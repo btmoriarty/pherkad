@@ -1,0 +1,46 @@
+name: Build artifacts
+
+# Rebuilds the installable .skill bundle and the cheat-sheet PDF whenever
+# their sources change, and commits them back to main. Exists because the
+# maintainer's API-based workflow cannot push binary files.
+#
+# Save this file as .github/workflows/build.yml in the pherkad repo and
+# commit it from a real terminal (the API token lacks the workflow scope).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'skills/**'
+      - 'docs/CHEATSHEET.html'
+      - 'build.sh'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build .skill bundle
+        run: bash build.sh
+
+      - name: Build cheat sheet PDF
+        run: |
+          pip install --quiet weasyprint
+          python -c "import weasyprint; weasyprint.HTML('docs/CHEATSHEET.html').write_pdf('docs/CHEATSHEET.pdf')"
+
+      - name: Lint the docs with voicelint
+        run: |
+          python3 skills/pherkad/tools/voicelint.py README.md docs/CHEATSHEET.md CHANGELOG.md
+
+      - name: Commit artifacts
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pherkad.skill docs/CHEATSHEET.pdf
+          git diff --cached --quiet || (git commit -m "Rebuild pherkad.skill and cheat sheet PDF [skip ci]" && git push)
