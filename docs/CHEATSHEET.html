@@ -4,43 +4,50 @@
 <meta charset="utf-8">
 <title>Pherkad Cheat Sheet</title>
 <style>
-  @page { size: Letter landscape; margin: 0.38in; }
+  @page { size: Letter landscape; margin: 0.32in; }
   * { box-sizing: border-box; }
   body {
     font-family: "Helvetica Neue", Arial, sans-serif;
-    color: #1c2440; margin: 0; font-size: 9pt; line-height: 1.35;
+    color: #1c2440; margin: 0; font-size: 8.9pt; line-height: 1.3;
   }
   .head { display: flex; align-items: flex-end; justify-content: space-between;
-    border-bottom: 3px solid #22306b; padding-bottom: 6px; margin-bottom: 10px; }
-  .title { font-size: 27pt; font-weight: 800; color: #22306b; letter-spacing: -0.5px; line-height: 1; }
-  .title .sub { font-weight: 400; color: #6b7290; font-size: 14pt; }
-  .tag { color: #45507a; font-size: 8.8pt; margin-top: 4px; max-width: 6.6in; }
+    border-bottom: 3px solid #22306b; padding-bottom: 5px; margin-bottom: 7px; }
+  .title { font-size: 24pt; font-weight: 800; color: #22306b; letter-spacing: -0.5px; line-height: 1; }
+  .title .sub { font-weight: 400; color: #6b7290; font-size: 15pt; }
+  .tag { color: #45507a; font-size: 9.4pt; margin-top: 5px; max-width: 7in; }
   .tag b { color: #22306b; }
-  .brand { text-align: right; color: #22306b; font-size: 8pt; white-space: nowrap; }
-  .brand .star { font-size: 22pt; color: #e6a532; line-height: 1; }
-  .brand .name { font-weight: 800; font-size: 12pt; letter-spacing: 1px; }
+  .brand { text-align: right; color: #22306b; font-size: 8.6pt; white-space: nowrap; }
+  .brand .star { font-size: 18pt; color: #e6a532; line-height: 1; }
+  .brand .name { font-weight: 800; font-size: 13pt; letter-spacing: 1px; }
 
-  .cols { column-count: 3; column-gap: 12px; }
+  .cols { column-count: 3; column-gap: 14px; }
   .card { break-inside: avoid; border: 1px solid #d3d9ee; border-radius: 5px;
     margin: 0 0 8px; overflow: hidden; background: #fff; }
-  .card > h2 { margin: 0; font-size: 8.6pt; text-transform: uppercase; letter-spacing: 0.6px;
-    color: #fff; background: #22306b; padding: 4px 8px; font-weight: 700; }
+  .card > h2 { margin: 0; font-size: 9.2pt; text-transform: uppercase; letter-spacing: 0.6px;
+    color: #fff; background: #22306b; padding: 3px 8px; font-weight: 700; }
   .card .body { padding: 6px 8px; }
   .card.alt > h2 { background: #38477f; }
 
-  .say { font-family: "SF Mono", "DejaVu Sans Mono", monospace; font-size: 7.8pt;
+  .say { font-family: "SF Mono", "DejaVu Sans Mono", monospace; font-size: 8.4pt;
     color: #9a6b12; background: #fbf4e6; border-left: 2px solid #e6a532;
     padding: 0 4px; border-radius: 2px; }
-  .get { color: #414b70; margin-top: 2px; }
-  .verdict { color: #fff; border-radius: 3px; padding: 0 5px; font-weight: 700; font-size: 7.8pt; }
+  .get { color: #414b70; margin-top: 3px; }
+  .verdict { color: #fff; border-radius: 3px; padding: 0 6px; font-weight: 700; font-size: 8.4pt; }
   .v-pass { background: #2e7d5b; }
   .v-revise { background: #c58a1e; }
   .v-rewrite { background: #8a4b52; }
-  ul.tight { margin: 2px 0 0; padding-left: 14px; }
+  ul.tight { margin: 3px 0 0; padding-left: 15px; }
   ul.tight li { margin-bottom: 2px; }
 
-  .foot { margin-top: 8px; background: #22306b; color: #fff; border-radius: 5px;
-    padding: 7px 12px; display: flex; justify-content: space-between; align-items: center; font-size: 8.4pt; gap: 16px; }
+  table.dims { width: 100%; border-collapse: collapse; margin-top: 2px; font-size: 8.5pt; }
+  table.dims td { padding: 2px 4px; border-bottom: 1px solid #e7ebf6; vertical-align: top; }
+  table.dims tr:last-child td { border-bottom: none; }
+  table.dims td.k { color: #22306b; font-weight: 700; white-space: nowrap; }
+  table.dims td.d { color: #414b70; }
+  .n { color: #e6a532; font-weight: 800; margin-right: 3px; }
+
+  .foot { margin-top: 2px; background: #22306b; color: #fff; border-radius: 5px;
+    padding: 6px 12px; display: flex; justify-content: space-between; align-items: center; font-size: 9pt; gap: 18px; }
   .foot b { color: #ffd580; }
   .foot .right { text-align: right; color: #c7cef0; }
 </style>
@@ -50,7 +57,7 @@
 <div class="head">
   <div>
     <div class="title">Pherkad <span class="sub">cheat sheet</span></div>
-    <div class="tag">Checks whether a draft still sounds like <b>you</b>, not a model. One voice, quoted evidence behind every score, fixes only for the sentences that drifted. Say things in your own words; the phrases below are examples.</div>
+    <div class="tag">Checks whether a draft still sounds like <b>you</b>, not a model. One voice, quoted evidence behind every score, fixes only for the sentences that drifted. Say things in your own words; the phrases below are examples, not commands.</div>
   </div>
   <div class="brand">
     <div class="star">&#10022;</div>
@@ -77,8 +84,8 @@
         <ul class="tight">
           <li>Fingerprint: the 3 sentences most and least like you, quoted</li>
           <li>Seven dimensions scored 1 to 5, each with cited evidence</li>
-          <li>Every AI tell flagged, by category, with the specific tell named</li>
-          <li>Density signal: flagged constructions per 100 words (warn above 2.0)</li>
+          <li>Every AI tell flagged, with the specific tell named</li>
+          <li>Density signal: flagged constructions per 100 words (warn above 2.0), plus cluster warnings per paragraph</li>
           <li>Verdict: <span class="verdict v-pass">PASS</span> <span class="verdict v-revise">REVISE</span> <span class="verdict v-rewrite">REWRITE</span></li>
         </ul>
       </div>
@@ -86,9 +93,24 @@
   </div>
 
   <div class="card">
+    <h2>The seven dimensions</h2>
+    <div class="body">
+      <table class="dims">
+        <tr><td class="k"><span class="n">1</span>Grounding</td><td class="d">where your authority comes from</td></tr>
+        <tr><td class="k"><span class="n">2</span>Calibration</td><td class="d">how you hedge, how confident you get</td></tr>
+        <tr><td class="k"><span class="n">3</span>Texture</td><td class="d">your concrete specifics</td></tr>
+        <tr><td class="k"><span class="n">4</span>Mechanics</td><td class="d">rhythm, punctuation, fragments, humor</td></tr>
+        <tr><td class="k"><span class="n">5</span>AI artifacts</td><td class="d">the shared tell catalog (right)</td></tr>
+        <tr><td class="k"><span class="n">6</span>Structure</td><td class="d">how you open, build, end; what stays implicit</td></tr>
+        <tr><td class="k"><span class="n">7</span>Tone</td><td class="d">the overall feel, and what you never sound like</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
     <h2>Targeted rewrites</h2>
     <div class="body">
-      <div class="get">Arrive with any REVISE or REWRITE verdict. Only the flagged sentences are rewritten, each fix explained. Facts, names, numbers, dates, sources, and emphasis stay exactly as you had them.</div>
+      <div class="get">Arrive with any REVISE or REWRITE verdict. Only the flagged sentences are rewritten, each fix explained. Facts, names, numbers, dates, sources, and emphasis stay exactly as you had them; terms of art survive.</div>
     </div>
   </div>
 
@@ -97,6 +119,24 @@
     <div class="body">
       <span class="say">that one is actually me</span>
       <div class="get">The correction appends to your profile with the sentence as evidence. The validator gets more accurate the more you use it.</div>
+    </div>
+  </div>
+
+  <div class="card alt">
+    <h2>Tell categories at a glance</h2>
+    <div class="body">
+      <table class="dims">
+        <tr><td class="k">5a</td><td class="d">filler and intensifiers ("crucial," "delve," "leverage")</td></tr>
+        <tr><td class="k">5b</td><td class="d">flattened stock phrases ("paradigm shift")</td></tr>
+        <tr><td class="k">5c</td><td class="d">antithesis family ("It doesn't just X. It Y.")</td></tr>
+        <tr><td class="k">5d</td><td class="d">scene-setting openers ("In a world where...")</td></tr>
+        <tr><td class="k">5e</td><td class="d">engagement bait ("here's the thing")</td></tr>
+        <tr><td class="k">5f</td><td class="d">triplet noun piling ("clarity, trust, and growth")</td></tr>
+        <tr><td class="k">5g</td><td class="d">counter-X constructions</td></tr>
+        <tr><td class="k">5h</td><td class="d">authenticity paradox ("to be honest," "frankly")</td></tr>
+        <tr><td class="k">5i</td><td class="d">structural artifacts: em dashes, hedge-stacking, canned closers, loaded adverbs</td></tr>
+      </table>
+      <div class="get">Quotes, technical-literal uses, and single isolated instances are exempt. Density and clustering are the tell.</div>
     </div>
   </div>
 
@@ -127,6 +167,13 @@
     <h2>About the defaults</h2>
     <div class="body">
       <div class="get">The shipped rules are the author's own, built from tells observed across many AI-assisted documents, and they ship strict. Your register may differ: edit <b>tools/voice_config.json</b> to your purpose, or relax single rules in your own config (<b>tools/examples/relaxed.json</b> shows the shape), with the override recorded in your profile so both layers agree.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Install</h2>
+    <div class="body">
+      <div class="get"><b>Claude (Cowork / claude.ai):</b> add <b>pherkad.skill</b> via Settings &gt; Capabilities, or build it with <b>./build.sh</b>.<br><b>Claude Code:</b> copy <b>skills/pherkad/</b> into your skills directory.<br>Then ask for a voice check on any draft.</div>
     </div>
   </div>
 
