@@ -1,14 +1,13 @@
 {
-  "_comment": "Example of a tuned team config: a news-brief house style. Stricter than the defaults: hard dash ban, per-word soft caps, and a low-trust source-domain list. Watch words and domain lists are context-bound by definition, so they live in configs like this one rather than the defaults. Use it as a template for your own team's register.",
+  "_comment": "Team-config template. The strict news-brief rules this file originally carried (hard dash ban, watch-word caps, low-trust domain list) now ship as the defaults, since they were built from tells observed across many documents. Keep a file like this for rules specific to your team's register: extra banned phrases, additional domains, tighter caps. Unlisted keys inherit the shipped defaults.",
 
   "no_dashes": true,
-  "load_bearing_literal_only": true,
 
   "watch_words": {
     "live": 2,
-    "quietly": 2
+    "quietly": 2,
+    "breaking": 2
   },
-  "flag_loaded_quietly": true,
 
   "aggregator_domains": [
     "msn.com",

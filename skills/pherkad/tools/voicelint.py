@@ -4,10 +4,10 @@
 The mechanical layer of Pherkad. A small, dependency-free linter that scans
 prose (Markdown, plain text, or HTML) for the stylistic tells that make writing
 sound machine-generated: canned phrases, engagement-bait openers, filler
-intensifiers, dash overuse, over-used crutch words, and (optionally) low-trust
+intensifiers, dash overuse, over-used crutch words, and low-trust
 source domains. The rules live in an external JSON config (voice_config.json)
-so any person or team can tune them; the shipped defaults are generic tells
-only, nothing tied to one writer's style.
+so any person or team can tune them; the shipped defaults were built from
+tells observed across many AI-assisted documents.
 
 What this layer cannot see (antithesis constructions, triplet noun piling,
 tone, whether prose sounds like *you*) is the job of the Pherkad skill's
@@ -42,13 +42,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # Built-in rules, used only when no voice_config.json is found (kept in sync
 # with that file). voice_config.json is the source of truth for a project.
 #
-# Defaults are deliberately generic: patterns observed as AI tells across many
-# documents, valid for any writer. Personal or team style (a hard dash ban,
-# crutch-word caps, domain lists) belongs in a config; see
-# examples/news-brief.json for a tuned team config, and the Pherkad profile
-# builder for generating a personal one.
+# Every default here was built from tells observed across many AI-assisted
+# documents, not one writer's taste. If a rule contradicts your real style
+# (you use dashes deliberately, "robust" is your field's vocabulary), relax it
+# in your own config; see examples/relaxed.json, and the Pherkad profile
+# builder for generating a personal config from your voice profile.
 FALLBACK_CONFIG = {
-    "no_dashes": False,
+    "no_dashes": True,
     "dash_density_cap": 1.0,
     "load_bearing_literal_only": True,
     "banned_phrases": [
@@ -81,9 +81,12 @@ FALLBACK_CONFIG = {
         "genuinely", "honestly", "straightforward", "seamless", "seamlessly",
         "leverage", "delve", "delves", "delving", "tapestry", "showcases",
     ],
-    "watch_words": {},
+    "watch_words": {"live": 2, "quietly": 2},
     "flag_loaded_quietly": True,
-    "aggregator_domains": [],
+    "aggregator_domains": [
+        "msn.com", "news.yahoo.com", "timesofindia", "lawyermonthly.com",
+        "techtimes.com", "933thedrive.com",
+    ],
 }
 
 # Words that can follow "quietly" without it being a loaded adverb+verb tell.
@@ -196,7 +199,7 @@ def check(text: str, cfg: dict) -> list[Finding]:
         out.append(Finding(line, col, severity, rule, m.group(0).strip(), message))
 
     dash_hits = list(_iter(r"[—–―−]", text, flags=0))  # em/en/horiz-bar/minus
-    if cfg.get("no_dashes", False):
+    if cfg.get("no_dashes", True):
         for m in dash_hits:
             add(m, "error", "dash", "em/en dash; use a comma, colon, or full stop")
     else:

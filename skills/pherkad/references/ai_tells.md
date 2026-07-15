@@ -117,15 +117,15 @@ Words meant to signal sincerity that become tells when models use them to sound 
 - Crutch-word overuse: any word the profile lists as a personal crutch, past its soft cap
 - Harsh rhetorical dismissals ("useless," "dumb," flat "bad" with no specifics). A voice critiques by naming the failure, not labeling the thing
 - Compound-hyphen abstractions ("better-serving-the-question"). Expand into a clause instead
-- Em dash overuse: em dashes doing work commas or semicolons would do, or three or more in one paragraph. **Profile override:** if `Voice_Profile.md` records that the writer avoids em dashes, flag every instance; if it records deliberate em dash use, flag only overuse
+- Em dashes. Flag them: heavy em dash use is a documented AI tell. **Profile override:** if `Voice_Profile.md` records deliberate em dash use with evidence, flag only overuse (three or more in a paragraph, or dashes doing work commas would do)
 
 ---
 
 ## The mechanical layer
 
-A subset of this catalog is literal enough for regex: `tools/voicelint.py`, a dependency-free Python linter with the rules in `tools/voice_config.json`. It gives exact line and column numbers, runs in CI or pre-commit (exit 1 on error-level findings, `--strict` to fail warnings, `--json` for machines), and its shipped defaults are generic tells only.
+A subset of this catalog is literal enough for regex: `tools/voicelint.py`, a dependency-free Python linter with the rules in `tools/voice_config.json`. It gives exact line and column numbers, runs in CI or pre-commit (exit 1 on error-level findings, `--strict` to fail warnings, `--json` for machines), and its shipped defaults were built from tells observed across many AI-assisted documents.
 
-When validating and a Python runtime is available, run it first and fold its findings into Step 3 as pre-located hits. What it cannot see (antithesis structure, triplet piling, clustering, tone, profile match) remains this catalog's judgment work. The linter's config is tunable per person or team; the profile builder can generate a personal config, and `tools/examples/news-brief.json` shows a tuned team one.
+When validating and a Python runtime is available, run it first and fold its findings into Step 3 as pre-located hits. What it cannot see (antithesis structure, triplet piling, clustering, tone, profile match) remains this catalog's judgment work. The linter's config is tunable per person or team: `tools/examples/relaxed.json` shows loosening a default the writer's profile contradicts (deliberate dash use), `tools/examples/news-brief.json` shows team-specific additions, and the profile builder can generate a personal config. A relaxation should match an evidence-backed profile override so this layer and the linter agree.
 
 ---
 
@@ -147,4 +147,4 @@ The density signal catches flattened prose built from individually allowed words
 - **Single instances** of antithesis, triplet, or hedge constructions. Real writers use contrast. Density is the tell.
 - **Informal registers** (chat messages, casual email) where a relaxed register is appropriate. The validator is for drafts intended as public posts, papers, and finished prose.
 - **Documents that teach this pattern list**: this catalog, the profile, validator-internals docs, and any text that discusses the patterns by name. Ignore hits inside lines that quote, name, or define the patterns; flag only the prose proper.
-- **Profile overrides.** Whatever `Voice_Profile.md` explicitly claims as the writer's real habit wins over a default in this catalog, except the density meta-rule, which always applies.
+- **Profile overrides.** Whatever `Voice_Profile.md` explicitly claims as the writer's real habit, with evidence, wins over a default in this catalog, except the density meta-rule, which always applies.

@@ -1,0 +1,10 @@
+{
+  "_comment": "Example of relaxing the defaults for a writer whose profile records deliberate dash use: the hard dash ban comes off and the density cap catches overuse instead. Loosen a rule only when your voice profile shows the habit is really yours (evidence, not aspiration), and record the override in Voice_Profile.md so the judgment layer agrees with the linter. Unlisted keys inherit the shipped defaults.",
+
+  "no_dashes": false,
+  "dash_density_cap": 1.0,
+
+  "watch_words": {
+    "quietly": 2
+  }
+}

@@ -25,7 +25,7 @@ python3 skills/pherkad/tools/voicelint.py draft.md          # findings with line
 python3 skills/pherkad/tools/voicelint.py --json --strict draft.md   # CI mode
 ```
 
-Rules live in [`tools/voice_config.json`](skills/pherkad/tools/voice_config.json). The shipped defaults are tells observed across many documents, valid for any writer; what is personal or team-bound (a hard dash ban, crutch-word soft caps, source-domain lists) belongs in your own config. [`tools/examples/news-brief.json`](skills/pherkad/tools/examples/news-brief.json) shows a tuned team config, and the profile builder can generate a personal one from your voice profile. Exit codes: 0 clean, 1 findings, 2 usage or IO error, so a crash never reads as "findings found."
+Rules live in [`tools/voice_config.json`](skills/pherkad/tools/voice_config.json). Every shipped default was built from tells observed across many AI-assisted documents, including the hard no-dash rule. If a default contradicts your real style (you use dashes deliberately, "robust" is your field's vocabulary), relax it in your own config and record the override in your voice profile so both layers agree: [`tools/examples/relaxed.json`](skills/pherkad/tools/examples/relaxed.json) shows the shape, [`tools/examples/news-brief.json`](skills/pherkad/tools/examples/news-brief.json) shows team-specific additions, and the profile builder can generate a personal config. Exit codes: 0 clean, 1 findings, 2 usage or IO error, so a crash never reads as "findings found."
 
 ## What Pherkad is and is not
 

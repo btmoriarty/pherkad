@@ -1,7 +1,7 @@
 {
-  "_comment": "Rule set for voicelint, the mechanical layer of Pherkad. These defaults are tells observed across many documents, valid for any writer. Personal or team style (a hard dash ban, crutch-word caps, source-domain lists) belongs in your own copy of this file; the Pherkad profile builder can generate one from your voice profile. See examples/news-brief.json for a tuned team config. Case-insensitive.",
+  "_comment": "Rule set for voicelint, the mechanical layer of Pherkad. Every default was built from tells observed across many AI-assisted documents, not one writer's taste. If a rule contradicts your real style (you use dashes deliberately, 'robust' is your field's vocabulary), relax it in your own copy; see examples/relaxed.json, and the Pherkad profile builder for generating a personal config from your voice profile. Case-insensitive.",
 
-  "no_dashes": false,
+  "no_dashes": true,
   "dash_density_cap": 1.0,
   "load_bearing_literal_only": true,
 
@@ -83,8 +83,18 @@
     "showcases"
   ],
 
-  "watch_words": {},
+  "watch_words": {
+    "live": 2,
+    "quietly": 2
+  },
   "flag_loaded_quietly": true,
 
-  "aggregator_domains": []
+  "aggregator_domains": [
+    "msn.com",
+    "news.yahoo.com",
+    "timesofindia",
+    "lawyermonthly.com",
+    "techtimes.com",
+    "933thedrive.com"
+  ]
 }
