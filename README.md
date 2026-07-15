@@ -27,6 +27,24 @@ python3 skills/pherkad/tools/voicelint.py --json --strict draft.md   # CI mode
 
 Rules live in [`tools/voice_config.json`](skills/pherkad/tools/voice_config.json). Every shipped default was built from tells observed across many AI-assisted documents, including the hard no-dash rule. If a default contradicts your real style (you use dashes deliberately, "robust" is your field's vocabulary), relax it in your own config and record the override in your voice profile so both layers agree: [`tools/examples/relaxed.json`](skills/pherkad/tools/examples/relaxed.json) shows the shape, [`tools/examples/news-brief.json`](skills/pherkad/tools/examples/news-brief.json) shows team-specific additions, and the profile builder can generate a personal config. Exit codes: 0 clean, 1 findings, 2 usage or IO error, so a crash never reads as "findings found."
 
+## Why these defaults
+
+The default rule set is the one I run on my own writing. Every entry took the same route in: a phrase or construction I kept meeting in AI-assisted documents, across many documents and many contexts, until it read as a signature. Nothing on the list is there as a matter of taste, which is why the defaults ship strict.
+
+They are still my conclusions, and your register may differ. The rules are a JSON file, so changing them is the easy part: clone the tool and edit `tools/voice_config.json` to your purpose, or keep the defaults and relax specific rules in your own config. The one ask: when you loosen a rule, do it because the evidence of your own writing shows the habit is really yours, and record the override in your voice profile so the linter and the judgment layer agree.
+
+## Why this exists
+
+I use AI in most of what I write and build now, and Pherkad came out of that practice. The tools are good enough that people who never called themselves writers or programmers are finishing essays and shipping working software. I think that is worth defending. The people on the fence, the ones with something to say who stopped before saying it, lose the most if the answer to AI-flattened prose is to abstain.
+
+The answer I believe in is informed use. Know what the tools do to your sentences, check the output against your own voice, and keep what is yours. A draft that fails validation is not a verdict on using AI; it is a note that the machine's habits crept in where yours belong. Fix the flagged sentences and the byline stays honest.
+
+So use the assistance. Write the essay you were not going to write, build the tool you were not going to build. Just read what you sign.
+
+## Cheat sheet
+
+One page, every mode, what to say, what you get: [docs/CHEATSHEET.md](docs/CHEATSHEET.md) (also as [HTML](docs/CHEATSHEET.html)).
+
 ## What Pherkad is and is not
 
 - It validates against one voice: yours. A passage can be fully human-written and still fail because it does not sound like you, and an assisted passage can pass because it does.

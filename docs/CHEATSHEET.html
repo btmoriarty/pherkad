@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pherkad Cheat Sheet</title>
+<style>
+  @page { size: Letter landscape; margin: 0.38in; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    color: #1c2440; margin: 0; font-size: 9pt; line-height: 1.35;
+  }
+  .head { display: flex; align-items: flex-end; justify-content: space-between;
+    border-bottom: 3px solid #22306b; padding-bottom: 6px; margin-bottom: 10px; }
+  .title { font-size: 27pt; font-weight: 800; color: #22306b; letter-spacing: -0.5px; line-height: 1; }
+  .title .sub { font-weight: 400; color: #6b7290; font-size: 14pt; }
+  .tag { color: #45507a; font-size: 8.8pt; margin-top: 4px; max-width: 6.6in; }
+  .tag b { color: #22306b; }
+  .brand { text-align: right; color: #22306b; font-size: 8pt; white-space: nowrap; }
+  .brand .star { font-size: 22pt; color: #e6a532; line-height: 1; }
+  .brand .name { font-weight: 800; font-size: 12pt; letter-spacing: 1px; }
+
+  .cols { column-count: 3; column-gap: 12px; }
+  .card { break-inside: avoid; border: 1px solid #d3d9ee; border-radius: 5px;
+    margin: 0 0 8px; overflow: hidden; background: #fff; }
+  .card > h2 { margin: 0; font-size: 8.6pt; text-transform: uppercase; letter-spacing: 0.6px;
+    color: #fff; background: #22306b; padding: 4px 8px; font-weight: 700; }
+  .card .body { padding: 6px 8px; }
+  .card.alt > h2 { background: #38477f; }
+
+  .say { font-family: "SF Mono", "DejaVu Sans Mono", monospace; font-size: 7.8pt;
+    color: #9a6b12; background: #fbf4e6; border-left: 2px solid #e6a532;
+    padding: 0 4px; border-radius: 2px; }
+  .get { color: #414b70; margin-top: 2px; }
+  .verdict { color: #fff; border-radius: 3px; padding: 0 5px; font-weight: 700; font-size: 7.8pt; }
+  .v-pass { background: #2e7d5b; }
+  .v-revise { background: #c58a1e; }
+  .v-rewrite { background: #8a4b52; }
+  ul.tight { margin: 2px 0 0; padding-left: 14px; }
+  ul.tight li { margin-bottom: 2px; }
+
+  .foot { margin-top: 8px; background: #22306b; color: #fff; border-radius: 5px;
+    padding: 7px 12px; display: flex; justify-content: space-between; align-items: center; font-size: 8.4pt; gap: 16px; }
+  .foot b { color: #ffd580; }
+  .foot .right { text-align: right; color: #c7cef0; }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <div>
+    <div class="title">Pherkad <span class="sub">cheat sheet</span></div>
+    <div class="tag">Checks whether a draft still sounds like <b>you</b>, not a model. One voice, quoted evidence behind every score, fixes only for the sentences that drifted. Say things in your own words; the phrases below are examples.</div>
+  </div>
+  <div class="brand">
+    <div class="star">&#10022;</div>
+    <div class="name">PHERKAD</div>
+    <div>the other Guardian of the Pole<br>sibling of Kochab</div>
+  </div>
+</div>
+
+<div class="cols">
+
+  <div class="card">
+    <h2>First run: build your profile</h2>
+    <div class="body">
+      <span class="say">build my voice profile</span>
+      <div class="get">A short interview over 3 to 5 pieces of writing you consider most you. Produces <b>Voice_Profile.md</b>: your authority, hedging, texture, sentence mechanics, structure, and tone, every marker backed by a quoted sentence of yours. Lives in your folder, never leaves it.</div>
+    </div>
+  </div>
+
+  <div class="card alt">
+    <h2>Voice check</h2>
+    <div class="body">
+      <span class="say">does this sound like me</span> <span class="say">voice check this draft</span>
+      <div class="get">
+        <ul class="tight">
+          <li>Fingerprint: the 3 sentences most and least like you, quoted</li>
+          <li>Seven dimensions scored 1 to 5, each with cited evidence</li>
+          <li>Every AI tell flagged, by category, with the specific tell named</li>
+          <li>Density signal: flagged constructions per 100 words (warn above 2.0)</li>
+          <li>Verdict: <span class="verdict v-pass">PASS</span> <span class="verdict v-revise">REVISE</span> <span class="verdict v-rewrite">REWRITE</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Targeted rewrites</h2>
+    <div class="body">
+      <div class="get">Arrive with any REVISE or REWRITE verdict. Only the flagged sentences are rewritten, each fix explained. Facts, names, numbers, dates, sources, and emphasis stay exactly as you had them.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Correct a flag</h2>
+    <div class="body">
+      <span class="say">that one is actually me</span>
+      <div class="get">The correction appends to your profile with the sentence as evidence. The validator gets more accurate the more you use it.</div>
+    </div>
+  </div>
+
+  <div class="card alt">
+    <h2>CLI linter (no model needed)</h2>
+    <div class="body">
+      <span class="say">python3 tools/voicelint.py draft.md</span>
+      <div class="get">
+        <ul class="tight">
+          <li>Mechanical tells with exact line and column numbers</li>
+          <li><b>--json --strict</b> for CI or a pre-commit hook</li>
+          <li>Exits 0 clean, 1 findings, 2 usage or IO error</li>
+          <li>Reads Markdown, plain text, and HTML; stdlib only, Python 3.8+</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Personal linter config</h2>
+    <div class="body">
+      <span class="say">make me a linter config from my profile</span>
+      <div class="get">Your dash stance, crutch-word caps, and extra bans as a <b>voice_config.json</b> the CLI linter can run anywhere.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>About the defaults</h2>
+    <div class="body">
+      <div class="get">The shipped rules are the author's own, built from tells observed across many AI-assisted documents, and they ship strict. Your register may differ: edit <b>tools/voice_config.json</b> to your purpose, or relax single rules in your own config (<b>tools/examples/relaxed.json</b> shows the shape), with the override recorded in your profile so both layers agree.</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="foot">
+  <div><b>Where your data lives:</b> your profile is built from your writing and stays in your folder. The repo ships no personal data; its only persona is fictional.</div>
+  <div class="right"><b>The rule that never bends:</b> every verdict carries quoted evidence.<br>A human-written draft can fail; the test is you. Density is the tell, never one stray phrase.</div>
+</div>
+
+</body>
+</html>
