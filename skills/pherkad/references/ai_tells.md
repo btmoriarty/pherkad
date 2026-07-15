@@ -1,0 +1,150 @@
+# AI Tells Catalog
+
+The generic half of Pherkad's diagnostic: constructions and phrases that mark AI-generated or AI-flattened prose regardless of whose voice is being validated. Personal markers live in the user's `Voice_Profile.md`, not here.
+
+Sources: patterns documented in the public "AI Tells" discussion threads (notably Julian Harris's 2026 thread), the Wikipedia "Signs of AI writing" page, and tells observed across many real AI-assisted documents. The category labels 5a-5i correspond to Dimension 5 of the skill protocol.
+
+---
+
+## 5a. Banned intensifiers and filler words
+
+Flag every instance, subject to the caveats at the end of this file:
+
+- significant, crucial, essential, important, key, robust
+- leverage (as verb), utilize
+- genuinely, honestly, straightforward
+- load-bearing (outside literal engineering)
+- delve, delves into, delving
+- tapestry
+- underscores (as verb meaning "emphasizes")
+- showcases
+- navigating (as metaphor, e.g. "navigating the complexities of")
+- in the realm of
+- it's worth noting, it is worth noting, it's important to note
+- essentially, fundamentally
+- ultimately (when hedging, not when sequencing)
+- in many ways
+- a testament to
+- speaks to
+
+## 5b. Flattened stock phrases
+
+Phrases that recur in AI-assisted drafts where a plain clause would serve:
+
+- empirical anchor
+- methodological foundation
+- rests on
+- necessary-but-invisible
+- game-changer, paradigm shift
+- unlock the potential of
+
+## 5c. Antithesis construction family
+
+A rhetorical family models over-rely on. Detect the structural pattern, not just word matches:
+
+1. "It doesn't just X. It Y."
+2. "X isn't just Y; it's Z."
+3. "This is not X. It is Y." (and the mirror: "This is not just X. It is Y.")
+4. "X to the Y's Z."
+5. "Not just X, but Y."
+6. "X doesn't merely Y; it Z."
+
+**Single instances can be authentic.** The tell is clustering: two or more antithesis-family constructions in adjacent sentences signals AI flattening. Report density across the document, not just individual hits.
+
+## 5d. Scene-setting and hedge openers
+
+Flag whenever one opens a paragraph:
+
+- "Situated [adverbial phrase], the [noun] [verb]..."
+- "In a world where..."
+- "In the rapidly evolving landscape of..."
+- "As we navigate..."
+- "Today, more than ever..."
+- "In recent years..."
+- "Picture this:"
+- "Imagine [scenario]..."
+
+## 5e. Engagement-bait transitions
+
+Social-post-genre tells; flag in any public-facing prose:
+
+- But here's the part no one is talking about
+- Here's what they don't tell you
+- And that's the thing
+- Here's the real question
+- The truth is
+- Let me tell you why
+- And here's why that matters
+- Plot twist:
+
+## 5f. Triplet noun piling
+
+Three abstract nouns coordinated where one or two would have served. Pattern: "[adjective]+[noun], [adjective]+[noun], and [adjective]+[noun]" with all three nouns abstract.
+
+Examples: "clarity, transparency, and accountability"; "engagement, calibration, and trust"; "innovation, collaboration, and growth."
+
+Single instances may be authentic; two or more triplets in a paragraph signals AI.
+
+## 5g. Counter-X constructions
+
+"Counter-" prefixed to an abstract noun where a plain word would serve: counter-symbol, counter-narrative (unless the literal subject), counter-intuitive (the hyphenated form specifically), and the shape "a [noun] of [hyphenated abstract]."
+
+## 5h. Authenticity-language paradox
+
+Words meant to signal sincerity that become tells when models use them to sound human:
+
+- genuinely, honestly (already in 5a)
+- truthfully, frankly, candidly
+- to be honest, in all honesty
+- I'll be real with you
+
+## 5i. Structural and stylistic artifacts
+
+- Hedge-stacking (piling "may," "potentially," "somewhat" into one sentence)
+- Parallel tricolon structure used more than twice in a piece
+- "Furthermore" / "Moreover" / "Additionally" as paragraph openers
+- Balanced-nothing sentences ("While X is important, Y is equally critical")
+- Generic abstraction where the profile shows the writer using concrete specifics
+- Summary paragraphs that restate the introduction
+- "In conclusion" / "To summarize"
+- "This raises important questions about"
+- "The landscape of"
+- "at the end of the day" / "the bottom line is"
+- Corporate-meeting idioms used non-literally ("didn't land," "needs sharpening," "circle back," "in flight")
+- Self-narrating closers ("writes itself," "needs no embellishment," "that's the news") and reader stage-directions ("watch the move," "note the framing"). End on the substantive point instead
+- Reach-for-an-analogy connectives ("the mirror image of," "rhymes with," "the flip side of")
+- Loaded adverb + verb ("quietly shelved," "quietly building"): state what happened instead of implying intent
+- Crutch-word overuse: any word the profile lists as a personal crutch, past its soft cap
+- Harsh rhetorical dismissals ("useless," "dumb," flat "bad" with no specifics). A voice critiques by naming the failure, not labeling the thing
+- Compound-hyphen abstractions ("better-serving-the-question"). Expand into a clause instead
+- Em dash overuse: em dashes doing work commas or semicolons would do, or three or more in one paragraph. **Profile override:** if `Voice_Profile.md` records that the writer avoids em dashes, flag every instance; if it records deliberate em dash use, flag only overuse
+
+---
+
+## The mechanical layer
+
+A subset of this catalog is literal enough for regex: `tools/voicelint.py`, a dependency-free Python linter with the rules in `tools/voice_config.json`. It gives exact line and column numbers, runs in CI or pre-commit (exit 1 on error-level findings, `--strict` to fail warnings, `--json` for machines), and its shipped defaults are generic tells only.
+
+When validating and a Python runtime is available, run it first and fold its findings into Step 3 as pre-located hits. What it cannot see (antithesis structure, triplet piling, clustering, tone, profile match) remains this catalog's judgment work. The linter's config is tunable per person or team; the profile builder can generate a personal config, and `tools/examples/news-brief.json` shows a tuned team one.
+
+---
+
+## Density meta-rule
+
+A bigger tell than any single phrase is prose heavily peppered with them. The validator produces two outputs:
+
+1. **Individual hits**: every match, listed by sentence.
+2. **Density signal**: flagged constructions per 100 words. Above 2.0 triggers a density warning even when no single hit would force a REVISE.
+
+The density signal catches flattened prose built from individually allowed words in characteristic clusters.
+
+---
+
+## Caveats and what NOT to flag
+
+- **Technical-literal uses.** "Key" as API key, JSON key, or primary key; "load-bearing" in structural engineering; "delve" in archaeology; "tapestry" in textiles; "showcases" as literal display cases; "navigating" as actual navigation. Extend to any banned item where domain context makes the word the subject.
+- **Direct quotes** from sources where the quoted person uses a flagged phrase. Reporting, not endorsing.
+- **Single instances** of antithesis, triplet, or hedge constructions. Real writers use contrast. Density is the tell.
+- **Informal registers** (chat messages, casual email) where a relaxed register is appropriate. The validator is for drafts intended as public posts, papers, and finished prose.
+- **Documents that teach this pattern list**: this catalog, the profile, validator-internals docs, and any text that discusses the patterns by name. Ignore hits inside lines that quote, name, or define the patterns; flag only the prose proper.
+- **Profile overrides.** Whatever `Voice_Profile.md` explicitly claims as the writer's real habit wins over a default in this catalog, except the density meta-rule, which always applies.
