@@ -64,6 +64,23 @@
     "plot twist:"
   ],
 
+  "_soft_comment": "Warnings, not errors: phrasings that are hard to ban outright but show up far too often in AI-assisted text. [word] matches one token; [verb] matches a gerund. A soft hit that lands on a stronger banned phrase is dropped as redundant.",
+  "soft_phrases": [
+    "it's worth [verb]",
+    "it is worth [verb]",
+    "i want to be plain",
+    "i want to be clear",
+    "i want to be honest",
+    "i want to be upfront",
+    "i want to be direct",
+    "i want to be transparent",
+    "gut-check",
+    "gut check",
+    "where your [word] lives",
+    "names a way",
+    "the [word] that never bends"
+  ],
+
   "filler_words": [
     "significant",
     "crucial",
