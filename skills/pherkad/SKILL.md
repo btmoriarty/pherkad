@@ -65,6 +65,8 @@ Then walk the full catalog in `references/ai_tells.md` (categories 5a through 5i
 
 Apply the catalog's caveats: technical-literal uses, direct quotes, single isolated constructions, informal-register exceptions, and the validator-internals exception (never flag a pattern inside a line that quotes, names, or defines it). Where the profile overrides a default (for example, a writer who uses em dashes on purpose), the profile wins.
 
+**Positive register.** Absence of tells is necessary, not sufficient. Also read whether the draft carries the writer's own distinctive markers, from the profile and the "Positive register" section of `references/ai_tells.md`. A draft clean of every tell but showing none of the writer's markers has flattened toward a generic default; treat that as a REVISE-level signal even when no single hit fires.
+
 ## Step 4: Compute the density signal
 
 1. Count total flagged constructions across the document.
@@ -77,7 +79,7 @@ Clustering weighs separately: two or more antithesis constructions (5c) or two o
 ## Step 5: Produce the verdict
 
 - **PASS**: reads as the writer's voice throughout. Minor surface edits only. No density warning, no cluster warning.
-- **REVISE**: core voice present but artifacts or drift in specific sections. Density warning OR cluster warning OR a handful of individual hits.
+- **REVISE**: core voice present but artifacts or drift in specific sections. Density warning OR cluster warning OR a handful of individual hits, OR the draft is clean of tells but shows none of the writer's positive markers (voice flattened toward generic).
 - **REWRITE**: voice has flattened or drifted substantially. Density warning AND multiple cluster warnings, or heavy hits across multiple dimensions.
 
 ## Step 6: Deliver targeted rewrites
@@ -111,6 +113,9 @@ DIAGNOSTIC SCORES
 AI ARTIFACT FLAGS (individual hits)
   [list from Step 3, grouped by category 5a-5i]
 
+POSITIVE REGISTER
+  [which of the writer's own markers are present or absent, with quotes]
+
 DENSITY SIGNAL
   Total flagged constructions: [N]
   Total words: [M]
@@ -132,5 +137,7 @@ TARGETED REWRITES
 Pherkad is not a generic AI detector and never polices someone else's text. It validates against one voice, its own user's. A passage can be entirely human-written and still fail because it does not sound like this writer; an assisted passage can pass because it does.
 
 A single antithesis construction or one banned phrase does not force a REVISE. The validator weighs density and clustering, not lone hits. Writers use contrast; models overuse it.
+
+**Genre calibration.** Distinctiveness lives in the frame, the transitions, and the close; a precise legal or technical core is correct when it is plain and must not be flagged for failing to be vivid. A finished piece is often deliberately uneven, a distinctive frame around an exact middle, and that unevenness is the design, not a defect. Read the frame and the transitions for the writer's positive register; hold the technical core to accuracy and the tell catalog, not to the archetype.
 
 The profile is the user's data. It lives in their folder, is never committed to this repository, and updates only when they ask or when they correct a flag ("that one is actually me"). Corrections append to the profile so the validator gets more accurate with use.
