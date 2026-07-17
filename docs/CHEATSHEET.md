@@ -15,6 +15,6 @@ One page. Everything Pherkad does and what to say to trigger it. It validates ag
 
 **About the defaults:** the shipped rules are the author's own, built from tells observed across many AI-assisted documents, and they ship strict. Your register may differ: edit `tools/voice_config.json` to your purpose, or relax single rules in your own config (`tools/examples/relaxed.json` shows the shape) with the override recorded in your profile.
 
-**Where your data lives:** your voice profile is built from your writing and stays in your folder. The repository ships no personal data; its only persona is fictional.
+**Your data:** your voice profile is built from your writing and stays in your folder. The repository ships no personal data; its only persona is fictional.
 
-**The rule that never bends:** every verdict carries quoted evidence. A fully human-written draft can fail, because the test is you, not humanity in general. Density is the tell; a single contrast or one stray phrase never sinks a draft.
+**The one rule:** every verdict carries quoted evidence. A fully human-written draft can fail, because the test is you, not humanity in general. Density is the tell; a single contrast or one stray phrase never sinks a draft.
