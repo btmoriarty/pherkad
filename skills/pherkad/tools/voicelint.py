@@ -225,8 +225,8 @@ def check(text: str, cfg: dict) -> list[Finding]:
             add(m, "error", "engagement-bait", f"manufactured-stance opener: '{phrase}'")
 
     if cfg.get("flag_loaded_quietly", True):
-        for m in _iter(rf"\bquietly\s+(?!{_QUIETLY_STOP}\b)[a-z]+", text):
-            add(m, "warning", "loaded-adverb", "loaded 'quietly + verb'; state what happened")
+        for m in _iter(r"\bquietly\b(?=\s*(?:[.,;:!?)\]]|$))", text, flags=re.IGNORECASE | re.MULTILINE):
+            add(m, "warning", "loaded-adverb", "trailing 'quietly'; the insinuating position. Put it before the verb or cut it")
 
     for word in cfg.get("filler_words", []):
         for m in _iter(rf"\b{re.escape(word)}\b", text):

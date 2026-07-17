@@ -113,7 +113,8 @@ Words meant to signal sincerity that become tells when models use them to sound 
 - Corporate-meeting idioms used non-literally ("didn't land," "needs sharpening," "circle back," "in flight")
 - Self-narrating closers ("writes itself," "needs no embellishment," "that's the news") and reader stage-directions ("watch the move," "note the framing"). End on the substantive point instead
 - Reach-for-an-analogy connectives ("the mirror image of," "rhymes with," "the flip side of")
-- Loaded adverb + verb ("quietly shelved," "quietly building"): state what happened instead of implying intent
+- Trailing "quietly" (mechanical): "quietly" ending a clause or sentence ("shut it down quietly," "the numbers moved quietly") is the insinuating position, implying concealed intent. The linter flags it; put the adverb before the verb or cut it
+- Pre-modifier "quietly + verb" (judgment): "quietly shelved," "quietly building" can imply hidden agency, but the same shape carries legitimate stance ("quietly skeptical," "quietly noticing"). Not mechanical; flag only when the intent is concealment, not stance
 - Crutch-word overuse: any word the profile lists as a personal crutch, past its soft cap
 - Harsh rhetorical dismissals ("useless," "dumb," flat "bad" with no specifics). A voice critiques by naming the failure, not labeling the thing
 - Compound-hyphen abstractions ("better-serving-the-question"). Expand into a clause instead
