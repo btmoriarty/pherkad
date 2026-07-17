@@ -4,10 +4,10 @@
 The mechanical layer of Pherkad. A small, dependency-free linter that scans
 prose (Markdown, plain text, or HTML) for the stylistic tells that make writing
 sound machine-generated: canned phrases, engagement-bait openers, filler
-intensifiers, dash overuse, over-used crutch words, and low-trust
-source domains. The rules live in an external JSON config (voice_config.json)
-so any person or team can tune them; the shipped defaults were built from
-tells observed across many AI-assisted documents.
+intensifiers, overused soft phrasings, dash overuse, over-used crutch words,
+and low-trust source domains. The rules live in an external JSON config
+(voice_config.json) so any person or team can tune them; the shipped defaults
+were built from tells observed across many AI-assisted documents.
 
 What this layer cannot see (antithesis constructions, triplet noun piling,
 tone, whether prose sounds like *you*) is the job of the Pherkad skill's
@@ -76,6 +76,19 @@ FALLBACK_CONFIG = {
         "the inconvenient truth", "let's be honest", "i'll be blunt",
         "let me tell you why", "and here's why that matters", "plot twist:",
     ],
+    # Warnings, not errors: phrasings that are hard to ban outright but recur
+    # far too often in AI-assisted text. [word] matches one token; [verb]
+    # matches a gerund. A soft hit that overlaps a stronger banned phrase is
+    # dropped as redundant (see check()).
+    "soft_phrases": [
+        "it's worth [verb]", "it is worth [verb]",
+        "i want to be plain", "i want to be clear", "i want to be honest",
+        "i want to be upfront", "i want to be direct", "i want to be transparent",
+        "gut-check", "gut check",
+        "where your [word] lives",
+        "names a way",
+        "the [word] that never bends",
+    ],
     "filler_words": [
         "significant", "crucial", "essential", "robust", "utilize",
         "genuinely", "honestly", "straightforward", "seamless", "seamlessly",
@@ -112,7 +125,7 @@ def _validate(cfg: dict) -> None:
     """Reject a structurally invalid rule set with a clear message (exit 2)."""
     if not isinstance(cfg, dict):
         _fail("config must be a JSON object")
-    for key in ("banned_phrases", "engagement_bait", "filler_words", "aggregator_domains"):
+    for key in ("banned_phrases", "engagement_bait", "soft_phrases", "filler_words", "aggregator_domains"):
         if key in cfg:
             v = cfg[key]
             if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
@@ -188,6 +201,21 @@ def _iter(pattern: str, text: str, flags=re.IGNORECASE):
     return re.finditer(pattern, text, flags)
 
 
+def _soft_to_regex(phrase: str) -> str:
+    """Turn a readable soft phrase into a regex. [word] -> one token,
+    [verb] -> a gerund (\\w+ing). Everything else is matched literally."""
+    parts = re.split(r"(\[word\]|\[verb\])", phrase)
+    out = []
+    for p in parts:
+        if p == "[word]":
+            out.append(r"\w+")
+        elif p == "[verb]":
+            out.append(r"\w+ing")
+        elif p:
+            out.append(re.escape(p))
+    return "".join(out)
+
+
 def check(text: str, cfg: dict) -> list[Finding]:
     """Run every enabled rule over ``text`` and return findings in order."""
     text = normalize_quotes(text)
@@ -224,6 +252,10 @@ def check(text: str, cfg: dict) -> list[Finding]:
         for m in _iter(re.escape(phrase), text):
             add(m, "error", "engagement-bait", f"manufactured-stance opener: '{phrase}'")
 
+    for phrase in cfg.get("soft_phrases", []):
+        for m in _iter(_soft_to_regex(phrase), text):
+            add(m, "warning", "soft-cliche", f"overused AI phrasing: '{phrase}'")
+
     if cfg.get("flag_loaded_quietly", True):
         for m in _iter(r"\bquietly\b(?=\s*(?:[.,;:!?)\]]|$))", text, flags=re.IGNORECASE | re.MULTILINE):
             add(m, "warning", "loaded-adverb", "trailing 'quietly'; the insinuating position. Put it before the verb or cut it")
@@ -245,6 +277,10 @@ def check(text: str, cfg: dict) -> list[Finding]:
             add(m, "error", "source", f"low-trust/aggregator source: {domain}")
 
     out.sort(key=lambda f: (f.line, f.col))
+    # A soft-cliche that lands exactly where a stronger error already fired
+    # (e.g. "it's worth noting that") is redundant; keep the error only.
+    err_starts = {(f.line, f.col) for f in out if f.severity == "error"}
+    out = [f for f in out if not (f.rule == "soft-cliche" and (f.line, f.col) in err_starts)]
     return out
 
 
