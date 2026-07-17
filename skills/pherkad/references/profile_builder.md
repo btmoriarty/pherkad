@@ -26,6 +26,10 @@ Read all samples, then draft the six personal dimensions. For each, write 2 to 4
 6. **Structural habits.** How pieces open and close, what stays implicit, paragraph length, use of headers and lists.
 7. **Tonal identity.** Three to five adjectives with evidence, plus an equally specific list of what the writer never sounds like.
 
+## Step 2b: Capture the positive register (the archetype)
+
+The six dimensions above capture what the writer avoids and prefers. Also capture what the voice actively does, its most specific and least imitable moves, so validation can calibrate toward the writer and not only against tells (see "Positive register" in `ai_tells.md`). From the samples, name two to four positive moves, each with a quoted example. Shapes to look for, examples and not a checklist: leading with a concrete object before the concept; stating a consequence flatly without the emotional adjective; the telling incidental detail that marks a scene as lived; owning a failure plainly rather than deflecting it to a structure. Record these as an Archetype section in the profile. These are the hardest signals for a model to fake, so they are the strongest evidence of the writer's hand. Note which markers belong to the frame and the close rather than the precise analytical core, so validation does not flatten a technical passage toward the archetype (see Genre calibration in `ai_tells.md`).
+
 ## Step 3: Confirm with the user
 
 Show the draft profile. Ask the user to correct anything that reads wrong and to add bans or allowances the samples did not surface. Their corrections win over inference.

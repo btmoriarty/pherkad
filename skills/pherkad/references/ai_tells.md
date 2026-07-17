@@ -121,11 +121,30 @@ Words meant to signal sincerity that become tells when models use them to sound 
 
 ---
 
+## Positive register: calibrate toward, not only against
+
+The catalog above says what to remove. It cannot say what a voice should sound like; that is the profile's job. But validation should carry a positive model, not only a ban list, or it flattens every draft toward a safe generic default. Read whether the draft shows the writer's own positive markers, drawn from the profile's Grounding, Texture, Mechanics, Structure, and Tone. Absence of tells is necessary, not sufficient: prose can be clean of every entry above and still read as competent, generic, and no one's.
+
+The strongest positive markers are the most specific and least imitable. Common shapes, examples of the kind of move to look for, not a checklist to score:
+
+- **Concrete before concept.** The writer leads with the physical thing and lets the reader infer the idea, rather than stating the abstraction.
+- **Flat consequence.** An outcome stated without the emotional adjective, so the plainness carries the feeling.
+- **The telling specific detail.** The incidental, slightly off detail that fixes a scene and marks it as lived. This is the single strongest signal of human provenance, and the move a model is least likely to make.
+- **Owned, not deflected.** When the failure or the stake is the writer's own, the voice names it plainly rather than distributing it to a structure.
+
+Read the profile for this writer's own version of these. When a draft is clean of tells but shows none of the writer's positive markers, that is a REVISE-level signal on its own: the voice has flattened even though nothing is technically wrong.
+
+## Genre calibration
+
+Distinctiveness lives in the frame, the transitions, and the close. The analytical, legal, or technical core of a piece stays plain, precise, and short, and it is correct when it is plain. Do not smooth a writer's positive markers evenly across a passage that must be exact, and do not flag a precise passage for failing to be vivid. A finished piece is often deliberately uneven: a distinctive frame around an exact middle, and the unevenness is the design. Apply the positive-register read to the frame and the transitions; hold the technical core to precision and to the tell catalog, not to the archetype.
+
+---
+
 ## The mechanical layer
 
 A subset of this catalog is literal enough for regex: `tools/voicelint.py`, a dependency-free Python linter with the rules in `tools/voice_config.json`. It gives exact line and column numbers, runs in CI or pre-commit (exit 1 on error-level findings, `--strict` to fail warnings, `--json` for machines), and its shipped defaults were built from tells observed across many AI-assisted documents.
 
-When validating and a Python runtime is available, run it first and fold its findings into Step 3 as pre-located hits. What it cannot see (antithesis structure, triplet piling, clustering, tone, profile match) remains this catalog's judgment work. The linter's config is tunable per person or team: `tools/examples/relaxed.json` shows loosening a default the writer's profile contradicts (deliberate dash use), `tools/examples/news-brief.json` shows team-specific additions, and the profile builder can generate a personal config. A relaxation should match an evidence-backed profile override so this layer and the linter agree.
+When validating and a Python runtime is available, run it first and fold its findings into Step 3 as pre-located hits. What it cannot see (antithesis structure, triplet piling, clustering, tone, profile match, and the positive register) remains this catalog's judgment work. The linter's config is tunable per person or team: `tools/examples/relaxed.json` shows loosening a default the writer's profile contradicts (deliberate dash use), `tools/examples/news-brief.json` shows team-specific additions, and the profile builder can generate a personal config. A relaxation should match an evidence-backed profile override so this layer and the linter agree.
 
 ---
 
@@ -147,4 +166,5 @@ The density signal catches flattened prose built from individually allowed words
 - **Single instances** of antithesis, triplet, or hedge constructions. Real writers use contrast. Density is the tell.
 - **Informal registers** (chat messages, casual email) where a relaxed register is appropriate. The validator is for drafts intended as public posts, papers, and finished prose.
 - **Documents that teach this pattern list**: this catalog, the profile, validator-internals docs, and any text that discusses the patterns by name. Ignore hits inside lines that quote, name, or define the patterns; flag only the prose proper.
+- **Precise cores.** Do not flag a legal, statutory, or technical passage for reading plainly; see Genre calibration above.
 - **Profile overrides.** Whatever `Voice_Profile.md` explicitly claims as the writer's real habit, with evidence, wins over a default in this catalog, except the density meta-rule, which always applies.
