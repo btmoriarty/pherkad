@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.1 (2026-07-17)
+
+- **Split profiles.** Pherkad loads `voice-rules.md` and `voice-authoring.md` from the working folder when present, alongside `Voice_Profile.md`. A profile can split across the three (personal markers in the profile, bans in `voice-rules.md`, drafting guidance in `voice-authoring.md`), so a writer keeps one canonical copy of each rule instead of duplicating them into the profile.
+- `SKILL.md` Step 0 and `references/authoring.md` load the companion files.
+- `VERSION` 0.4.1.
+
 ## v0.4.0 (2026-07-17)
 
 - **Authoring mode.** Pherkad now drafts and rewrites in the writer's voice, not only validates. New `references/authoring.md`: write from the profile's positive markers, avoid the product-marketing register by default, choose words by a meaning-versus-decoration condition rather than a fixed list, restore the writer's hedging, anchor in a concrete witnessed detail, and self-validate the draft before returning it.

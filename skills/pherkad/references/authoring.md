@@ -10,7 +10,7 @@ Pherkad has two modes. Validation, the rest of this skill, checks a draft agains
 
 ## Precondition: the profile
 
-Authoring reads `Voice_Profile.md` from the working folder, the same file validation uses. Without it there is no voice to write in; run `references/profile_builder.md` first. Do not author against a generic default and call it the user's voice.
+Authoring reads `Voice_Profile.md` from the working folder, the same file validation uses. Without it there is no voice to write in; run `references/profile_builder.md` first. Do not author against a generic default and call it the user's voice. If `voice-rules.md` or `voice-authoring.md` are present alongside the profile, they are part of it; load them too.
 
 ## How to draft
 
