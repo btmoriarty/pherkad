@@ -1,6 +1,6 @@
 ---
 name: pherkad
-description: Validate that papers, blog posts, and other prose sound like the user's own human voice rather than AI-generated or AI-flattened writing. Trigger when the user asks for a voice check, voice audit, or tone check, asks "does this sound like me," or submits a draft and asks whether it sounds human or sounds like them. Also trigger when the user wants to build or update their voice profile from writing samples. First run builds the profile; later runs validate drafts against it.
+description: Validate or draft prose in the user's own human voice rather than AI-generated or AI-flattened writing. Validation mode triggers on a voice check, voice audit, tone check, "does this sound like me," or a draft submitted to check whether it sounds like them. Authoring mode triggers when the user asks to write, draft, or rewrite prose in their voice, or wants text they will send as themselves (emails, posts, papers) to come out in their voice. Also triggers to build or update the voice profile from samples. First run builds the profile; later runs draft from it and validate against it.
 ---
 
 # Pherkad
@@ -13,6 +13,15 @@ Two parts do the work:
 
 - **The engine** (this skill plus `references/ai_tells.md`): a catalog of documented AI-writing tells and the scoring protocol. Generic, shared by every user.
 - **The voice profile** (`Voice_Profile.md` in the user's working folder): what this one writer actually sounds like. Personal, built once, refined over time. Never part of this repository.
+
+## Modes
+
+Pherkad runs in two directions against the same profile and the same tell catalog.
+
+- **Validation** (Steps 0 through 6 below): check an existing draft and report, with cited evidence and a verdict.
+- **Authoring** (`references/authoring.md`): draft or rewrite prose in the writer's voice in the first place, then self-validate before returning it. Use this whenever the user asks for a draft or rewrite in their voice, or wants text they will send as themselves.
+
+Both begin by loading `Voice_Profile.md`. Without it, build the profile first.
 
 ## When to use
 
