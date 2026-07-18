@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.4.0 (2026-07-17)
+
+- **Authoring mode.** Pherkad now drafts and rewrites in the writer's voice, not only validates. New `references/authoring.md`: write from the profile's positive markers, avoid the product-marketing register by default, choose words by a meaning-versus-decoration condition rather than a fixed list, restore the writer's hedging, anchor in a concrete witnessed detail, and self-validate the draft before returning it.
+- `SKILL.md` gains a Modes section: validation (Steps 0 to 6) and authoring (`references/authoring.md`), both reading the same `Voice_Profile.md`.
+- Weighted preferences are documented as authoring guidance and corpus-level monitoring, never a per-document lint rule, since a ratio is not checkable in a single document.
+- `VERSION` bumped to 0.4.0.
+
 ## v0.3.1 (2026-07-17)
 
 - **voicelint: the "quietly" rule now flags the trailing position, not the pre-modifier.** A pre-modifier "quietly + verb" ("quietly building") cannot be told mechanically from a legitimate stance ("quietly skeptical," "quietly noticing"), so the old rule fired on good prose. The linter now flags "quietly" only when it ends a clause or sentence ("shut it down quietly," "the numbers moved quietly"), the insinuating position that implies concealed intent. The pre-modifier case moves to the judgment layer in `references/ai_tells.md`.
