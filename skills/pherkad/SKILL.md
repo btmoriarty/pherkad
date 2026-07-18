@@ -36,6 +36,7 @@ Look for `Voice_Profile.md` in the user's working folder.
 
 - **Missing:** run the profile-builder interview in `references/profile_builder.md` before validating anything. Validating without a profile produces a generic AI-tell scan at best; say so plainly if the user wants a scan anyway, and label the output as profile-less.
 - **Present:** load it. Its markers drive Dimensions 1 through 4, 6, and 7 below. `references/example_profile.md` shows the expected shape (the persona in it is fictional).
+- **Companion files:** if `voice-rules.md` or `voice-authoring.md` sit in the same folder, load them too. A profile may be split across the three: `Voice_Profile.md` holds the personal markers, `voice-rules.md` the bans, `voice-authoring.md` the drafting guidance. Together they are the profile.
 
 ## Step 1: Extract a voice fingerprint
 
