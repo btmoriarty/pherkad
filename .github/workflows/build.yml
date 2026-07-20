@@ -35,8 +35,11 @@ jobs:
           python -c "import weasyprint; weasyprint.HTML('docs/CHEATSHEET.html').write_pdf('docs/CHEATSHEET.pdf')"
 
       - name: Lint the docs with voicelint
+        # CHANGELOG.md is a pattern-documenting meta-doc (it names banned phrases
+        # when describing the rules), so it trips the mechanical linter the way
+        # ai_tells.md would. Lint only the voice-bearing prose.
         run: |
-          python3 skills/pherkad/tools/voicelint.py README.md docs/CHEATSHEET.md CHANGELOG.md
+          python3 skills/pherkad/tools/voicelint.py README.md docs/CHEATSHEET.md
 
       - name: Commit artifacts
         run: |
