@@ -1,5 +1,5 @@
 {
-  "_comment": "Rule set for voicelint, the mechanical layer of Pherkad. Every default was built from tells observed across many AI-assisted documents, not one writer's taste. If a rule contradicts your real style (you use dashes deliberately, 'robust' is your field's vocabulary), relax it in your own copy; see examples/relaxed.json, and the Pherkad profile builder for generating a personal config from your voice profile. Case-insensitive.",
+  "_comment": "Rule set for voicelint, the mechanical layer of Pherkad. Every default was built from tells observed across many AI-assisted documents, not one writer's taste. A hit means the configured pattern is present, not that a passage was machine-written. A user config is deep-merged onto these defaults: unlisted top-level fields and unlisted nested keys (for example one entry in watch_words) inherit; listed arrays replace, or amend a default list with add_<field> / remove_<field>. If a rule contradicts your real style (you use dashes deliberately, 'robust' is your field's vocabulary), relax it in your own copy; see examples/relaxed.json, and the Pherkad profile builder for generating a personal config from your voice profile. Case-insensitive.",
 
   "no_dashes": true,
   "dash_density_cap": 1.0,
@@ -104,7 +104,8 @@
     "live": 2,
     "quietly": 2
   },
-  "flag_loaded_quietly": true,
+  "_flag_loaded_quietly_comment": "Off by default: clause-final position alone cannot separate an insinuating 'quietly' from a plain manner adverb ('shut the door quietly'). Set true as a house rule if your register wants it; overuse is still caught by the 'quietly' watch word, and the pre-modifier case is judged in references/ai_tells.md.",
+  "flag_loaded_quietly": false,
 
   "aggregator_domains": [
     "msn.com",

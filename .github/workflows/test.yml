@@ -1,0 +1,36 @@
+name: Test
+
+# Runs the voicelint regression suite across supported Python versions, and
+# lints the voice-bearing docs, on every push and pull request. Kept separate
+# from build.yml, which rebuilds and commits artifacts only on main.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Run the voicelint regression suite
+        run: python3 skills/pherkad/tools/test_voicelint.py
+
+      - name: Lint the voice-bearing docs
+        # CHANGELOG.md and references/ai_tells.md are pattern-documenting
+        # meta-docs (they name banned phrases when describing the rules), so
+        # they trip the mechanical linter by design. Lint only the prose that
+        # is meant to read clean.
+        run: python3 skills/pherkad/tools/voicelint.py README.md docs/CHEATSHEET.md

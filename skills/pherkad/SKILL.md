@@ -9,10 +9,11 @@ Validate that written output sounds like one specific person's voice.
 
 Pherkad runs a structured diagnostic against text to detect AI-generated flatness, voice drift, and tone misalignment. It produces an actionable report with cited evidence, never a bare score.
 
-Two parts do the work:
+Three parts do the work:
 
-- **The engine** (this skill plus `references/ai_tells.md`): a catalog of documented AI-writing tells and the scoring protocol. Generic, shared by every user.
+- **The tell catalog** (this skill plus `references/ai_tells.md`): documented AI-writing tells and the scoring protocol. Generic, shared by every user.
 - **The voice profile** (`Voice_Profile.md` in the user's working folder): what this one writer actually sounds like. Personal, built once, refined over time. Never part of this repository.
+- **The mechanical linter** (`tools/voicelint.py`): the regex-able subset of the catalog as a dependency-free script. It finds the literal patterns that can be checked without judgment; everything else stays with the model.
 
 ## Modes
 
@@ -79,10 +80,12 @@ Apply the catalog's caveats: technical-literal uses, direct quotes, single isola
 
 ## Step 4: Compute the density signal
 
+Apply the density verdict only to a draft of at least 150 words with at least 3 flagged constructions. A rate per 100 words is meaningless on a short passage: one hit in 40 words reads as 2.5 and would force a REVISE that a single stray phrase should never force (see Calibration notes). Below either floor, report the individual findings and skip the density warning.
+
 1. Count total flagged constructions across the document.
 2. Count total words.
 3. Density = (flagged constructions / words) * 100.
-4. Density above 2.0 per 100 words raises a DENSITY WARNING.
+4. For a draft of 150 or more words with 3 or more findings, density above 2.0 per 100 words raises a DENSITY WARNING. Otherwise there is no density warning.
 
 Clustering weighs separately: two or more antithesis constructions (5c) or two or more triplet noun piles (5f) inside one paragraph raises a CLUSTER WARNING for that paragraph.
 
@@ -150,4 +153,4 @@ A single antithesis construction or one banned phrase does not force a REVISE. T
 
 **Genre calibration.** Distinctiveness lives in the frame, the transitions, and the close; a precise legal or technical core is correct when it is plain and must not be flagged for failing to be vivid. A finished piece is often deliberately uneven, a distinctive frame around an exact middle, and that unevenness is the design, not a defect. Read the frame and the transitions for the writer's positive register; hold the technical core to accuracy and the tell catalog, not to the archetype.
 
-The profile is the user's data. It lives in their folder, is never committed to this repository, and updates only when they ask or when they correct a flag ("that one is actually me"). Corrections append to the profile so the validator gets more accurate with use.
+The profile is the user's data. It lives in their folder, is never committed to this repository, and updates only when they ask or when they correct a flag ("that one is actually me"). Corrections append to the profile, so a later run can apply the recorded correction instead of repeating the flag.

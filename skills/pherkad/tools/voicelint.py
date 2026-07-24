@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
-"""voicelint - flag writing that reads as AI-generated.
+"""voicelint: flag configured mechanical writing patterns.
 
 The mechanical layer of Pherkad. A small, dependency-free linter that scans
-prose (Markdown, plain text, or HTML) for the stylistic tells that make writing
-sound machine-generated: canned phrases, engagement-bait openers, filler
-intensifiers, overused soft phrasings, dash overuse, over-used crutch words,
-and low-trust source domains. The rules live in an external JSON config
-(voice_config.json) so any person or team can tune them; the shipped defaults
-were built from tells observed across many AI-assisted documents.
+prose (Markdown, plain text, or HTML) for the stylistic patterns configured in
+its rule set: canned phrases, engagement-bait openers, filler intensifiers,
+overused soft phrasings, dash overuse, over-used crutch words, and low-trust
+source domains. The rules live in an external JSON config (voice_config.json)
+so any person or team can tune them; the shipped defaults were built from tells
+observed across many AI-assisted documents. No hit proves how a passage was
+written; a hit means the configured pattern is present.
 
 What this layer cannot see (antithesis constructions, triplet noun piling,
-tone, whether prose sounds like *you*) is the job of the Pherkad skill's
-judgment pass. See references/ai_tells.md.
+tone, direct-quote and technical-context judgment, whether prose sounds like
+*you*) is the job of the Pherkad skill's judgment pass. The linter masks code
+spans before matching, but it does not adjudicate quotations or domain context;
+that stays with the model. See references/ai_tells.md.
 
 Usage:
     voicelint.py FILE [FILE ...]
@@ -25,7 +28,7 @@ Exit status: 0 if clean; 1 if any error-level finding (or any warning with
 --strict); 2 on a usage, IO, or config problem. That makes it safe in CI, where
 a crash must not look like "findings found".
 
-Stdlib only. Tested on Python 3.8+.
+Stdlib only. Runs on Python 3.8+ (exercised in CI across 3.8 through 3.12).
 """
 from __future__ import annotations
 import argparse
@@ -95,15 +98,30 @@ FALLBACK_CONFIG = {
         "leverage", "delve", "delves", "delving", "tapestry", "showcases",
     ],
     "watch_words": {"live": 2, "quietly": 2},
-    "flag_loaded_quietly": True,
+    # Off by default: clause-final position alone cannot tell an insinuating
+    # "quietly" from a plain manner adverb ("shut the door quietly"). Kept as an
+    # opt-in house rule; overuse is still caught by the "quietly" watch word,
+    # and the pre-modifier case lives in the judgment layer (references/ai_tells.md).
+    "flag_loaded_quietly": False,
     "aggregator_domains": [
         "msn.com", "news.yahoo.com", "timesofindia", "lawyermonthly.com",
         "techtimes.com", "933thedrive.com",
     ],
 }
 
-# Words that can follow "quietly" without it being a loaded adverb+verb tell.
-_QUIETLY_STOP = r"(?:in|on|at|and|but|the|a|an|to|as|with|for|by|of|from|into|over|under|behind|before|after)"
+# Literal nouns that make "load-bearing" a structural-engineering term, not the
+# figurative tell. Kept broad so real technical prose is not flagged.
+_LOAD_BEARING_LITERAL = (
+    r"walls?|beams?|columns?|members?|structures?|assembl(?:y|ies)|"
+    r"capacit(?:y|ies)|joists?|trusses|slabs?|frames?|studs?|lintels?|girders?"
+)
+
+# Config fields whose value is a list of strings, and which support
+# add_<field> / remove_<field> override keys in a user config.
+_LIST_FIELDS = (
+    "banned_phrases", "engagement_bait", "soft_phrases",
+    "filler_words", "aggregator_domains",
+)
 
 
 @dataclass
@@ -125,7 +143,10 @@ def _validate(cfg: dict) -> None:
     """Reject a structurally invalid rule set with a clear message (exit 2)."""
     if not isinstance(cfg, dict):
         _fail("config must be a JSON object")
-    for key in ("banned_phrases", "engagement_bait", "soft_phrases", "filler_words", "aggregator_domains"):
+    list_keys = list(_LIST_FIELDS)
+    for field in _LIST_FIELDS:
+        list_keys += ["add_" + field, "remove_" + field]
+    for key in list_keys:
         if key in cfg:
             v = cfg[key]
             if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
@@ -143,11 +164,52 @@ def _validate(cfg: dict) -> None:
             _fail("config field 'dash_density_cap' must be a non-negative number")
 
 
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Merge ``override`` onto ``base`` recursively.
+
+    Nested objects (for example ``watch_words``) merge key by key, so a config
+    that sets one watch word does not wipe the other defaults. A non-dict value
+    replaces the default outright. List fields replace wholesale here; use the
+    ``add_<field>`` / ``remove_<field>`` keys (applied afterward) to amend a
+    default list instead of replacing it.
+    """
+    out = dict(base)
+    for key, val in override.items():
+        if isinstance(out.get(key), dict) and isinstance(val, dict):
+            out[key] = _deep_merge(out[key], val)
+        else:
+            out[key] = val
+    return out
+
+
+def _apply_list_ops(cfg: dict) -> dict:
+    """Apply add_<field> / remove_<field> amendments, then drop the helper keys.
+
+    Adds are appended (skipping duplicates); removes are filtered out. This lets
+    a config extend or trim a shipped list without restating the whole thing.
+    """
+    for field in _LIST_FIELDS:
+        adds = cfg.pop("add_" + field, [])
+        removes = cfg.pop("remove_" + field, [])
+        if not adds and not removes:
+            continue
+        merged = list(cfg.get(field, []))
+        for item in adds:
+            if item not in merged:
+                merged.append(item)
+        drop = set(removes)
+        cfg[field] = [x for x in merged if x not in drop]
+    return cfg
+
+
 def load_config(path: str | None) -> dict:
     """Load the JSON rule set. Look next to the script, then in the CWD.
 
     Falls back to the built-in defaults (with a stderr note) if none is found,
-    so a copied-away script still runs, just predictably.
+    so a copied-away script still runs, just predictably. A user config is
+    deep-merged onto the defaults: unlisted top-level fields and unlisted nested
+    keys inherit, listed objects merge key by key, and listed arrays replace
+    (amend with add_/remove_ keys).
     """
     if path:
         chosen = path
@@ -164,9 +226,8 @@ def load_config(path: str | None) -> dict:
     except (OSError, json.JSONDecodeError) as exc:
         _fail(f"cannot read config {chosen}: {exc}")
     _validate(cfg)
-    merged = dict(FALLBACK_CONFIG)
-    merged.update(cfg)
-    return merged
+    merged = _deep_merge(FALLBACK_CONFIG, cfg)
+    return _apply_list_ops(merged)
 
 
 def strip_html(text: str) -> str:
@@ -184,6 +245,34 @@ def normalize_quotes(text: str) -> str:
     """Fold typographic quotes to ASCII so phrase rules match AI/Word output.
     One-to-one, so character offsets are preserved."""
     return text.translate({0x2018: "'", 0x2019: "'", 0x201C: '"', 0x201D: '"'})
+
+
+def mask_code(text: str) -> str:
+    """Blank Markdown code so a pattern quoted as code is not flagged.
+
+    Fenced blocks (```...```) and inline spans (`...`) become same-height
+    whitespace: newlines stay, every other character becomes a space, so line
+    and column offsets are unchanged. This is why a doc can name a banned phrase
+    inside backticks without tripping the linter. It does not touch prose in
+    ordinary quotation marks; adjudicating a direct quote stays with the
+    judgment layer (see references/ai_tells.md)."""
+    def blank(m):
+        return re.sub(r"[^\n]", " ", m.group(0))
+    text = re.sub(r"(?s)```.*?```", blank, text)
+    text = re.sub(r"`[^`\n]*`", blank, text)
+    return text
+
+
+def _phrase_pattern(phrase: str) -> str:
+    """Escape a literal phrase and guard its alphanumeric edges with token
+    boundaries, so 'is the move' does not match inside 'movement' but
+    'picture this:' (edge is punctuation) still matches as written."""
+    pat = re.escape(phrase)
+    if phrase[:1].isalnum():
+        pat = r"(?<![0-9A-Za-z])" + pat
+    if phrase[-1:].isalnum():
+        pat = pat + r"(?![0-9A-Za-z])"
+    return pat
 
 
 def _linecol_fn(text: str):
@@ -213,13 +302,21 @@ def _soft_to_regex(phrase: str) -> str:
             out.append(r"\w+ing")
         elif p:
             out.append(re.escape(p))
-    return "".join(out)
+    pat = "".join(out)
+    if phrase[:1].isalnum():
+        pat = r"(?<![0-9A-Za-z])" + pat
+    if phrase[-1:].isalnum():
+        pat = pat + r"(?![0-9A-Za-z])"
+    return pat
 
 
 def check(text: str, cfg: dict) -> list[Finding]:
     """Run every enabled rule over ``text`` and return findings in order."""
     text = normalize_quotes(text)
     at = _linecol_fn(text)
+    # Match against a copy with code spans blanked; offsets are preserved, so
+    # findings still point at the real line and column.
+    text = mask_code(text)
     out: list[Finding] = []
 
     def add(m, severity, rule, message):
@@ -232,8 +329,10 @@ def check(text: str, cfg: dict) -> list[Finding]:
             add(m, "error", "dash", "em/en dash; use a comma, colon, or full stop")
     else:
         cap = float(cfg.get("dash_density_cap", 0) or 0)
-        if cap > 0 and dash_hits:
-            words = len(re.findall(r"\w+", text))
+        words = len(re.findall(r"\w+", text))
+        # A rate per 100 words is meaningless on a sentence; require a floor of
+        # text before a density warning so one dash in a short note is silent.
+        if cap > 0 and dash_hits and words >= 100:
             allowed = int(cap * words / 100)
             if len(dash_hits) > allowed:
                 add(dash_hits[allowed], "warning", "dash-density",
@@ -241,15 +340,15 @@ def check(text: str, cfg: dict) -> list[Finding]:
                     "heavy dash use is an AI tell")
 
     if cfg.get("load_bearing_literal_only", True):
-        for m in _iter(r"load[-\s]?bearing(?!\s+walls?\b)", text):
+        for m in _iter(rf"load[-\s]?bearing(?!\s+(?:{_LOAD_BEARING_LITERAL})\b)", text):
             add(m, "error", "load-bearing", "figurative 'load-bearing'; earn the weight instead")
 
     for phrase in cfg.get("banned_phrases", []):
-        for m in _iter(re.escape(phrase), text):
+        for m in _iter(_phrase_pattern(phrase), text):
             add(m, "error", "banned-phrase", f"canned phrase: '{phrase}'")
 
     for phrase in cfg.get("engagement_bait", []):
-        for m in _iter(re.escape(phrase), text):
+        for m in _iter(_phrase_pattern(phrase), text):
             add(m, "error", "engagement-bait", f"manufactured-stance opener: '{phrase}'")
 
     for phrase in cfg.get("soft_phrases", []):
@@ -296,7 +395,7 @@ def read_source(path: str, as_html: bool) -> str:
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="Flag AI-generated writing tells.")
+    ap = argparse.ArgumentParser(description="Flag configured mechanical writing patterns.")
     ap.add_argument("files", nargs="+", help="files to lint, or - for stdin")
     ap.add_argument("--config", help="path to a JSON rule set")
     ap.add_argument("--html", action="store_true", help="treat input as HTML (also auto-detected by extension)")

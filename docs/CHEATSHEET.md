@@ -7,9 +7,9 @@ One page. Everything Pherkad does and what to say to trigger it. It validates ag
 | Mode | Say something like | What you get |
 |---|---|---|
 | **Build profile** | "build my voice profile" | A short interview over your samples, then `Voice_Profile.md`: your authority, hedging, texture, mechanics, structure, and tone, every marker backed by a quoted sentence of yours |
-| **Voice check** | "does this sound like me," "voice check this draft," "tone check" | A fingerprint (the 3 sentences most and least like you), seven dimensions scored with evidence, every AI tell flagged, density per 100 words, and a verdict: PASS / REVISE / REWRITE |
+| **Voice check** | "does this sound like me," "voice check this draft," "tone check" | A fingerprint (the 3 sentences most and least like you), seven dimensions scored with evidence, the full catalog checked, density per 100 words, and a verdict: PASS / REVISE / REWRITE |
 | **Targeted rewrites** | arrives with any REVISE or REWRITE verdict | Only the flagged sentences rewritten, each fix explained. Facts, names, numbers, dates, sources, and emphasis stay exactly as you had them |
-| **Correct a flag** | "that one is actually me" | The correction appends to your profile with the sentence as evidence, so the validator gets more accurate the more you use it |
+| **Correct a flag** | "that one is actually me" | The correction appends to your profile with the sentence as evidence, so a later run applies it instead of repeating the flag |
 | **Personal linter config** | "make me a linter config from my profile" | Your dash stance, crutch-word caps, and extra bans as a `voice_config.json` the CLI linter can run in CI |
 | **CLI linter** | `python3 tools/voicelint.py draft.md` | The mechanical tells with exact line numbers, no model needed. `--json --strict` for CI; exits 0 clean, 1 findings, 2 usage or IO error |
 

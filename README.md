@@ -14,7 +14,7 @@ Pherkad splits the problem in three:
 - **A personal voice profile**: built once from 3 to 5 samples of your real writing through a short interview ([`references/profile_builder.md`](skills/pherkad/references/profile_builder.md)). It records where your authority comes from, how you hedge, what concrete texture you use, your sentence mechanics, your structural habits, and your tone, each marker backed by a quoted sentence of yours. A fictional example profile shows the shape ([`references/example_profile.md`](skills/pherkad/references/example_profile.md)).
 - **A mechanical linter** ([`skills/pherkad/tools/voicelint.py`](skills/pherkad/tools/voicelint.py)): the regex-able subset of the catalog as a dependency-free, stdlib-only Python script (3.8+). Exact line numbers, JSON output, CI-friendly exit codes. Runs standalone, no model needed.
 
-A validation run fingerprints the draft (the three sentences most and least like you), runs the linter when Python is available, scores seven dimensions with quoted evidence, flags every tell, computes tell density per 100 words, and returns a verdict: PASS, REVISE, or REWRITE, with targeted rewrites of only the flagged sentences.
+A validation run fingerprints the draft (the three sentences most and least like you), runs the linter when Python is available, scores seven dimensions with quoted evidence, checks the full catalog, computes tell density per 100 words, and returns a verdict: PASS, REVISE, or REWRITE, with targeted rewrites of only the flagged sentences.
 
 ## The linter alone
 
@@ -25,13 +25,15 @@ python3 skills/pherkad/tools/voicelint.py draft.md          # findings with line
 python3 skills/pherkad/tools/voicelint.py --json --strict draft.md   # CI mode
 ```
 
-Rules live in [`tools/voice_config.json`](skills/pherkad/tools/voice_config.json). Every shipped default was built from tells observed across many AI-assisted documents, including the hard no-dash rule. If a default contradicts your real style (you use dashes deliberately, "robust" is your field's vocabulary), relax it in your own config and record the override in your voice profile so both layers agree: [`tools/examples/relaxed.json`](skills/pherkad/tools/examples/relaxed.json) shows the shape, [`tools/examples/news-brief.json`](skills/pherkad/tools/examples/news-brief.json) shows team-specific additions, and the profile builder can generate a personal config. Exit codes: 0 clean, 1 findings, 2 usage or IO error, so a crash never reads as "findings found."
+The linter masks Markdown code spans before matching, so a doc can name a banned phrase inside backticks without tripping it. It does not adjudicate ordinary quotations or domain context; that judgment stays with the model. CI lints this repo's own README and cheat sheet on every push, and they exit 0 under the default rules.
+
+Rules live in [`tools/voice_config.json`](skills/pherkad/tools/voice_config.json). Every shipped default was built from tells observed across many AI-assisted documents, including the hard no-dash rule. A user config is deep-merged onto the defaults: unlisted top-level fields and unlisted nested keys inherit, listed arrays replace, and `add_<field>` / `remove_<field>` amend a shipped list without restating it. If a default contradicts your real style (you use dashes deliberately, `robust` is your field's vocabulary), relax it in your own config and record the override in your voice profile so both layers agree: [`tools/examples/relaxed.json`](skills/pherkad/tools/examples/relaxed.json) shows the shape, [`tools/examples/news-brief.json`](skills/pherkad/tools/examples/news-brief.json) shows team-specific additions, and the profile builder can generate a personal config. Exit codes: 0 clean, 1 findings, 2 usage or IO error, so a crash never reads as "findings found."
 
 ## Why these defaults
 
-The default rule set is the one I run on my own writing. Every entry took the same route in: a phrase or construction I kept meeting in AI-assisted documents, across many documents and many contexts, until it read as a signature. Nothing on the list is there as a matter of taste, which is why the defaults ship strict.
+The default rule set is the one I run on my own writing. I added each entry after meeting a phrase or construction across many AI-assisted documents, in many contexts, until it read as a signature. That makes it a useful house default, not proof that the phrase is bad or machine-written. A hit flags a pattern; it does not judge how the text was written.
 
-They are still my conclusions, and your register may differ. The rules are a JSON file, so changing them is the easy part: clone the tool and edit `tools/voice_config.json` to your purpose, or keep the defaults and relax specific rules in your own config. The one ask: when you loosen a rule, do it because the evidence of your own writing shows the habit is really yours, and record the override in your voice profile so the linter and the judgment layer agree.
+The defaults are still my conclusions, and your register may differ. The rules are a JSON file, so changing them is the easy part: clone the tool and edit `tools/voice_config.json` to your purpose, or keep the defaults and relax specific rules in your own config. The one ask: when you loosen a rule, do it because the evidence of your own writing shows the habit is really yours, and record the override in your voice profile so the linter and the judgment layer agree.
 
 ## Why this exists
 
@@ -54,7 +56,7 @@ One page, every mode, what to say, what you get: [docs/CHEATSHEET.md](docs/CHEAT
 
 ## Your data
 
-The voice profile is built from your writing and stays in your folder. This repository ships no profiles and no personal data; the only persona in it (Rosa Vantani) is fictional. Corrections you make ("that flag is wrong, that's really me") append to your profile, so the validator gets more accurate with use.
+The voice profile is built from your writing and stays in your folder. This repository ships no profiles and no personal data; the only persona in it (Rosa Vantani) is fictional. Corrections you make ("that flag is wrong, that's really me") append to your profile, so a later run applies the recorded correction instead of repeating the flag.
 
 ## Install
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.4.2 (2026-07-24)
+
+Correctness pass on the mechanical linter after an external repo review, plus honest-scope wording in the docs. The linter now overreaches less and the judgment layer keeps the calls it should keep.
+
+- **Phrase matching respects word boundaries.** A banned or engagement-bait phrase whose edge is alphanumeric is now guarded, so `is the move` no longer fires inside `movement`. Punctuation-edged phrases (`picture this:`, `in conclusion,`) still match as written.
+- **Code spans are masked before matching.** Fenced blocks and inline `code` become same-height whitespace, so a doc can name a banned phrase in backticks without tripping the linter. Line and column offsets are unchanged. Ordinary quotations are deliberately not exempted; adjudicating a direct quote stays with the judgment layer.
+- **`load-bearing` recognizes real structural context.** The literal exemption widened past `walls` to beams, columns, members, structures, assemblies, capacity, joists, trusses, slabs, frames, studs, lintels, and girders. Figurative use still fires.
+- **`flag_loaded_quietly` is off by default.** Clause-final position alone cannot separate an insinuating `quietly` from a plain manner adverb (`shut the door quietly`), which produced false positives. It is now an opt-in house rule; overuse is still caught by the `quietly` watch word, and the pre-modifier case stays in `references/ai_tells.md`.
+- **Config deep-merges.** A user config now merges onto the defaults key by key: setting one entry in `watch_words` no longer wipes the others. New `add_<field>` / `remove_<field>` keys amend a shipped list without restating it. `examples/relaxed.json` demonstrates both.
+- **Density needs a floor of text.** The judgment-layer density verdict (`SKILL.md` Step 4) applies only to a draft of 150+ words with 3+ findings, so a lone hit in a short passage no longer forces a REVISE against the stated lone-hit calibration. The linter's dash-density warning gained the same floor.
+- **Tests and CI.** `tools/test_voicelint.py` rewritten as a table-driven suite covering every rule and promised exception (boundaries, load-bearing context, code masking, dash and density modes, deep-merge and list ops, domain matching, HTML stripping, JSON, `--strict`, exit codes, invalid config, line/column). A new `.github/workflows/test.yml` runs it on Python 3.8 through 3.12 on every push and pull request.
+- **Honest-scope wording.** README no longer says "flags every tell" (now "checks the full catalog"); "the validator gets more accurate with use" became "a later run applies the recorded correction"; the module and `--help` descriptions and `ai_tells.md` no longer claim to detect provenance; the self-lint claim now names its scope (README and the cheat sheet).
+- `VERSION` 0.4.2.
+
 ## v0.4.1 (2026-07-17)
 
 - **Split profiles.** Pherkad loads `voice-rules.md` and `voice-authoring.md` from the working folder when present, alongside `Voice_Profile.md`. A profile can split across the three (personal markers in the profile, bans in `voice-rules.md`, drafting guidance in `voice-authoring.md`), so a writer keeps one canonical copy of each rule instead of duplicating them into the profile.
@@ -33,7 +47,7 @@
 - **voicelint: soft-cliche warnings.** A new warning layer for phrasings that are hard to ban outright but recur far too often in AI-assisted text. New `soft_phrases` config field, matched as warnings rather than errors, with readable placeholders: `[word]` matches one token, `[verb]` matches a gerund. Seeded set: `it's worth [verb]`, the `I want to be plain / clear / honest / upfront / direct / transparent` opener family, `gut-check` and `gut check`, `where your [word] lives`, `names a way`, and `the [word] that never bends`.
 - A soft hit that lands on a stronger banned phrase (for example `it's worth noting that`) is dropped as redundant, so the phrase reports once, as an error.
 - Config validation now covers `soft_phrases`. Warnings still exit 0 unless `--strict`, so the layer is safe in CI.
-- Reworded the two cheat-sheet footer labels the new rule flagged in Pherkad's own docs (`Where your data lives` -> `Your data`, `The rule that never bends` -> `The one rule`), so the tool keeps passing its own linter.
+- Reworded the two cheat-sheet footer labels the new rule flagged in Pherkad's own docs (`Where your data lives` -> `Your data`, `The rule that never bends` -> `The one rule`), so `README.md` and the cheat sheet still exit 0 under the default linter (the scope CI checks; the changelog and catalog quote the patterns by name and are exempt).
 
 ## v0.1 (2026-07-15)
 
