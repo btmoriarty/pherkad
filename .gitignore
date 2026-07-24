@@ -3,3 +3,6 @@ __pycache__/
 voice-rules.md
 voice-authoring.md
 voice-intake.md
+
+# Voice-eval study data (real writers samples/profiles stay local)
+eval/data/

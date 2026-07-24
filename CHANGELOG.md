@@ -9,7 +9,8 @@ A review confirmed the mechanical layer is sound and put the weight on the judgm
 - **The profile holdout is repaired.** The holdout is chosen and isolated before markers are extracted (a read sample cannot be made unseen); a failed holdout is spent, so a profile changed to fix it is confirmed on a new untouched sample; the flattened rewrite is produced by an editor or model blind to the profile, preserving facts and order within 10 percent length, not by deleting the profile's markers; and the impostor check uses several closely matched writers.
 - **The blind-eval protocol became a study design.** `docs/blind-eval.md` now leads with correct-profile lift (run every item under the correct, a wrong, a shuffled, and no profile, plus linter-only) as the primary result, since a pass proves nothing if the wrong profile does as well. Added within-writer register coverage, independent blind flattening with at least two variants, several hard impostors, external blinded pairwise reader judgment, role separation across model families, frozen definitions (light REVISE, run count, model and sampling, stability, thresholds), a twelve-item measurement list, an authoring arm, and pilot-versus-confirmatory sizing.
 - **Test.** Added a regression case that an empty watch-word key exits 2.
-- `VERSION` 0.4.6.
+- **Evaluation harness.** New `eval/study.py` and `eval/README.md`: a blinded voice-authoring study that measures correct-profile lift (a draft written with the writer's own profile against wrong-profile and no-profile controls, plus a real held-out anchor), the concrete way to run the `docs/blind-eval.md` design. Data lives under `eval/data/` and is gitignored; the code and protocol are shareable.
+- `VERSION` 0.4.6 (the eval harness is repo tooling, not part of the skill bundle).
 
 ## v0.4.5 (2026-07-24)
 
