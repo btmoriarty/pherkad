@@ -101,18 +101,11 @@
   ],
 
   "watch_words": {
-    "live": 2,
     "quietly": 2
   },
   "_flag_loaded_quietly_comment": "Off by default: clause-final position alone cannot separate an insinuating 'quietly' from a plain manner adverb ('shut the door quietly'). Set true as a house rule if your register wants it; overuse is still caught by the 'quietly' watch word, and the pre-modifier case is judged in references/ai_tells.md.",
   "flag_loaded_quietly": false,
 
-  "aggregator_domains": [
-    "msn.com",
-    "news.yahoo.com",
-    "timesofindia",
-    "lawyermonthly.com",
-    "techtimes.com",
-    "933thedrive.com"
-  ]
+  "_source_comment": "aggregator_domains is source-quality policy, not a voice tell, so it is empty in the generic defaults. A team that wants a low-trust-domain check keeps its list in a config like examples/news-brief.json.",
+  "aggregator_domains": []
 }

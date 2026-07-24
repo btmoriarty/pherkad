@@ -39,6 +39,7 @@ import os
 import re
 import sys
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -97,23 +98,24 @@ FALLBACK_CONFIG = {
         "genuinely", "honestly", "straightforward", "seamless", "seamlessly",
         "leverage", "delve", "delves", "delving", "tapestry", "showcases",
     ],
-    "watch_words": {"live": 2, "quietly": 2},
+    "watch_words": {"quietly": 2},
     # Off by default: clause-final position alone cannot tell an insinuating
     # "quietly" from a plain manner adverb ("shut the door quietly"). Kept as an
     # opt-in house rule; overuse is still caught by the "quietly" watch word,
     # and the pre-modifier case lives in the judgment layer (references/ai_tells.md).
     "flag_loaded_quietly": False,
-    "aggregator_domains": [
-        "msn.com", "news.yahoo.com", "timesofindia", "lawyermonthly.com",
-        "techtimes.com", "933thedrive.com",
-    ],
+    # Source-quality policy, not a voice tell, so it is not a shipped default.
+    # A team that wants it keeps a config like examples/news-brief.json.
+    "aggregator_domains": [],
 }
 
 # Literal nouns that make "load-bearing" a structural-engineering term, not the
-# figurative tell. Kept broad so real technical prose is not flagged.
+# figurative tell. Deliberately only unambiguously physical members: words like
+# "structure", "capacity", "member", "frame", and "assembly" read as metaphor
+# just as often ("the load-bearing structure of the argument"), so they stay
+# with the judgment layer instead of the regex.
 _LOAD_BEARING_LITERAL = (
-    r"walls?|beams?|columns?|members?|structures?|assembl(?:y|ies)|"
-    r"capacit(?:y|ies)|joists?|trusses|slabs?|frames?|studs?|lintels?|girders?"
+    r"walls?|beams?|columns?|joists?|trusses|slabs?|studs?|lintels?|girders?|rafters?"
 )
 
 # Config fields whose value is a list of strings, and which support
@@ -263,16 +265,25 @@ def mask_code(text: str) -> str:
     return text
 
 
-def _phrase_pattern(phrase: str) -> str:
-    """Escape a literal phrase and guard its alphanumeric edges with token
-    boundaries, so 'is the move' does not match inside 'movement' but
-    'picture this:' (edge is punctuation) still matches as written."""
-    pat = re.escape(phrase)
-    if phrase[:1].isalnum():
-        pat = r"(?<![0-9A-Za-z])" + pat
-    if phrase[-1:].isalnum():
-        pat = pat + r"(?![0-9A-Za-z])"
-    return pat
+def _iter_phrase(pattern: str, phrase: str, text: str):
+    """Yield case-insensitive matches of ``pattern`` in ``text``, rejecting a
+    match whose alphanumeric edge sits against another alphanumeric character.
+
+    The guard is decided from ``phrase`` (the readable source): if it starts or
+    ends with an alphanumeric, that side must not touch a word character, so
+    'is the move' does not match inside 'movement' while 'picture this:'
+    (punctuation edge) still matches. The neighbor test uses ``str.isalnum``,
+    which is Unicode-aware, so an accented letter next to the phrase counts as a
+    word character too."""
+    guard_left = phrase[:1].isalnum()
+    guard_right = phrase[-1:].isalnum()
+    for m in re.finditer(pattern, text, re.IGNORECASE):
+        s, e = m.start(), m.end()
+        if guard_left and s > 0 and text[s - 1].isalnum():
+            continue
+        if guard_right and e < len(text) and text[e].isalnum():
+            continue
+        yield m
 
 
 def _linecol_fn(text: str):
@@ -302,12 +313,7 @@ def _soft_to_regex(phrase: str) -> str:
             out.append(r"\w+ing")
         elif p:
             out.append(re.escape(p))
-    pat = "".join(out)
-    if phrase[:1].isalnum():
-        pat = r"(?<![0-9A-Za-z])" + pat
-    if phrase[-1:].isalnum():
-        pat = pat + r"(?![0-9A-Za-z])"
-    return pat
+    return "".join(out)
 
 
 def check(text: str, cfg: dict) -> list[Finding]:
@@ -330,9 +336,10 @@ def check(text: str, cfg: dict) -> list[Finding]:
     else:
         cap = float(cfg.get("dash_density_cap", 0) or 0)
         words = len(re.findall(r"\w+", text))
-        # A rate per 100 words is meaningless on a sentence; require a floor of
-        # text before a density warning so one dash in a short note is silent.
-        if cap > 0 and dash_hits and words >= 100:
+        # A rate per 100 words is meaningless on a short passage. Match the
+        # judgment layer's floor (SKILL.md Step 4): at least 150 words and at
+        # least 3 dash hits before a density warning fires.
+        if cap > 0 and words >= 150 and len(dash_hits) >= 3:
             allowed = int(cap * words / 100)
             if len(dash_hits) > allowed:
                 add(dash_hits[allowed], "warning", "dash-density",
@@ -344,15 +351,15 @@ def check(text: str, cfg: dict) -> list[Finding]:
             add(m, "error", "load-bearing", "figurative 'load-bearing'; earn the weight instead")
 
     for phrase in cfg.get("banned_phrases", []):
-        for m in _iter(_phrase_pattern(phrase), text):
+        for m in _iter_phrase(re.escape(phrase), phrase, text):
             add(m, "error", "banned-phrase", f"canned phrase: '{phrase}'")
 
     for phrase in cfg.get("engagement_bait", []):
-        for m in _iter(_phrase_pattern(phrase), text):
+        for m in _iter_phrase(re.escape(phrase), phrase, text):
             add(m, "error", "engagement-bait", f"manufactured-stance opener: '{phrase}'")
 
     for phrase in cfg.get("soft_phrases", []):
-        for m in _iter(_soft_to_regex(phrase), text):
+        for m in _iter_phrase(_soft_to_regex(phrase), phrase, text):
             add(m, "warning", "soft-cliche", f"overused AI phrasing: '{phrase}'")
 
     if cfg.get("flag_loaded_quietly", True):
@@ -369,11 +376,25 @@ def check(text: str, cfg: dict) -> list[Finding]:
             add(hits[int(limit)], "warning", "overuse",
                 f"'{word}' used {len(hits)} times (soft cap {limit}); vary it")
 
-    for domain in cfg.get("aggregator_domains", []):
-        # match the domain as a host label, not an arbitrary substring
-        pat = rf"https?://[^\s)\"']*(?<![A-Za-z0-9-]){re.escape(domain)}(?![A-Za-z0-9-])[^\s)\"']*"
-        for m in _iter(pat, text):
-            add(m, "error", "source", f"low-trust/aggregator source: {domain}")
+    domains = [d.lower().strip(".") for d in cfg.get("aggregator_domains", []) if d.strip(".")]
+    if domains:
+        for m in _iter(r"https?://[^\s)\"'<>]+", text):
+            host = (urlsplit(m.group(0)).hostname or "").lower()
+            if not host:
+                continue
+            labels = host.split(".")
+            for domain in domains:
+                # A dotted domain matches as a host suffix (msn.com in
+                # www.msn.com); a bare label matches a whole label
+                # (timesofindia in timesofindia.indiatimes.com). Neither
+                # matches the same string sitting in the path or query.
+                if "." in domain:
+                    hit = host == domain or host.endswith("." + domain)
+                else:
+                    hit = domain in labels
+                if hit:
+                    add(m, "error", "source", f"low-trust/aggregator source: {domain}")
+                    break
 
     out.sort(key=lambda f: (f.line, f.col))
     # A soft-cliche that lands exactly where a stronger error already fired

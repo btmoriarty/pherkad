@@ -34,10 +34,10 @@ jobs:
           pip install --quiet weasyprint
           python -c "import weasyprint; weasyprint.HTML('docs/CHEATSHEET.html').write_pdf('docs/CHEATSHEET.pdf')"
 
-      - name: Lint the docs with voicelint
-        # CHANGELOG.md is a pattern-documenting meta-doc (it names banned phrases
-        # when describing the rules), so it trips the mechanical linter the way
-        # ai_tells.md would. Lint only the voice-bearing prose.
+      - name: Lint the self-lint-scoped docs
+        # Lint the two documents covered by the repository's public self-lint
+        # claim. CHANGELOG.md and references/ai_tells.md quote configured
+        # patterns, so they are excluded from this mechanical check.
         run: |
           python3 skills/pherkad/tools/voicelint.py README.md docs/CHEATSHEET.md
 

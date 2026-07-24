@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.4.3 (2026-07-24)
+
+A second external review caught two regressions from 0.4.2 and three older bugs. This pass fixes the mechanical layer to match its own release notes and pulls source-quality policy out of the generic defaults.
+
+- **`load-bearing` regression fixed.** 0.4.2 widened the literal exemption too far: `structure`, `capacity`, `member`, `frame`, and `assembly` read as metaphor as often as engineering (`the load-bearing structure of the argument`), so they wrongly silenced the tell. The exemption is now only unambiguously physical members (wall, beam, column, joist, truss, slab, stud, lintel, girder, rafter); figurative use fires again.
+- **Density floor regression fixed.** The linter's dash-density warning still used a 100-word floor while `SKILL.md` and the changelog said 150. The linter now requires 150+ words and 3+ dash hits, matching the judgment layer.
+- **Domain matching reads the host, not the whole URL.** The old regex flagged an aggregator name anywhere after `https://`, so `https://example.com/path/msn.com/story` fired on `msn.com`. Matching now parses the hostname with `urllib.parse.urlsplit` and compares host suffixes and labels, so a domain in the path or query is ignored.
+- **Phrase edges are Unicode-aware.** The 0.4.2 boundary guard used an ASCII character class, so a phrase wedged between accented letters slipped through. The guard now tests the neighboring character with `str.isalnum`, which is Unicode-aware.
+- **Source policy left the generic defaults.** `aggregator_domains` is now empty and the `live` watch word is gone from `voice_config.json` and the built-in fallback; both live in `examples/news-brief.json`. Source provenance is not voice, so it should not ship as a generic voice rule.
+- **Tests and honesty.** Added regression cases for the ambiguous-noun `load-bearing`, the 149/150-word and 2/3-hit density thresholds, host-versus-path domain matching, and Unicode edges. The "covers every rule and promised exception" claim is corrected to "core rules, CLI behavior, and documented examples," and the test docstring says plainly that the judgment layer is not tested here.
+- **Doc accuracy.** README and the cheat sheet now describe the real exit-code contract (a warning exits 0 unless `--strict`; usage, IO, and config errors exit 2). README's provenance section is retitled Origins and no longer implies public validation. `SKILL.md` Step 3 asks for each sentence with a *supported* tell, not "every" tell.
+- `VERSION` 0.4.3.
+
 ## v0.4.2 (2026-07-24)
 
 Correctness pass on the mechanical linter after an external repo review, plus honest-scope wording in the docs. The linter now overreaches less and the judgment layer keeps the calls it should keep.
@@ -10,7 +23,7 @@ Correctness pass on the mechanical linter after an external repo review, plus ho
 - **`flag_loaded_quietly` is off by default.** Clause-final position alone cannot separate an insinuating `quietly` from a plain manner adverb (`shut the door quietly`), which produced false positives. It is now an opt-in house rule; overuse is still caught by the `quietly` watch word, and the pre-modifier case stays in `references/ai_tells.md`.
 - **Config deep-merges.** A user config now merges onto the defaults key by key: setting one entry in `watch_words` no longer wipes the others. New `add_<field>` / `remove_<field>` keys amend a shipped list without restating it. `examples/relaxed.json` demonstrates both.
 - **Density needs a floor of text.** The judgment-layer density verdict (`SKILL.md` Step 4) applies only to a draft of 150+ words with 3+ findings, so a lone hit in a short passage no longer forces a REVISE against the stated lone-hit calibration. The linter's dash-density warning gained the same floor.
-- **Tests and CI.** `tools/test_voicelint.py` rewritten as a table-driven suite covering every rule and promised exception (boundaries, load-bearing context, code masking, dash and density modes, deep-merge and list ops, domain matching, HTML stripping, JSON, `--strict`, exit codes, invalid config, line/column). A new `.github/workflows/test.yml` runs it on Python 3.8 through 3.12 on every push and pull request.
+- **Tests and CI.** `tools/test_voicelint.py` rewritten as a table-driven suite over the core rules, CLI behavior, and documented examples (boundaries, load-bearing context, code masking, dash and density modes, deep-merge and list ops, domain matching, HTML stripping, JSON, `--strict`, exit codes, invalid config, line/column). A new `.github/workflows/test.yml` runs it on Python 3.8 through 3.12 on every push and pull request.
 - **Honest-scope wording.** README no longer says "flags every tell" (now "checks the full catalog"); "the validator gets more accurate with use" became "a later run applies the recorded correction"; the module and `--help` descriptions and `ai_tells.md` no longer claim to detect provenance; the self-lint claim now names its scope (README and the cheat sheet).
 - `VERSION` 0.4.2.
 

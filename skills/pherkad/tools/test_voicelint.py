@@ -4,10 +4,13 @@
 Run from this directory:  python3 test_voicelint.py
 Exit 0 if all pass, 1 otherwise. Safe to wire into CI.
 
-Covers every rule and every promised exception: word-boundary false positives,
-load-bearing literal context, code-span masking, dash and density modes, the
-config deep-merge and add_/remove_ list ops, domain matching, HTML stripping,
-JSON output, --strict, exit codes, invalid config, and line/column accuracy.
+Covers the core rules, CLI behavior, and documented examples: word-boundary
+and Unicode-edge false positives, load-bearing literal-versus-figurative
+context, code-span masking, dash and density modes with the 150-word / 3-hit
+floor, the config deep-merge and add_/remove_ list ops, host-versus-path domain
+matching, HTML stripping, JSON output, --strict, exit codes, invalid config,
+and line/column accuracy. It is not exhaustive; the judgment layer is not
+tested here.
 """
 import io
 import json
@@ -56,21 +59,23 @@ FIRING = [
      "The signification of the sign.", "filler", False),
     ("figurative load-bearing fires",
      "That assumption is load-bearing for the argument.", "load-bearing", True),
+    ("figurative load-bearing structure fires (ambiguous noun)",
+     "This is the load-bearing structure of the argument.", "load-bearing", True),
+    ("figurative load-bearing capacity fires (ambiguous noun)",
+     "The load-bearing capacity of the claim is weak.", "load-bearing", True),
     ("literal load-bearing wall is exempt",
      "The load-bearing wall held.", "load-bearing", False),
     ("literal load-bearing beam is exempt",
      "The load-bearing beam passed inspection.", "load-bearing", False),
-    ("literal load-bearing column is exempt",
-     "A load-bearing column carries the floor.", "load-bearing", False),
+    ("literal load-bearing girder is exempt",
+     "A load-bearing girder carries the floor.", "load-bearing", False),
     ("dash fires by default", "We shipped it — then paused.", "dash", True),
     ("plain manner quietly is silent by default",
      "She shut the nursery door quietly.", "loaded-adverb", False),
     ("watch-word overuse fires past the cap",
-     "live live live coverage", "overuse", True),
-    ("aggregator domain fires",
-     "See https://www.msn.com/story for more.", "source", True),
-    ("real domain does not fire",
-     "See https://www.congress.gov/bill for more.", "source", False),
+     "quietly quietly quietly it went", "overuse", True),
+    ("no aggregator domains in the generic defaults",
+     "See https://www.msn.com/story for more.", "source", False),
 ]
 for desc, text, rule, should in FIRING:
     check(desc, (rule in rules(text)) == should)
@@ -100,17 +105,47 @@ check("quietly pre-modifier stays silent even when enabled",
 
 
 # ---------------------------------------------------------------------------
-# 4. Dash density (relaxed mode) needs a floor of text
+# 4. Dash density (relaxed mode): floor of 150 words and 3 dash hits
 # ---------------------------------------------------------------------------
 relaxed = dict(DEFAULT)
 relaxed["no_dashes"] = False
 relaxed["dash_density_cap"] = 1.0
-short = "A — B."  # over the rate, but far too short to judge
-check("short text raises no dash-density warning",
-      "dash-density" not in rules(short, relaxed))
-long_over = ("word " * 200) + "— — —"
-check("long text over the cap raises dash-density",
-      "dash-density" in rules(long_over, relaxed))
+
+
+def dash_density(words, dashes):
+    text = ("word " * words) + " ".join(["—"] * dashes)
+    return "dash-density" in rules(text, relaxed)
+
+
+check("149 words with 3 dashes: below the word floor, silent", not dash_density(149, 3))
+check("150 words with 3 dashes: at the floor, warns", dash_density(150, 3))
+check("150 words with 2 dashes: below the hit floor, silent", not dash_density(150, 2))
+check("short text raises no dash-density warning", not dash_density(5, 2))
+
+
+# ---------------------------------------------------------------------------
+# 4b. Unicode-safe phrase edges
+# ---------------------------------------------------------------------------
+check("phrase between accented letters does not fire (unicode edge)",
+      "banned-phrase" not in rules("éis the moveé here"))
+check("phrase with an accented word after it still fires",
+      "banned-phrase" in rules("that is the move café"))
+
+
+# ---------------------------------------------------------------------------
+# 4c. Domain matching reads the host, not the whole URL
+# ---------------------------------------------------------------------------
+NEWS = voicelint.load_config(os.path.join(HERE, "examples", "news-brief.json"))
+check("aggregator host fires under the news preset",
+      "source" in rules("See https://www.msn.com/story here.", NEWS))
+check("bare-label domain fires as a host label",
+      "source" in rules("See https://timesofindia.indiatimes.com/x here.", NEWS))
+check("aggregator name in the path does not fire",
+      "source" not in rules("See https://example.com/path/msn.com/story here.", NEWS))
+check("aggregator name in the query does not fire",
+      "source" not in rules("See https://example.com/?u=https://msn.com/x here.", NEWS))
+check("an unlisted host does not fire",
+      "source" not in rules("See https://www.congress.gov/bill here.", NEWS))
 
 
 # ---------------------------------------------------------------------------
@@ -120,13 +155,13 @@ with tempfile.TemporaryDirectory() as d:
     p = os.path.join(d, "c.json")
     with open(p, "w") as fh:
         json.dump({
-            "watch_words": {"quietly": 5},
+            "watch_words": {"live": 5},
             "add_banned_phrases": ["circle back"],
             "remove_banned_phrases": ["game-changer"],
         }, fh)
     cfg = voicelint.load_config(p)
-    check("deep-merge keeps sibling watch word", cfg["watch_words"].get("live") == 2)
-    check("deep-merge overrides the named watch word", cfg["watch_words"].get("quietly") == 5)
+    check("deep-merge keeps the sibling default watch word", cfg["watch_words"].get("quietly") == 2)
+    check("deep-merge adds the named watch word", cfg["watch_words"].get("live") == 5)
     check("add_ extends the default list", "circle back" in cfg["banned_phrases"])
     check("remove_ drops from the default list", "game-changer" not in cfg["banned_phrases"])
     check("add_/remove_ helper keys are consumed",

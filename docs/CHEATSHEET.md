@@ -11,7 +11,7 @@ One page. Everything Pherkad does and what to say to trigger it. It validates ag
 | **Targeted rewrites** | arrives with any REVISE or REWRITE verdict | Only the flagged sentences rewritten, each fix explained. Facts, names, numbers, dates, sources, and emphasis stay exactly as you had them |
 | **Correct a flag** | "that one is actually me" | The correction appends to your profile with the sentence as evidence, so a later run applies it instead of repeating the flag |
 | **Personal linter config** | "make me a linter config from my profile" | Your dash stance, crutch-word caps, and extra bans as a `voice_config.json` the CLI linter can run in CI |
-| **CLI linter** | `python3 tools/voicelint.py draft.md` | The mechanical tells with exact line numbers, no model needed. `--json --strict` for CI; exits 0 clean, 1 findings, 2 usage or IO error |
+| **CLI linter** | `python3 tools/voicelint.py draft.md` | The mechanical tells with exact line numbers, no model needed. Use `--json --strict` for CI. Exit 0 means no error-level findings, exit 1 means an error-level finding or a warning under `--strict`, and exit 2 means a usage, IO, or config error |
 
 **About the defaults:** the shipped rules are the author's own, built from tells observed across many AI-assisted documents, and they ship strict. Your register may differ: edit `tools/voice_config.json` to your purpose, or relax single rules in your own config (`tools/examples/relaxed.json` shows the shape) with the override recorded in your profile.
 

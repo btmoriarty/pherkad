@@ -72,7 +72,7 @@ If a Python runtime is available, first run the mechanical layer for exact line-
 python3 tools/voicelint.py --json --strict <draft>
 ```
 
-Then walk the full catalog in `references/ai_tells.md` (categories 5a through 5i) and flag every sentence exhibiting a tell, including the structural families the linter cannot see. List each flagged sentence with the specific tell identified. Deduplicate against the linter's findings; count each construction once.
+Then walk the full catalog in `references/ai_tells.md` (categories 5a through 5i) and flag each sentence with a supported tell, including the structural families the linter cannot see. List each flagged sentence with the specific tell identified. Deduplicate against the linter's findings; count each construction once.
 
 Apply the catalog's caveats: technical-literal uses, direct quotes, single isolated constructions, informal-register exceptions, and the validator-internals exception (never flag a pattern inside a line that quotes, names, or defines it). Where the profile overrides a default (for example, a writer who uses em dashes on purpose), the profile wins.
 

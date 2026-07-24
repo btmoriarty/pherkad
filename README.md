@@ -25,9 +25,9 @@ python3 skills/pherkad/tools/voicelint.py draft.md          # findings with line
 python3 skills/pherkad/tools/voicelint.py --json --strict draft.md   # CI mode
 ```
 
-The linter masks Markdown code spans before matching, so a doc can name a banned phrase inside backticks without tripping it. It does not adjudicate ordinary quotations or domain context; that judgment stays with the model. CI lints this repo's own README and cheat sheet on every push, and they exit 0 under the default rules.
+The linter masks Markdown code spans before matching, so a document can name a banned phrase inside backticks without tripping it. It does not adjudicate ordinary quotations. It flags configured source domains mechanically and leaves their context to the model. CI lints this repository's README and cheat sheet on every push, and both exit 0 under the default rules.
 
-Rules live in [`tools/voice_config.json`](skills/pherkad/tools/voice_config.json). Every shipped default was built from tells observed across many AI-assisted documents, including the hard no-dash rule. A user config is deep-merged onto the defaults: unlisted top-level fields and unlisted nested keys inherit, listed arrays replace, and `add_<field>` / `remove_<field>` amend a shipped list without restating it. If a default contradicts your real style (you use dashes deliberately, `robust` is your field's vocabulary), relax it in your own config and record the override in your voice profile so both layers agree: [`tools/examples/relaxed.json`](skills/pherkad/tools/examples/relaxed.json) shows the shape, [`tools/examples/news-brief.json`](skills/pherkad/tools/examples/news-brief.json) shows team-specific additions, and the profile builder can generate a personal config. Exit codes: 0 clean, 1 findings, 2 usage or IO error, so a crash never reads as "findings found."
+Rules live in [`tools/voice_config.json`](skills/pherkad/tools/voice_config.json). Every shipped default was built from tells observed across many AI-assisted documents, including the hard no-dash rule. A user config is deep-merged onto the defaults: unlisted top-level fields and unlisted nested keys inherit, listed arrays replace, and `add_<field>` / `remove_<field>` amend a shipped list without restating it. If a default contradicts your real style (you use dashes deliberately, `robust` is your field's vocabulary), relax it in your own config and record the override in your voice profile so both layers agree: [`tools/examples/relaxed.json`](skills/pherkad/tools/examples/relaxed.json) shows the shape, [`tools/examples/news-brief.json`](skills/pherkad/tools/examples/news-brief.json) shows team-specific additions, and the profile builder can generate a personal config. Exit codes: 0 when no error-level findings are present, 1 when an error-level finding is present or a warning is present under `--strict`, and 2 for usage, IO, or config errors. A crash therefore cannot look like a style finding.
 
 ## Why these defaults
 
@@ -74,9 +74,9 @@ First run: ask for a voice check on any draft. Pherkad will notice you have no p
 
 produces `pherkad.skill` (a zip of `skills/pherkad/`).
 
-## Provenance
+## Origins
 
-The tells catalog draws on the public "AI Tells" discussions (notably Julian Harris's 2026 thread), the Wikipedia "Signs of AI writing" page, and tells observed across many real AI-assisted documents. The seven-dimension structure and the density rule come from a private predecessor validated against one writer's published work before this generalization. The voicelint mechanical layer began as a house linter for a news-brief project and was generalized here.
+The tell catalog draws on public discussions of recurring AI-writing patterns (notably Julian Harris's 2026 thread), the Wikipedia "Signs of AI writing" page, and patterns observed in assisted drafts. The seven-dimension review and the density rule began as a private workflow for one writer. That history explains the design, but it is not public validation of the generalized skill; see [docs/review-followups.md](docs/review-followups.md) for what a blind validation set would add. The mechanical linter began as a news-brief house rule set and was generalized here.
 
 ## License
 

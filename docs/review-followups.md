@@ -2,9 +2,9 @@
 
 The 0.4.2 pass fixed every confirmed linter bug, added tests and CI, and corrected the doc claims from the external review. Four findings were judgment calls, not bugs, and were held back on purpose. Each needs a design decision before it ships, so they live here rather than in a rushed release.
 
-## 1. Split the generic defaults from house style
+## 1. Split the generic defaults from house style (done in 0.4.3)
 
-The default `voice_config.json` still carries rules that are source-quality policy, not voice tells: the `aggregator_domains` list and the `live` watch word came in from a news-brief linter. `examples/news-brief.json` already exists as a preset, so the move is to strip the news-specific rules out of the generic defaults and into that preset, leaving `voice_config.json` as cross-register patterns only. Held back because it changes default behavior for existing users and deserves a deliberate call on what counts as "generic."
+The source-quality rules are out of the generic defaults: `aggregator_domains` is now empty and the `live` watch word is gone from `voice_config.json` and the built-in fallback. Both live in `examples/news-brief.json` for a team that wants them. What remains open is the softer call on a few self-narrating banned phrases (`that's the news`, `watch the move`, `note the framing`, `read this under`) that came from the same news-brief origin; they are plausibly generic AI closers, so they stay in the default list until there is reason to move them.
 
 ## 2. Ship blind validation evidence for the judgment layer
 

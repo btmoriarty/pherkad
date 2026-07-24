@@ -148,7 +148,7 @@
         <ul class="tight">
           <li>Mechanical tells with exact line and column numbers</li>
           <li><b>--json --strict</b> for CI or a pre-commit hook</li>
-          <li>Exits 0 clean, 1 findings, 2 usage or IO error</li>
+          <li>Exit 0 no error-level findings, 1 an error (or a warning under <b>--strict</b>), 2 a usage, IO, or config error</li>
           <li>Reads Markdown, plain text, and HTML; stdlib only, Python 3.8+</li>
         </ul>
       </div>
