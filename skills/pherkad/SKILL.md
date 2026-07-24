@@ -104,7 +104,7 @@ Clustering weighs separately: two or more antithesis constructions (5c) or two o
 The verdict follows from the dimension scores (Step 2) and the signals (Steps 3 and 4), not from a general impression. "Voice dimensions" below means 1 to 4, 6, and 7; Dimension 5 is the tell read.
 
 - **PASS**: every voice dimension scores 4 or 5, Dimension 5 is 4 or 5, and there is no density warning and no cluster warning. Minor surface edits only.
-- **REVISE**: the core voice is present but a section drifts. Any one of: a voice dimension at 3; a density warning; a cluster warning; three or more individual hits; or the draft is clean of tells (Dimension 5 high) but shows none of the writer's positive markers, so a voice dimension still lands at 2 or below (voice flattened toward generic).
+- **REVISE**: the core voice is present but a section drifts. Any one of: a voice dimension at 3; exactly one voice dimension at 2 or below (whether from a missing-markers flattening or one off-profile score); a density warning; a cluster warning; or three or more individual hits.
 - **REWRITE**: the voice has flattened or drifted across the piece. Two or more voice dimensions at 2 or below, or a density warning together with two or more cluster warnings.
 
 When the signals point at different verdicts, take the more serious one and say which signal drove it.

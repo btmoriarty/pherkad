@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.4.8 (2026-07-24)
+
+A second Codex round on 0.4.7 confirmed the earlier fixes and found four smaller things. All docs.
+
+- **The verdict map covers every state.** REVISE listed a voice dimension at 3 and a missing-markers score at 2 or below, but not one off-profile dimension at 2 or below for any other reason, while REWRITE needs two or more. REVISE now includes "exactly one voice dimension at 2 or below," so no score pattern falls through.
+- **The blind-eval primary outcome is one frozen formula.** It said "mean rating (or discrimination margin)," which is two outcomes. The primary is now the mean 1-to-5 rating, correct profile minus the equally weighted controls, with the discrimination margin and any verdict score named as secondary and a fixed verdict encoding if one is used.
+- **The local holdout runs blind.** Step 4b listed each case beside its expected verdict, so a validating pass could return the expected answer from the cue. The check now shuffles the items, strips the labels and expectations from the validating pass, and reveals them only for the comparison.
+- **The cheat sheet stops promising fidelity it cannot enforce.** "Facts ... stay exactly as you had them" is now stated as a requirement to check, not a guarantee, since nothing enforces exact preservation and rewrite fidelity is still an unmeasured outcome.
+- `VERSION` 0.4.8.
+
 ## v0.4.7 (2026-07-24)
 
 A cross-vendor review (Codex, GPT-5.6) caught issues the Claude reviews missed. All docs.
