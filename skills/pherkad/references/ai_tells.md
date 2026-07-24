@@ -130,7 +130,7 @@ The strongest positive markers are the most specific and least imitable. Common 
 
 - **Concrete before concept.** The writer leads with the physical thing and lets the reader infer the idea, rather than stating the abstraction.
 - **Flat consequence.** An outcome stated without the emotional adjective, so the plainness carries the feeling.
-- **The telling specific detail.** The incidental, slightly off detail that fixes a scene and shows the writer's way of noticing. Treat it as evidence of voice, not evidence of human provenance; it is the move a model is least likely to make.
+- **The telling specific detail.** The incidental, slightly off detail that fixes a scene and shows the writer's way of noticing. Treat it as evidence of profile match, not evidence of how the passage was produced.
 - **Owned, not deflected.** When the failure or the stake is the writer's own, the voice names it plainly rather than distributing it to a structure.
 
 Read the profile for this writer's own version of these. When a draft is clean of tells but shows none of the writer's positive markers, that is a REVISE-level signal on its own: the voice has flattened even though nothing is technically wrong.

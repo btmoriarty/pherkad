@@ -1,13 +1,13 @@
 ---
 name: pherkad
-description: Validate or draft prose in the user's own human voice rather than AI-generated or AI-flattened writing. Validation mode triggers on a voice check, voice audit, tone check, "does this sound like me," or a draft submitted to check whether it sounds like them. Authoring mode triggers when the user asks to write, draft, or rewrite prose in their voice, or wants text they will send as themselves (emails, posts, papers) to come out in their voice. Also triggers to build or update the voice profile from samples. First run builds the profile; later runs draft from it and validate against it.
+description: Validate or draft prose in the user's own voice rather than generic or flattened writing. Validation mode triggers on a voice check, voice audit, tone check, "does this sound like me," or a draft submitted to check whether it sounds like them. Authoring mode triggers when the user asks to write, draft, or rewrite prose in their voice, or wants text they will send as themselves (emails, posts, papers) to come out in their voice. Also triggers to build or update the voice profile from samples. First run builds the profile; later runs draft from it and validate against it.
 ---
 
 # Pherkad
 
 Validate that written output sounds like one specific person's voice.
 
-Pherkad runs a structured diagnostic against text to detect AI-generated flatness, voice drift, and tone misalignment. It produces an actionable report with cited evidence, never a bare score.
+Pherkad runs a structured diagnostic against text to surface generic phrasing, voice drift, and tone misalignment. It produces an actionable report with cited evidence, never a bare score.
 
 Three parts do the work:
 

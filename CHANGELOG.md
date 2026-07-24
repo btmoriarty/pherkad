@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.4.5 (2026-07-24)
+
+A fourth review found the mechanical layer sound and pointed the real work at the judgment layer. This pass closes the remaining linter holes, stops the linter and docs from implying provenance, and starts the highest-value work: evidence that the "sounds like you" verdict generalizes.
+
+- **Config validation is semantic, not just structural.** A negative watch-word cap (which used to crash at runtime) and an empty configured phrase (which used to match at every character) are now rejected with exit 2, along with empty watch-word keys. A validated config no longer reaches a runtime failure or a match-everywhere rule.
+- **Suppression is comment-scoped and code-aware.** A `voicelint: ignore` directive is recognized only inside an HTML comment, and directives are read from the code-masked text, so a backticked or in-prose token can no longer silence a real finding.
+- **`load-bearing` is warning-only.** A regex reading one word cannot tell `load-bearing frame of the argument` (figurative) from `load-bearing case` (a literal enclosure), so the hard-error tier is gone. A clear physical member is exempt; everything else is a soft `load-bearing-context` warning, and whether an ambiguous use is really figurative is left to the judgment layer.
+- **Provenance language removed.** The linter and docs no longer imply they detect AI authorship. README leads with "helps you review whether a draft still sounds like you"; `SKILL.md` surfaces "generic phrasing" rather than "AI-generated flatness"; `profile_builder.md` and `ai_tells.md` describe positive markers as evidence of profile match, not of how a passage was produced. A hit or a verdict is about voice fit, never about provenance.
+- **Profile holdout check.** `profile_builder.md` gains Step 4b: reserve one sample the profile never saw, then confirm the profile recognizes it, revises a flattened rewrite of it, and does not accept another writer's piece, before the profile is trusted. It catches an overfit profile that only matches its own extraction set.
+- **Blind-evaluation protocol.** New `docs/blind-eval.md`: the plan for the multi-writer blind set that would move the judgment layer from advisory to dependable, with the case types, the run method, the pass bar, and a requirement to report failures. The protocol is written; the dataset needs real samples. `docs/review-followups.md` is updated to match.
+- `VERSION` 0.4.5.
+
 ## v0.4.4 (2026-07-24)
 
 A third external review found an over-correction from 0.4.3 and several older bugs. This pass grades `load-bearing` instead of guessing, hardens the config loader, makes the linter safe for real technical and multilingual prose, and adds a way to silence a checked false positive.

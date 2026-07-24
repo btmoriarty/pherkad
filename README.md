@@ -1,6 +1,6 @@
 # Pherkad
 
-A Claude skill that checks whether a draft still sounds like you.
+A Claude skill that helps you review whether a draft still sounds like you.
 
 AI-assisted writing drifts toward a house style that belongs to no one: balanced sentences, stock openers, three abstract nouns where one would do. The drift is gradual and invisible from inside a draft. Pherkad makes it visible, names the flattened sentences, and proposes rewrites that keep your meaning in your voice.
 

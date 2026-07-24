@@ -109,24 +109,18 @@ FALLBACK_CONFIG = {
     "aggregator_domains": [],
 }
 
-# "load-bearing" is graded in three tiers, because position alone cannot always
-# tell the structural term from the metaphor:
-#   - followed by a physical member -> literal, no finding
-#   - followed by an argument word  -> figurative, error
-#   - anything else (ambiguous noun, predicate use) -> a soft context warning
-# So "load-bearing beam" is silent, "load-bearing assumption" errors, and
-# "load-bearing structure" or "the claim is load-bearing" only asks for a look.
+# "load-bearing" is handled in two tiers. A regex reading only the next word
+# cannot reliably tell the structural term from the metaphor: "load-bearing
+# frame of the argument" is figurative though "frame" is physical, and
+# "load-bearing case" can be a literal enclosure. So the linter exempts a clear
+# physical member and, for anything else, emits a soft context warning that
+# asks for a look. Whether an ambiguous use is really figurative is left to the
+# judgment layer, which reads the sentence.
 _LOAD_BEARING_PHYSICAL = {
     "wall", "walls", "beam", "beams", "column", "columns", "joist", "joists",
     "truss", "trusses", "slab", "slabs", "stud", "studs", "lintel", "lintels",
     "girder", "girders", "rafter", "rafters", "member", "members", "frame",
     "frames", "assembly", "assemblies", "footing", "footings", "pier", "piers",
-}
-_LOAD_BEARING_FIGURATIVE = {
-    "argument", "arguments", "assumption", "assumptions", "claim", "claims",
-    "thesis", "premise", "premises", "idea", "ideas", "reasoning", "logic",
-    "case", "point", "points", "narrative", "principle", "principles",
-    "concept", "concepts", "notion", "notions", "theory", "story",
 }
 
 # Config fields whose value is a list of strings, and which support
@@ -179,6 +173,9 @@ def _validate(cfg: dict) -> None:
             v = cfg[key]
             if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
                 _fail(f"config field '{key}' must be a list of strings")
+            if not all(x.strip() for x in v):
+                _fail(f"config field '{key}' must not contain an empty string "
+                      "(an empty pattern would match everywhere)")
     if "watch_words" in cfg:
         ww = cfg["watch_words"]
         if not isinstance(ww, dict) or not all(
@@ -186,6 +183,10 @@ def _validate(cfg: dict) -> None:
             for k, n in ww.items()
         ):
             _fail("config field 'watch_words' must be an object of word -> integer")
+        if not all(k.strip() for k in ww):
+            _fail("config field 'watch_words' must not have an empty word key")
+        if not all(n >= 0 for n in ww.values()):
+            _fail("config field 'watch_words' caps must be non-negative integers")
     if "dash_density_cap" in cfg:
         cap = cfg["dash_density_cap"]
         if not isinstance(cap, (int, float)) or isinstance(cap, bool) or cap < 0:
@@ -361,19 +362,24 @@ def _soft_to_regex(phrase: str) -> str:
 
 def _suppression_map(text: str) -> dict:
     """Map a 1-based line number to the rules suppressed there by an inline
-    directive. ``voicelint: ignore-line`` suppresses the line it sits on;
-    ``voicelint: ignore-next-line`` suppresses the following line. Names after
-    the directive limit it to those rules (``ignore-line filler``); with none,
-    the whole line is suppressed (``*``). Put a directive in a comment, e.g.
-    ``<!-- voicelint: ignore-next-line banned-phrase -->``."""
+    directive. A directive is recognized only inside an HTML comment:
+    ``<!-- voicelint: ignore-line -->`` suppresses the line it sits on;
+    ``<!-- voicelint: ignore-next-line -->`` suppresses the following line.
+    Rule names after the verb limit it to those rules
+    (``<!-- voicelint: ignore-line filler -->``); with none, the whole line is
+    suppressed (``*``).
+
+    The comment requirement, plus running this over the code-masked text, is
+    deliberate: a directive written in prose or backticked as code must not be
+    able to silence a real finding."""
     supp: dict = {}
     for i, line in enumerate(text.split("\n"), start=1):
-        m = re.search(r"voicelint:\s*ignore(-next-line|-line)?\b([^\n]*)", line, re.IGNORECASE)
-        if not m:
-            continue
-        target = i + 1 if m.group(1) == "-next-line" else i
-        names = set(re.findall(r"[A-Za-z][\w-]*", m.group(2))) or {"*"}
-        supp.setdefault(target, set()).update(names)
+        for m in re.finditer(
+            r"<!--\s*voicelint:\s*ignore(-next-line|-line)?\b(.*?)-->",
+            line, re.IGNORECASE):
+            target = i + 1 if m.group(1) == "-next-line" else i
+            names = set(re.findall(r"[A-Za-z][\w-]*", m.group(2))) or {"*"}
+            supp.setdefault(target, set()).update(names)
     return supp
 
 
@@ -389,10 +395,12 @@ def check_counting(text: str, cfg: dict):
     """Like :func:`check`, but return ``(findings, suppressed_count)``."""
     text = normalize_quotes(text)
     at = _linecol_fn(text)
-    suppress = _suppression_map(text)
     # Match against a copy with code spans blanked; offsets are preserved, so
-    # findings still point at the real line and column.
+    # findings still point at the real line and column. Suppression directives
+    # are read from the masked text, so a backticked directive cannot silence a
+    # real finding.
     text = mask_code(text)
+    suppress = _suppression_map(text)
     out: list[Finding] = []
 
     def add(m, severity, rule, message):
@@ -422,11 +430,8 @@ def check_counting(text: str, cfg: dict):
             word = nxt.group(1).lower() if nxt else ""
             if word in _LOAD_BEARING_PHYSICAL:
                 continue  # literal structural use
-            if word in _LOAD_BEARING_FIGURATIVE:
-                add(m, "error", "load-bearing", "figurative 'load-bearing'; earn the weight instead")
-            else:
-                add(m, "warning", "load-bearing-context",
-                    "'load-bearing' with an ambiguous object; confirm this is literal, not metaphor")
+            add(m, "warning", "load-bearing-context",
+                "'load-bearing' with a non-structural object; confirm this is literal, not metaphor")
 
     for phrase in cfg.get("banned_phrases", []):
         for m in _iter_phrase(re.escape(phrase), phrase, text):

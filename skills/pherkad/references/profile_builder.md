@@ -28,7 +28,7 @@ Read all samples, then draft the six personal dimensions. For each, write 2 to 4
 
 ## Step 2b: Capture the positive register (the archetype)
 
-The six dimensions above capture what the writer avoids and prefers. Also capture what the voice actively does, its most specific and least imitable moves, so validation can calibrate toward the writer and not only against tells (see "Positive register" in `ai_tells.md`). From the samples, name two to four positive moves, each with a quoted example. Shapes to look for, examples and not a checklist: leading with a concrete object before the concept; stating a consequence flatly without the emotional adjective; the telling incidental detail that marks a scene as lived; owning a failure plainly rather than deflecting it to a structure. Record these as an Archetype section in the profile. These are the hardest signals for a model to fake, so they are the strongest evidence of the writer's hand. Note which markers belong to the frame and the close rather than the precise analytical core, so validation does not flatten a technical passage toward the archetype (see Genre calibration in `ai_tells.md`).
+The six dimensions above capture what the writer avoids and prefers. Also capture what the voice actively does, its most specific and least imitable moves, so validation can calibrate toward the writer and not only against tells (see "Positive register" in `ai_tells.md`). From the samples, name two to four positive moves, each with a quoted example. Shapes to look for, examples and not a checklist: leading with a concrete object before the concept; stating a consequence flatly without the emotional adjective; the telling incidental detail that marks a scene as lived; owning a failure plainly rather than deflecting it to a structure. Record these as an Archetype section in the profile. These are strong profile-match signals because they are specific to the writer's samples. Treat them as evidence of voice fit, not evidence of how the passage was produced. Note which markers belong to the frame and the close rather than the precise analytical core, so validation does not flatten a technical passage toward the archetype (see Genre calibration in `ai_tells.md`).
 
 ## Step 3: Confirm with the user
 
@@ -37,6 +37,18 @@ Show the draft profile. Ask the user to correct anything that reads wrong and to
 ## Step 4: Write the profile
 
 Save as `Voice_Profile.md` in the user's working folder, following the shape of `example_profile.md`. Include a "One paragraph" summary at the end: the whole voice compressed, ending with a test like "if a passage could have been written by anyone, it is not this writer."
+
+## Step 4b: Hold a sample back and check the profile generalizes
+
+A profile built and judged on the same samples can look sharper than it is: the markers were read off those exact pieces, so of course they match. Before treating the profile as ready, run one holdout check.
+
+Reserve one collected sample that did not feed marker extraction (Step 1 asked for enough that one can be spared). Then run a validation pass against three texts and read the verdicts, not to score the tool but to check the profile:
+
+1. The held-out sample. It should read as the writer: the positive markers should be present and the verdict should land at PASS or a light REVISE. If the profile does not recognize the writer's own unused writing, the markers are overfit to the extraction set; widen them.
+2. A flattened rewrite of the held-out sample (strip the texture, even the sentences, generic connectives). It should draw a REVISE or REWRITE on the positive-register read, even if it trips no banned phrase. If it passes, the profile is only catching tells, not carrying voice.
+3. A short piece by a different writer in the same register. It should not read as this writer. If it passes, the profile is too generic to distinguish anyone.
+
+Record the three results in the profile as a dated "Holdout check." If any of the three comes out wrong, fix the profile before use and note what changed. This is a sanity check on one writer, not a validation of the method; the method-level evidence is the multi-writer blind set in `docs/blind-eval.md`.
 
 ## Step 5: Offer a personal linter config
 

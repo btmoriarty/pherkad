@@ -59,19 +59,15 @@ FIRING = [
     ("filler fires on whole word", "A significant result.", "filler", True),
     ("filler does not fire inside a word",
      "The signification of the sign.", "filler", False),
-    ("load-bearing + argument word is an error",
-     "The load-bearing assumption fails.", "load-bearing", True),
-    ("load-bearing + argument word does not emit a context warning",
-     "The load-bearing assumption fails.", "load-bearing-context", False),
-    ("load-bearing + ambiguous noun is a context warning, not an error",
-     "This is the load-bearing structure of the argument.", "load-bearing", False),
+    ("load-bearing + non-structural object is a context warning",
+     "The load-bearing assumption fails.", "load-bearing-context", True),
+    ("load-bearing never emits a hard error (judgment layer decides figurative)",
+     "The load-bearing assumption fails.", "load-bearing", False),
     ("load-bearing + ambiguous noun emits a context warning",
      "This is the load-bearing structure of the argument.", "load-bearing-context", True),
     ("predicate load-bearing is a context warning",
      "That claim is load-bearing.", "load-bearing-context", True),
-    ("engineering member is not an error",
-     "The load-bearing member failed inspection.", "load-bearing", False),
-    ("engineering member is fully exempt (no context warning)",
+    ("engineering member is fully exempt (no finding)",
      "The load-bearing member failed inspection.", "load-bearing-context", False),
     ("literal load-bearing wall is exempt",
      "The load-bearing wall held.", "load-bearing-context", False),
@@ -253,6 +249,17 @@ with tempfile.TemporaryDirectory() as d:
     code, _, _ = run(["--config", okcfg, clean])
     check("valid config with a comment key exits 0", code == 0)
 
+    # semantic validation: negative caps and empty patterns are rejected (exit 2),
+    # not accepted into a runtime crash or a match-everywhere rule
+    negcap = os.path.join(d, "negcap.json")
+    open(negcap, "w").write('{"watch_words": {"quietly": -1}}')
+    code, _, _ = run(["--config", negcap, clean])
+    check("negative watch-word cap exits 2", code == 2)
+    emptyphrase = os.path.join(d, "empty.json")
+    open(emptyphrase, "w").write('{"add_banned_phrases": [""]}')
+    code, _, _ = run(["--config", emptyphrase, clean])
+    check("empty configured phrase exits 2", code == 2)
+
 
 # ---------------------------------------------------------------------------
 # 9. Inline suppression
@@ -266,6 +273,13 @@ check("ignore-next-line drops the next line", not kept and dropped == 1)
 kept, dropped = voicelint.check_counting(
     "This is a game-changer. <!-- voicelint: ignore-line filler -->", DEFAULT)
 check("a rule-specific ignore leaves other rules firing", len(kept) == 1 and dropped == 0)
+# a directive must be an HTML comment; backticked or prose text cannot suppress
+kept, dropped = voicelint.check_counting(
+    "This is a game-changer. `voicelint: ignore-line`", DEFAULT)
+check("a backticked directive does not suppress", len(kept) == 1 and dropped == 0)
+kept, dropped = voicelint.check_counting(
+    "This is a game-changer and the words voicelint: ignore-line appear.", DEFAULT)
+check("a directive token in prose does not suppress", len(kept) == 1 and dropped == 0)
 
 
 # ---------------------------------------------------------------------------
