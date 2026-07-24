@@ -1,6 +1,6 @@
 # Review follow-ups (deferred)
 
-The 0.4.2 pass fixed every confirmed linter bug, added tests and CI, and corrected the doc claims from the external review. Four findings were judgment calls, not bugs, and were held back on purpose. Each needs a design decision before it ships, so they live here rather than in a rushed release.
+The 0.4.2 through 0.4.4 passes fixed the confirmed linter bugs then known, added tests and CI, and corrected the documentation claims from the external reviews. The remaining items below are design or validation work that was held back on purpose. Each needs a decision before it ships, so it lives here rather than in a rushed release.
 
 ## 1. Split the generic defaults from house style (done in 0.4.3)
 

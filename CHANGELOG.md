@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.4.4 (2026-07-24)
+
+A third external review found an over-correction from 0.4.3 and several older bugs. This pass grades `load-bearing` instead of guessing, hardens the config loader, makes the linter safe for real technical and multilingual prose, and adds a way to silence a checked false positive.
+
+- **`load-bearing` is graded in three tiers.** 0.4.3 over-corrected: `member`, `frame`, and `assembly` are ordinary engineering nouns but were hard-errored as figurative. Now a physical member (wall, beam, column, joist, truss, slab, stud, lintel, girder, rafter, member, frame, assembly, footing, pier) is exempt; a clear argument word (argument, assumption, claim, thesis, premise, idea, reasoning, logic, case, and the like) is an error; everything else, including ambiguous nouns and predicate use, is a soft `load-bearing-context` warning that asks for a look rather than declaring the metaphor.
+- **The mathematical minus sign is no longer called a dash.** U+2212 left the prose-dash set, so `5 − 3` does not raise a dash error.
+- **Decomposed Unicode is handled.** The phrase-edge guard now counts combining marks (category M) as part of the preceding letter, so a phrase after an NFD accent no longer slips the boundary.
+- **Config validation is strict.** Boolean fields (`no_dashes`, `flag_loaded_quietly`, `load_bearing_literal_only`) are type-checked, and an unknown top-level key (a typo like `no_dash`) is rejected with exit 2 instead of silently ignored. Comment keys still start with `_`.
+- **No shared mutable default state.** `load_config` and the deep-merge now `deepcopy` the built-in fallback, so mutating one returned config cannot bleed into the next load (matters for imports and tests, not the one-shot CLI).
+- **Hostname matching tolerates a trailing dot.** A fully qualified `www.msn.com.` now matches; path, query, and userinfo still do not. Only scheme-bearing URLs are scanned, and that limit is documented.
+- **Inline suppression.** A `voicelint: ignore-line` or `voicelint: ignore-next-line` directive (optionally naming rules) silences a checked false positive; the summary and JSON report the suppressed count. This gives the standalone linter a real answer for a legitimate quotation or term instead of "the model will sort it out."
+- **JSON output shape.** `--json` now returns `{"suppressed": N, "files": {path: [findings]}}` rather than a bare path map, so a consumer can see suppressions. A breaking change for anyone parsing the old top-level map.
+- **Honest defaults and docs.** The news-brief closers (`that's the news`, `watch the move`, `note the framing`, `read this under`, `is the move`) moved from the generic defaults to `examples/news-brief.json`. `SKILL.md` describes the linter as heuristic where it is heuristic and drops "final quality gate" for "final advisory review." The stale example comments and the `review-followups.md` opening are corrected.
+- `VERSION` 0.4.4.
+
 ## v0.4.3 (2026-07-24)
 
 A second external review caught two regressions from 0.4.2 and three older bugs. This pass fixes the mechanical layer to match its own release notes and pulls source-quality policy out of the generic defaults.

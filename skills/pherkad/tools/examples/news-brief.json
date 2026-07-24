@@ -1,5 +1,5 @@
 {
-  "_comment": "Team-config template. The strict news-brief rules this file originally carried (hard dash ban, watch-word caps, low-trust domain list) now ship as the defaults, since they were built from tells observed across many documents. Keep a file like this for rules specific to your team's register: extra banned phrases, additional domains, tighter caps. Unlisted keys inherit the shipped defaults.",
+  "_comment": "Team-config template. Source-domain checks and the live watch word do not ship in the generic defaults. This preset adds them for a news brief, retains the hard dash ban, sets team caps for quietly and breaking, and adds the news-brief closers that are too register-specific for the generic list. Keep rules here only when they belong to the team's register or source policy. Unlisted keys inherit the shipped defaults.",
 
   "no_dashes": true,
 
@@ -8,6 +8,14 @@
     "quietly": 2,
     "breaking": 2
   },
+
+  "add_banned_phrases": [
+    "that's the news",
+    "watch the move",
+    "note the framing",
+    "read this under",
+    "is the move"
+  ],
 
   "aggregator_domains": [
     "msn.com",

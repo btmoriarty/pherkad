@@ -1,5 +1,5 @@
 {
-  "_comment": "Example of relaxing the defaults for a writer whose profile records deliberate dash use: the hard dash ban comes off and the density cap catches overuse instead. Loosen a rule only when your voice profile shows the habit is really yours (evidence, not aspiration), and record the override in Voice_Profile.md so the judgment layer agrees with the linter. The config is deep-merged onto the defaults, so unlisted top-level fields and unlisted nested keys inherit: setting watch_words.quietly below leaves the default watch_words.live untouched. To amend a shipped list without restating it, use add_banned_phrases / remove_banned_phrases and the like.",
+  "_comment": "Example of relaxing the defaults for a writer whose profile records deliberate dash use: the hard dash ban comes off and the density cap catches overuse instead. Loosen a rule only when the voice profile shows the habit is real, and record the override in Voice_Profile.md so the judgment layer agrees with the linter. The config is deep-merged onto the defaults, so unlisted top-level fields and nested keys inherit. Here, watch_words.quietly changes the shipped cap; there is no shipped live cap to inherit. Use add_banned_phrases or remove_banned_phrases to amend a shipped list without restating it.",
 
   "no_dashes": false,
   "dash_density_cap": 1.0,

@@ -50,26 +50,35 @@ def findings(text, cfg=DEFAULT):
 FIRING = [
     ("banned phrase fires", "This is a game-changer for the team.", "banned-phrase", True),
     ("banned phrase mid-word does not fire",
-     "This is the movement we need.", "banned-phrase", False),
+     "The paradigm shifts the debate.", "banned-phrase", False),
+    ("banned phrase fires as a whole phrase",
+     "That was a paradigm shift.", "banned-phrase", True),
     ("engagement bait fires", "Here's the thing: nobody cares.", "engagement-bait", True),
     ("banned phrase with trailing punct still fires",
      "In conclusion, we won.", "banned-phrase", True),
     ("filler fires on whole word", "A significant result.", "filler", True),
     ("filler does not fire inside a word",
      "The signification of the sign.", "filler", False),
-    ("figurative load-bearing fires",
-     "That assumption is load-bearing for the argument.", "load-bearing", True),
-    ("figurative load-bearing structure fires (ambiguous noun)",
-     "This is the load-bearing structure of the argument.", "load-bearing", True),
-    ("figurative load-bearing capacity fires (ambiguous noun)",
-     "The load-bearing capacity of the claim is weak.", "load-bearing", True),
+    ("load-bearing + argument word is an error",
+     "The load-bearing assumption fails.", "load-bearing", True),
+    ("load-bearing + argument word does not emit a context warning",
+     "The load-bearing assumption fails.", "load-bearing-context", False),
+    ("load-bearing + ambiguous noun is a context warning, not an error",
+     "This is the load-bearing structure of the argument.", "load-bearing", False),
+    ("load-bearing + ambiguous noun emits a context warning",
+     "This is the load-bearing structure of the argument.", "load-bearing-context", True),
+    ("predicate load-bearing is a context warning",
+     "That claim is load-bearing.", "load-bearing-context", True),
+    ("engineering member is not an error",
+     "The load-bearing member failed inspection.", "load-bearing", False),
+    ("engineering member is fully exempt (no context warning)",
+     "The load-bearing member failed inspection.", "load-bearing-context", False),
     ("literal load-bearing wall is exempt",
-     "The load-bearing wall held.", "load-bearing", False),
+     "The load-bearing wall held.", "load-bearing-context", False),
     ("literal load-bearing beam is exempt",
-     "The load-bearing beam passed inspection.", "load-bearing", False),
-    ("literal load-bearing girder is exempt",
-     "A load-bearing girder carries the floor.", "load-bearing", False),
+     "The load-bearing beam passed inspection.", "load-bearing-context", False),
     ("dash fires by default", "We shipped it — then paused.", "dash", True),
+    ("mathematical minus is not a dash", "The result is 5 − 3.", "dash", False),
     ("plain manner quietly is silent by default",
      "She shut the nursery door quietly.", "loaded-adverb", False),
     ("watch-word overuse fires past the cap",
@@ -85,11 +94,11 @@ for desc, text, rule, should in FIRING:
 # 2. Code-span masking: a pattern quoted as code is not flagged
 # ---------------------------------------------------------------------------
 check("inline code span is masked",
-      "banned-phrase" not in rules("The `is the move` phrase is an example."))
+      "banned-phrase" not in rules("The `game-changer` phrase is an example."))
 check("fenced code block is masked",
-      "banned-phrase" not in rules("```\nis the move\n```\n"))
+      "banned-phrase" not in rules("```\ngame-changer\n```\n"))
 check("the same phrase in prose still fires",
-      "banned-phrase" in rules("that is the move here"))
+      "banned-phrase" in rules("that game-changer here"))
 
 
 # ---------------------------------------------------------------------------
@@ -126,10 +135,15 @@ check("short text raises no dash-density warning", not dash_density(5, 2))
 # ---------------------------------------------------------------------------
 # 4b. Unicode-safe phrase edges
 # ---------------------------------------------------------------------------
-check("phrase between accented letters does not fire (unicode edge)",
-      "banned-phrase" not in rules("éis the moveé here"))
+import unicodedata as _ud
+_nfc = _ud.normalize("NFC", "\u00e9game-changer\u00e9 here")   # precomposed accents
+_nfd = _ud.normalize("NFD", "\u00e9game-changer here")          # base + combining mark
+check("phrase between precomposed accented letters does not fire",
+      "banned-phrase" not in rules(_nfc))
+check("phrase after a decomposed accent (base + combining mark) does not fire",
+      "banned-phrase" not in rules(_nfd))
 check("phrase with an accented word after it still fires",
-      "banned-phrase" in rules("that is the move café"))
+      "banned-phrase" in rules("that game-changer caf\u00e9"))
 
 
 # ---------------------------------------------------------------------------
@@ -146,6 +160,10 @@ check("aggregator name in the query does not fire",
       "source" not in rules("See https://example.com/?u=https://msn.com/x here.", NEWS))
 check("an unlisted host does not fire",
       "source" not in rules("See https://www.congress.gov/bill here.", NEWS))
+check("a fully-qualified host with a trailing dot still fires",
+      "source" in rules("See https://www.msn.com./story here.", NEWS))
+check("userinfo that looks like the host does not fire",
+      "source" not in rules("See https://msn.com@evil.example/x here.", NEWS))
 
 
 # ---------------------------------------------------------------------------
@@ -180,7 +198,7 @@ check("html strip preserves the line of a finding",
 # ---------------------------------------------------------------------------
 # 7. Line and column accuracy
 # ---------------------------------------------------------------------------
-fs = findings("ok ok\nhere is the move now")
+fs = findings("ok ok\nhere game-changer now")
 check("line/col points at the real position",
       any(f.rule == "banned-phrase" and f.line == 2 and f.col == 6 for f in fs))
 
@@ -216,9 +234,49 @@ with tempfile.TemporaryDirectory() as d:
 
     code, out, _ = run(["--json", dirty])
     parsed = json.loads(out)
-    check("json output is a dict keyed by path", isinstance(parsed, dict) and dirty in parsed)
+    check("json has a files map and a suppressed count",
+          isinstance(parsed, dict) and "files" in parsed and "suppressed" in parsed)
     check("json finding carries line/rule",
-          any(x["rule"] == "banned-phrase" for x in parsed[dirty]))
+          any(x["rule"] == "banned-phrase" for x in parsed["files"][dirty]))
+
+    # bad boolean type and unknown key both exit 2
+    boolcfg = os.path.join(d, "boolcfg.json")
+    open(boolcfg, "w").write('{"no_dashes": "false"}')
+    code, _, _ = run(["--config", boolcfg, clean])
+    check("string in a boolean field exits 2", code == 2)
+    typocfg = os.path.join(d, "typocfg.json")
+    open(typocfg, "w").write('{"no_dash": false}')
+    code, _, _ = run(["--config", typocfg, clean])
+    check("unknown config key exits 2", code == 2)
+    okcfg = os.path.join(d, "okcfg.json")
+    open(okcfg, "w").write('{"no_dashes": false, "_note": "fine"}')
+    code, _, _ = run(["--config", okcfg, clean])
+    check("valid config with a comment key exits 0", code == 0)
+
+
+# ---------------------------------------------------------------------------
+# 9. Inline suppression
+# ---------------------------------------------------------------------------
+kept, dropped = voicelint.check_counting(
+    "This is a game-changer. <!-- voicelint: ignore-line banned-phrase -->", DEFAULT)
+check("ignore-line drops the matching rule", not kept and dropped == 1)
+kept, dropped = voicelint.check_counting(
+    "<!-- voicelint: ignore-next-line -->\nThis is a game-changer.", DEFAULT)
+check("ignore-next-line drops the next line", not kept and dropped == 1)
+kept, dropped = voicelint.check_counting(
+    "This is a game-changer. <!-- voicelint: ignore-line filler -->", DEFAULT)
+check("a rule-specific ignore leaves other rules firing", len(kept) == 1 and dropped == 0)
+
+
+# ---------------------------------------------------------------------------
+# 10. Fallback config is not shared mutable state
+# ---------------------------------------------------------------------------
+a = voicelint.load_config(None)
+a["banned_phrases"].append("state leak probe")
+a["watch_words"]["quietly"] = 99
+b = voicelint.load_config(None)
+check("a mutated config does not leak into the next load",
+      "state leak probe" not in b["banned_phrases"] and b["watch_words"]["quietly"] == 2)
 
 
 # ---------------------------------------------------------------------------

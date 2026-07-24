@@ -35,9 +35,11 @@ import argparse
 import bisect
 import html
 import json
+import copy
 import os
 import re
 import sys
+import unicodedata
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
@@ -46,11 +48,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # Built-in rules, used only when no voice_config.json is found (kept in sync
 # with that file). voice_config.json is the source of truth for a project.
 #
-# Every default here was built from tells observed across many AI-assisted
-# documents, not one writer's taste. If a rule contradicts your real style
-# (you use dashes deliberately, "robust" is your field's vocabulary), relax it
-# in your own config; see examples/relaxed.json, and the Pherkad profile
-# builder for generating a personal config from your voice profile.
+# These defaults are the maintainer's house rules. Each was added after
+# recurring across many AI-assisted documents, but the set still reflects one
+# writer's conclusions. If a rule contradicts your real style, relax it in
+# your own config (see examples/relaxed.json, or generate one from your voice
+# profile) and record the override in your voice profile.
 FALLBACK_CONFIG = {
     "no_dashes": True,
     "dash_density_cap": 1.0,
@@ -65,9 +67,7 @@ FALLBACK_CONFIG = {
         "in the rapidly evolving landscape", "in a world where",
         "picture this:", "as we navigate", "today, more than ever",
         "in conclusion,", "to summarize,",
-        "writes itself", "needs no embellishment", "that's the news",
-        "watch the move", "note the framing", "read this under",
-        "is the move",
+        "writes itself", "needs no embellishment",
     ],
     "engagement_bait": [
         "nobody's talking about", "everybody's talking about",
@@ -109,20 +109,46 @@ FALLBACK_CONFIG = {
     "aggregator_domains": [],
 }
 
-# Literal nouns that make "load-bearing" a structural-engineering term, not the
-# figurative tell. Deliberately only unambiguously physical members: words like
-# "structure", "capacity", "member", "frame", and "assembly" read as metaphor
-# just as often ("the load-bearing structure of the argument"), so they stay
-# with the judgment layer instead of the regex.
-_LOAD_BEARING_LITERAL = (
-    r"walls?|beams?|columns?|joists?|trusses|slabs?|studs?|lintels?|girders?|rafters?"
-)
+# "load-bearing" is graded in three tiers, because position alone cannot always
+# tell the structural term from the metaphor:
+#   - followed by a physical member -> literal, no finding
+#   - followed by an argument word  -> figurative, error
+#   - anything else (ambiguous noun, predicate use) -> a soft context warning
+# So "load-bearing beam" is silent, "load-bearing assumption" errors, and
+# "load-bearing structure" or "the claim is load-bearing" only asks for a look.
+_LOAD_BEARING_PHYSICAL = {
+    "wall", "walls", "beam", "beams", "column", "columns", "joist", "joists",
+    "truss", "trusses", "slab", "slabs", "stud", "studs", "lintel", "lintels",
+    "girder", "girders", "rafter", "rafters", "member", "members", "frame",
+    "frames", "assembly", "assemblies", "footing", "footings", "pier", "piers",
+}
+_LOAD_BEARING_FIGURATIVE = {
+    "argument", "arguments", "assumption", "assumptions", "claim", "claims",
+    "thesis", "premise", "premises", "idea", "ideas", "reasoning", "logic",
+    "case", "point", "points", "narrative", "principle", "principles",
+    "concept", "concepts", "notion", "notions", "theory", "story",
+}
 
 # Config fields whose value is a list of strings, and which support
 # add_<field> / remove_<field> override keys in a user config.
 _LIST_FIELDS = (
     "banned_phrases", "engagement_bait", "soft_phrases",
     "filler_words", "aggregator_domains",
+)
+
+# Boolean fields, type-checked so a stray "false" string (which is truthy in
+# Python) cannot silently enable or disable a rule.
+_BOOL_FIELDS = ("no_dashes", "load_bearing_literal_only", "flag_loaded_quietly")
+
+# Every recognized top-level key. An unknown non-comment key (a typo like
+# "no_dash") is rejected rather than silently ignored. Keys beginning with "_"
+# are treated as comments and always allowed.
+_KNOWN_KEYS = frozenset(
+    _LIST_FIELDS
+    + tuple("add_" + f for f in _LIST_FIELDS)
+    + tuple("remove_" + f for f in _LIST_FIELDS)
+    + _BOOL_FIELDS
+    + ("watch_words", "dash_density_cap")
 )
 
 
@@ -164,6 +190,15 @@ def _validate(cfg: dict) -> None:
         cap = cfg["dash_density_cap"]
         if not isinstance(cap, (int, float)) or isinstance(cap, bool) or cap < 0:
             _fail("config field 'dash_density_cap' must be a non-negative number")
+    for key in _BOOL_FIELDS:
+        if key in cfg and not isinstance(cfg[key], bool):
+            _fail(f"config field '{key}' must be true or false")
+    for key in cfg:
+        if key.startswith("_"):
+            continue  # comment/metadata keys
+        if key not in _KNOWN_KEYS:
+            _fail(f"unknown config key '{key}'; check for a typo "
+                  "(comment keys must start with '_')")
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
@@ -175,7 +210,7 @@ def _deep_merge(base: dict, override: dict) -> dict:
     ``add_<field>`` / ``remove_<field>`` keys (applied afterward) to amend a
     default list instead of replacing it.
     """
-    out = dict(base)
+    out = copy.deepcopy(base)  # never hand back a reference into FALLBACK_CONFIG
     for key, val in override.items():
         if isinstance(out.get(key), dict) and isinstance(val, dict):
             out[key] = _deep_merge(out[key], val)
@@ -221,7 +256,7 @@ def load_config(path: str | None) -> dict:
         chosen = here if os.path.exists(here) else (cwd if os.path.exists(cwd) else None)
     if not chosen:
         sys.stderr.write("voicelint: no voice_config.json found; using built-in defaults\n")
-        return dict(FALLBACK_CONFIG)
+        return copy.deepcopy(FALLBACK_CONFIG)
     try:
         with open(chosen, encoding="utf-8") as fh:
             cfg = json.load(fh)
@@ -265,23 +300,31 @@ def mask_code(text: str) -> str:
     return text
 
 
+def _is_word_char(ch: str) -> bool:
+    """True if ``ch`` is part of a word: an alphanumeric, or a combining mark
+    (Unicode category M) that attaches to the preceding letter. The mark test
+    makes the guard safe for decomposed text, where an accent is a separate
+    character after its base letter (NFD 'e' + U+0301)."""
+    return ch.isalnum() or unicodedata.category(ch).startswith("M")
+
+
 def _iter_phrase(pattern: str, phrase: str, text: str):
     """Yield case-insensitive matches of ``pattern`` in ``text``, rejecting a
-    match whose alphanumeric edge sits against another alphanumeric character.
+    match whose word-forming edge sits against another word character.
 
     The guard is decided from ``phrase`` (the readable source): if it starts or
     ends with an alphanumeric, that side must not touch a word character, so
     'is the move' does not match inside 'movement' while 'picture this:'
-    (punctuation edge) still matches. The neighbor test uses ``str.isalnum``,
-    which is Unicode-aware, so an accented letter next to the phrase counts as a
-    word character too."""
+    (punctuation edge) still matches. The neighbor test counts alphanumerics
+    and combining marks, so an accented letter, precomposed or decomposed,
+    counts as a word character."""
     guard_left = phrase[:1].isalnum()
     guard_right = phrase[-1:].isalnum()
     for m in re.finditer(pattern, text, re.IGNORECASE):
         s, e = m.start(), m.end()
-        if guard_left and s > 0 and text[s - 1].isalnum():
+        if guard_left and s > 0 and _is_word_char(text[s - 1]):
             continue
-        if guard_right and e < len(text) and text[e].isalnum():
+        if guard_right and e < len(text) and _is_word_char(text[e]):
             continue
         yield m
 
@@ -316,10 +359,37 @@ def _soft_to_regex(phrase: str) -> str:
     return "".join(out)
 
 
+def _suppression_map(text: str) -> dict:
+    """Map a 1-based line number to the rules suppressed there by an inline
+    directive. ``voicelint: ignore-line`` suppresses the line it sits on;
+    ``voicelint: ignore-next-line`` suppresses the following line. Names after
+    the directive limit it to those rules (``ignore-line filler``); with none,
+    the whole line is suppressed (``*``). Put a directive in a comment, e.g.
+    ``<!-- voicelint: ignore-next-line banned-phrase -->``."""
+    supp: dict = {}
+    for i, line in enumerate(text.split("\n"), start=1):
+        m = re.search(r"voicelint:\s*ignore(-next-line|-line)?\b([^\n]*)", line, re.IGNORECASE)
+        if not m:
+            continue
+        target = i + 1 if m.group(1) == "-next-line" else i
+        names = set(re.findall(r"[A-Za-z][\w-]*", m.group(2))) or {"*"}
+        supp.setdefault(target, set()).update(names)
+    return supp
+
+
 def check(text: str, cfg: dict) -> list[Finding]:
-    """Run every enabled rule over ``text`` and return findings in order."""
+    """Run every enabled rule over ``text`` and return findings in order.
+
+    Findings silenced by an inline ``voicelint: ignore`` directive are removed;
+    use :func:`check_counting` to also learn how many were suppressed."""
+    return check_counting(text, cfg)[0]
+
+
+def check_counting(text: str, cfg: dict):
+    """Like :func:`check`, but return ``(findings, suppressed_count)``."""
     text = normalize_quotes(text)
     at = _linecol_fn(text)
+    suppress = _suppression_map(text)
     # Match against a copy with code spans blanked; offsets are preserved, so
     # findings still point at the real line and column.
     text = mask_code(text)
@@ -329,7 +399,7 @@ def check(text: str, cfg: dict) -> list[Finding]:
         line, col = at(m.start())
         out.append(Finding(line, col, severity, rule, m.group(0).strip(), message))
 
-    dash_hits = list(_iter(r"[—–―−]", text, flags=0))  # em/en/horiz-bar/minus
+    dash_hits = list(_iter(r"[—–―]", text, flags=0))  # em / en / horizontal bar
     if cfg.get("no_dashes", True):
         for m in dash_hits:
             add(m, "error", "dash", "em/en dash; use a comma, colon, or full stop")
@@ -347,8 +417,16 @@ def check(text: str, cfg: dict) -> list[Finding]:
                     "heavy dash use is an AI tell")
 
     if cfg.get("load_bearing_literal_only", True):
-        for m in _iter(rf"load[-\s]?bearing(?!\s+(?:{_LOAD_BEARING_LITERAL})\b)", text):
-            add(m, "error", "load-bearing", "figurative 'load-bearing'; earn the weight instead")
+        for m in _iter(r"load[-\s]?bearing\b", text):
+            nxt = re.match(r"\s+([^\W\d_]+)", text[m.end():])  # next alphabetic word
+            word = nxt.group(1).lower() if nxt else ""
+            if word in _LOAD_BEARING_PHYSICAL:
+                continue  # literal structural use
+            if word in _LOAD_BEARING_FIGURATIVE:
+                add(m, "error", "load-bearing", "figurative 'load-bearing'; earn the weight instead")
+            else:
+                add(m, "warning", "load-bearing-context",
+                    "'load-bearing' with an ambiguous object; confirm this is literal, not metaphor")
 
     for phrase in cfg.get("banned_phrases", []):
         for m in _iter_phrase(re.escape(phrase), phrase, text):
@@ -378,8 +456,11 @@ def check(text: str, cfg: dict) -> list[Finding]:
 
     domains = [d.lower().strip(".") for d in cfg.get("aggregator_domains", []) if d.strip(".")]
     if domains:
+        # Only scheme-bearing URLs are scanned; a bare "msn.com/x" with no
+        # scheme is left to the judgment layer, since a loose host regex would
+        # reintroduce path and prose false positives.
         for m in _iter(r"https?://[^\s)\"'<>]+", text):
-            host = (urlsplit(m.group(0)).hostname or "").lower()
+            host = (urlsplit(m.group(0)).hostname or "").lower().rstrip(".")
             if not host:
                 continue
             labels = host.split(".")
@@ -401,7 +482,17 @@ def check(text: str, cfg: dict) -> list[Finding]:
     # (e.g. "it's worth noting that") is redundant; keep the error only.
     err_starts = {(f.line, f.col) for f in out if f.severity == "error"}
     out = [f for f in out if not (f.rule == "soft-cliche" and (f.line, f.col) in err_starts)]
-    return out
+
+    if suppress:
+        kept, dropped = [], 0
+        for f in out:
+            names = suppress.get(f.line)
+            if names and ("*" in names or f.rule in names):
+                dropped += 1
+                continue
+            kept.append(f)
+        return kept, dropped
+    return out, 0
 
 
 def read_source(path: str, as_html: bool) -> str:
@@ -431,11 +522,11 @@ def main(argv=None) -> int:
     files = [f for f in args.files if not (f in seen or seen.add(f))]  # dedupe, keep order
 
     results = []  # list of (path, findings)
-    errors = warnings = 0
+    errors = warnings = suppressed = 0
     io_failed = False
     for path in files:
         try:
-            findings = check(read_source(path, args.html), cfg)
+            findings, dropped = check_counting(read_source(path, args.html), cfg)
         except OSError as exc:
             sys.stderr.write(f"voicelint: {exc}\n")
             io_failed = True
@@ -443,10 +534,12 @@ def main(argv=None) -> int:
         results.append((path, findings))
         errors += sum(f.severity == "error" for f in findings)
         warnings += sum(f.severity == "warning" for f in findings)
+        suppressed += dropped
 
     if args.json:
         print(json.dumps(
-            {p: [vars(f) for f in fs] for p, fs in results},
+            {"suppressed": suppressed,
+             "files": {p: [vars(f) for f in fs] for p, fs in results}},
             indent=2, ensure_ascii=False))
     else:
         if not args.quiet:
@@ -454,7 +547,8 @@ def main(argv=None) -> int:
                 for f in findings:
                     print(f"{path}:{f.line}:{f.col} [{f.severity}] {f.rule}: "
                           f"{f.message}  ->  {f.match!r}")
-        print(f"voicelint: {errors} error(s), {warnings} warning(s) "
+        tail = f", {suppressed} suppressed" if suppressed else ""
+        print(f"voicelint: {errors} error(s), {warnings} warning(s){tail} "
               f"across {len(results)} file(s).")
 
     if io_failed:

@@ -1,5 +1,5 @@
 {
-  "_comment": "Rule set for voicelint, the mechanical layer of Pherkad. Every default was built from tells observed across many AI-assisted documents, not one writer's taste. A hit means the configured pattern is present, not that a passage was machine-written. A user config is deep-merged onto these defaults: unlisted top-level fields and unlisted nested keys (for example one entry in watch_words) inherit; listed arrays replace, or amend a default list with add_<field> / remove_<field>. If a rule contradicts your real style (you use dashes deliberately, 'robust' is your field's vocabulary), relax it in your own copy; see examples/relaxed.json, and the Pherkad profile builder for generating a personal config from your voice profile. Case-insensitive.",
+  "_comment": "Rule set for voicelint, the mechanical layer of Pherkad. These defaults are the maintainer's house rules, added after recurring across many AI-assisted documents; the set still reflects one writer's conclusions. A hit means the configured pattern is present, not that a passage was machine-written. A user config is deep-merged onto these defaults: unlisted top-level fields and unlisted nested keys (for example one entry in watch_words) inherit; listed arrays replace, or amend a default list with add_<field> / remove_<field>. If a rule contradicts your real style (you use dashes deliberately, 'robust' is your field's vocabulary), relax it in your own copy; see examples/relaxed.json, and the Pherkad profile builder for generating a personal config from your voice profile. Case-insensitive.",
 
   "no_dashes": true,
   "dash_density_cap": 1.0,
@@ -31,12 +31,7 @@
     "in conclusion,",
     "to summarize,",
     "writes itself",
-    "needs no embellishment",
-    "that's the news",
-    "watch the move",
-    "note the framing",
-    "read this under",
-    "is the move"
+    "needs no embellishment"
   ],
 
   "engagement_bait": [

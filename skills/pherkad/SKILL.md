@@ -13,7 +13,7 @@ Three parts do the work:
 
 - **The tell catalog** (this skill plus `references/ai_tells.md`): documented AI-writing tells and the scoring protocol. Generic, shared by every user.
 - **The voice profile** (`Voice_Profile.md` in the user's working folder): what this one writer actually sounds like. Personal, built once, refined over time. Never part of this repository.
-- **The mechanical linter** (`tools/voicelint.py`): the regex-able subset of the catalog as a dependency-free script. It finds the literal patterns that can be checked without judgment; everything else stays with the model.
+- **The mechanical linter** (`tools/voicelint.py`): the configurable, regex-based subset of the catalog. It finds literal patterns and a small number of heuristic context checks. The model must review technical uses, quotations, and other cases that need judgment.
 
 ## Modes
 
@@ -29,7 +29,7 @@ Both begin by loading `Voice_Profile.md`. Without it, build the profile first.
 - Before finalizing a paper, blog post, application letter, or any prose that should sound like its author
 - When the user asks "does this sound like me?"
 - When reviewing AI-assisted drafts for voice authenticity
-- As a final quality gate before publication
+- As a final advisory review before publication
 
 ## Step 0: Check for a voice profile
 
