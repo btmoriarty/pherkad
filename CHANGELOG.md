@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.4.9 (2026-07-24)
+
+A third Codex round refined the evaluation design. The verdict has held across rounds (a sound advisory tool, the judgment layer unproved), so this closes the doc-review loop; the remaining work is running the study, not editing it.
+
+- **The primary outcome is a paired within-writer contrast.** The 0.4.8 "frozen" outcome still averaged authentic and flattened items together, which cancels the two cases the study exists to separate. It is now the discrimination margin (authentic rating minus flattened rating, and authentic minus impostor) under the correct profile minus the same margins under the pooled controls. The estimand matches.
+- **Reader reliability is a measured outcome.** Added to the metrics: writer-versus-reader and reader-versus-reader agreement on the blind pairwise judgments, with uncertainty and a fixed rule for disputed pairs. The human reference is only as good as its agreement.
+- **The harness and the protocol are told apart.** `eval/README.md` now states plainly what `study.py` implements (correct/wrong/none, one rater, one run) and what stays manual (shuffled control, validation case types, repeated runs, multiple readers), so "the harness scales to it" is not read as "it is implemented."
+- **A failed holdout is diagnosed, not auto-widened.** `profile_builder.md` no longer says "widen them" on a missed holdout; it revises a marker only if a fresh control shows better authentic recognition without accepting an impostor, since widening trades specificity for recall.
+- `VERSION` 0.4.9.
+
 ## v0.4.8 (2026-07-24)
 
 A second Codex round on 0.4.7 confirmed the earlier fixes and found four smaller things. All docs.

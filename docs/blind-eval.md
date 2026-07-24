@@ -76,15 +76,16 @@ Report, per writer, not only pooled:
 9. Rewrite fidelity: facts, qualifications, emphasis, and terms of art preserved.
 10. False-edit burden: authentic sentences rewritten unnecessarily.
 11. Writer-rated usefulness: whether the named failures and proposed rewrites are actually right.
-12. Authoring performance (below).
+12. Reader reliability: writer-versus-reader and reader-versus-reader agreement on the blind pairwise judgments, with uncertainty, plus a rule fixed in advance for adjudicating disputed pairs. The human reference is only as good as its agreement, so measure it rather than assume it.
+13. Authoring performance (below).
 
 ## Preregistration
 
 Write these down before collecting a single verdict, and do not change them after seeing results. This is what separates a study from a story.
 
-- **Estimand.** The average correct-profile lift: the difference in the "sounds like the writer" outcome between the correct-profile condition and the pooled controls (wrong, shuffled, none), across writers.
+- **Estimand.** The average correct-profile lift: the paired discrimination margin (authentic minus flattened, and authentic minus impostor) under the correct profile minus the same margins under the pooled controls (wrong, shuffled, none), across writers.
 - **Analysis unit.** The writer, not the passage. Passages within a writer are correlated, so the writer is the independent unit and the count that drives the result.
-- **Primary outcome (one formula, frozen).** The rating is the 1-to-5 "sounds like the writer" score. Per writer, lift = the mean rating under the correct profile minus the mean rating under the pooled controls (wrong, shuffled, none), the three controls weighted equally. Aggregate as the across-writer mean lift with a confidence interval. The paired authentic-versus-flattened discrimination margin, and any verdict-based score, are named secondary outcomes, not the primary. If a verdict is scored at all, encode it once and in advance (for example PASS 4, light REVISE 3, REVISE 2, REWRITE 1) and keep it secondary; the primary is the rating.
+- **Primary outcome (one formula, frozen).** The rating is the 1-to-5 "sounds like the writer" score. The primary is a label-aware paired contrast within writer, not a pooled mean: a pooled mean over authentic and flattened items cancels the two cases the study is meant to separate. For each held-out authentic sample paired with its flattening, the discrimination margin is the authentic rating minus the flattened rating. Correct-profile lift is that margin under the correct profile minus the same margin under the pooled controls (wrong, shuffled, none, weighted equally). Writer-versus-impostor separation is scored the same paired way (authentic minus impostor). Aggregate each as the across-writer mean with a confidence interval. Any verdict-based score is a named secondary; if used, encode it once and in advance (for example PASS 4, light REVISE 3, REVISE 2, REWRITE 1). The primary is the paired rating margin.
 - **Interval method.** A cluster bootstrap over writers, or a mixed-effects model with a random intercept per writer. Report the interval, not just the point estimate.
 - **Multiplicity.** Name the one primary outcome (lift) in advance. Everything else (per-register rates, stability, fidelity) is secondary and reported as secondary, not promoted to the headline after the fact.
 - **Power.** State the smallest lift worth detecting and the writer count needed to detect it at the chosen interval width. Five to eight writers is a pilot that cannot power a confirmatory claim; size the confirmatory run to the effect, not the reverse.

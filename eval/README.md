@@ -30,6 +30,10 @@ Maps to your plan (gather writers, have Pherkad write on a new subject, validate
 
 You as sole validator on a few writers is a **pilot**: it proves the harness and gives a first signal, but one judge and a handful of writers is not the claim. The writer is the unit that counts. `docs/blind-eval.md` sets the bar for the confirmatory version: roughly 20 to 30 writers, preregistered, independent readers as well as the writer, wrong/shuffled/no-profile controls, within-writer register coverage, and an authoring arm reported at the writer level. Only that justifies a public "reliable voice validation" claim. The harness scales to it; the judgments are what cost real effort.
 
+## What this implements, and what stays manual
+
+`study.py` runs the pilot: the correct, wrong, and none conditions, one rater, one run per item, with an optional real anchor. The confirmatory design in `../docs/blind-eval.md` needs pieces this harness does not automate yet: a shuffled-profile control, the validation case types (atypical authentic, matched impostors, an override sample), repeated runs for stability, and multiple independent readers with an agreement measure. Read "the harness scales to it" as "the file layout and scoring extend to it," not "it is implemented." Those elements are manual, or a job for a separate validation-study harness, until one is built.
+
 ## Files
 
 - `study.py`: the CLI (stdlib only).
