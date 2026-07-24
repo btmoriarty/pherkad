@@ -27,7 +27,7 @@ For each writer, assemble labeled items. Keep the labels out of the text the val
 
 - Authentic samples used to build the profile.
 - Authentic held-out samples the profile never saw, including at least one deliberately atypical piece (an unusual but real register or subject), since penalizing a writer's own unusual prose is a named failure mode.
-- Flattened rewrites of a held-out sample, at least two per sample, each produced by a different editor or model family that cannot see the profile. Preserve facts, argument, and paragraph function; keep within 10 percent of the source length. Do not build a flattening by deleting the profile's listed markers; that tests obedience, not recognition.
+- Flattened rewrites of a held-out sample, at least two per sample, each produced by a different editor or model family that cannot see the profile. Preserve facts, concrete examples, argument, and paragraph function; neutralize framing, syntax, hedging, transitions, and rhythm only; keep within 10 percent of the source length. Before using a flattening, confirm it carries the same facts and specific detail as its source, so the contrast measures voice and not lost content; a thinner text is a confound, not a flatter voice. Do not build a flattening by deleting the profile's listed markers; that tests obedience, not recognition.
 - Hard impostors: several different writers per subject, matched as closely as possible on register, topic, length, and expertise. One easy impostor proves little.
 - An override sample: an authentic piece that legitimately uses a catalog phrase or a habit the profile allows, to check overrides hold.
 
@@ -77,6 +77,18 @@ Report, per writer, not only pooled:
 10. False-edit burden: authentic sentences rewritten unnecessarily.
 11. Writer-rated usefulness: whether the named failures and proposed rewrites are actually right.
 12. Authoring performance (below).
+
+## Preregistration
+
+Write these down before collecting a single verdict, and do not change them after seeing results. This is what separates a study from a story.
+
+- **Estimand.** The average correct-profile lift: the difference in the "sounds like the writer" outcome between the correct-profile condition and the pooled controls (wrong, shuffled, none), across writers.
+- **Analysis unit.** The writer, not the passage. Passages within a writer are correlated, so the writer is the independent unit and the count that drives the result.
+- **Primary outcome.** Per writer, the mean rating (or discrimination margin) under the correct profile minus the mean under the controls. Aggregate as the across-writer mean lift with a confidence interval.
+- **Interval method.** A cluster bootstrap over writers, or a mixed-effects model with a random intercept per writer. Report the interval, not just the point estimate.
+- **Multiplicity.** Name the one primary outcome (lift) in advance. Everything else (per-register rates, stability, fidelity) is secondary and reported as secondary, not promoted to the headline after the fact.
+- **Power.** State the smallest lift worth detecting and the writer count needed to detect it at the chosen interval width. Five to eight writers is a pilot that cannot power a confirmatory claim; size the confirmatory run to the effect, not the reverse.
+- **Failure criteria.** Fixed before the run: the lift below which the profile is judged to add no writer-specific value, the flattened-pass rate above which the positive-register read is judged unreliable, and the run-to-run verdict swing above which the judgment is judged unstable. If any triggers, the claim stays advisory and says so.
 
 ## Authoring arm
 

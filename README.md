@@ -11,7 +11,7 @@ Pherkad is the sibling of [Kochab](https://github.com/btmoriarty/kochab), a job-
 Pherkad splits the problem in three:
 
 - **A generic tell catalog** ([`references/ai_tells.md`](skills/pherkad/references/ai_tells.md)): banned filler, antithesis constructions, scene-setting openers, engagement-bait transitions, triplet noun piles, and a density rule that catches prose built from individually allowed words in characteristic clusters.
-- **A personal voice profile**: built once from 3 to 5 samples of your real writing through a short interview ([`references/profile_builder.md`](skills/pherkad/references/profile_builder.md)). It records where your authority comes from, how you hedge, what concrete texture you use, your sentence mechanics, your structural habits, and your tone, each marker backed by a quoted sentence of yours. A fictional example profile shows the shape ([`references/example_profile.md`](skills/pherkad/references/example_profile.md)).
+- **A personal voice profile**: built once from at least four samples of your real writing (five or more if you write in several registers) through a short interview ([`references/profile_builder.md`](skills/pherkad/references/profile_builder.md)). It records where your authority comes from, how you hedge, what concrete texture you use, your sentence mechanics, your structural habits, and your tone, each marker backed by a quoted sentence of yours. A fictional example profile shows the shape ([`references/example_profile.md`](skills/pherkad/references/example_profile.md)).
 - **A mechanical linter** ([`skills/pherkad/tools/voicelint.py`](skills/pherkad/tools/voicelint.py)): the regex-able subset of the catalog as a dependency-free, stdlib-only Python script (3.8+). Exact line numbers, JSON output, CI-friendly exit codes. Runs standalone, no model needed.
 
 A validation run fingerprints the draft (the three sentences most and least like you), runs the linter when Python is available, scores seven dimensions with quoted evidence, checks the full catalog, computes tell density per 100 words, and returns a verdict: PASS, REVISE, or REWRITE, with targeted rewrites of only the flagged sentences.
@@ -64,7 +64,7 @@ The voice profile is built from your writing and stays in your folder. This repo
 
 **Claude Code:** copy `skills/pherkad/` into your skills directory.
 
-First run: ask for a voice check on any draft. Pherkad will notice you have no profile yet and run the profile interview first; bring 3 to 5 pieces of writing you consider most you.
+First run: ask for a voice check on any draft. Pherkad will notice you have no profile yet and run the profile interview first; bring at least four pieces of writing you consider most you (five or more if you write in several registers), since one is held back to check the profile.
 
 ## Build the .skill bundle
 

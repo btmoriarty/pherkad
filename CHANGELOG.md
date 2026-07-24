@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.4.7 (2026-07-24)
+
+A cross-vendor review (Codex, GPT-5.6) caught issues the Claude reviews missed. All docs.
+
+- **Sample count matches the holdout.** The profile builder reserves one sample before extraction (0.4.6), but the docs still said "3 to 5 samples," which leaves only two to build from at the low end. README, `profile_builder.md`, and both cheat sheets now say at least four (five or more for multiple registers), with one reserved.
+- **The eval harness stops overclaiming.** `eval/README.md` opened by calling itself "the harness that turns ... into a result you can trust," but `study.py` is a blinded single-rater pilot, not the confirmatory study. The opening now says so and points to `docs/blind-eval.md` for the multi-writer design.
+- **Flattening no longer strips content.** The holdout and blind-eval flattening steps said "remove personal examples," but examples are often the evidence, so removing them confounds a thinner text with a flatter voice. Both now preserve facts and concrete examples, neutralize only framing, syntax, hedging, transitions, and rhythm, and require a facts-and-detail equivalence check before a flattening is used.
+- **The blind-eval protocol has a preregistration.** `docs/blind-eval.md` gains an estimand, the writer as the analysis unit, the primary-outcome formula, an interval method, a multiplicity rule, a power statement, and fixed failure criteria, all set before the run.
+- `VERSION` 0.4.7.
+
 ## v0.4.6 (2026-07-24)
 
 A review confirmed the mechanical layer is sound and put the weight on the judgment layer, the holdout, and the evaluation design. This pass is docs and one test, no linter code.

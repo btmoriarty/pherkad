@@ -1,6 +1,6 @@
 # Voice-authoring evaluation
 
-The harness that turns "have Pherkad write with a profile, then validate the output" into a result you can trust. It measures **correct-profile lift**: whether a draft written with the writer's own profile reads more like the writer than drafts written with a wrong profile or no profile. Without that comparison and blinding, a single labeled draft cannot separate voice capture from competent prose.
+The harness for the voice-authoring study. It measures **correct-profile lift**: whether a draft written with the writer's own profile reads more like the writer than drafts written with a wrong profile or no profile. This is a blinded, single-rater pilot instrument, run on your own machine to prove the method and get a first signal; the confirmatory multi-writer, multi-reader design is `../docs/blind-eval.md`. Without the comparison and blinding, a single labeled draft cannot separate voice capture from competent prose.
 
 `study.py` does the bookkeeping that keeps the judgment honest (conditions, randomization, hidden keys, arithmetic). The judgment itself is human. See `../docs/blind-eval.md` for the full study design; this is how you run it.
 

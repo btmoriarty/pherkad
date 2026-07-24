@@ -2,7 +2,7 @@
 
 One page. Everything Pherkad does and what to say to trigger it. It validates against one voice, yours; it never polices anyone else's text and never returns a score without quoted evidence. Say things in your own words; the phrases below are examples, not commands.
 
-**First run:** ask for a voice check on any draft. With no profile yet, Pherkad interviews you first; bring 3 to 5 pieces of writing you consider most you. The profile lives in your folder and never leaves it.
+**First run:** ask for a voice check on any draft. With no profile yet, Pherkad interviews you first; bring at least four pieces of writing you consider most you. The profile lives in your folder and never leaves it.
 
 | Mode | Say something like | What you get |
 |---|---|---|
