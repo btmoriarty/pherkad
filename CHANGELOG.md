@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.4.6 (2026-07-24)
+
+A review confirmed the mechanical layer is sound and put the weight on the judgment layer, the holdout, and the evaluation design. This pass is docs and one test, no linter code.
+
+- **Provenance residue removed.** README no longer says Pherkad "makes it visible" or that a failure means "the machine's habits crept in"; a REVISE or REWRITE is described as a weak profile match or too many configured patterns, never as evidence of how a draft was produced. `SKILL.md`'s central line is now "run a structured review of whether written output matches one specific person's voice profile," Dimension 5 is "Generic or flattened patterns," and the output heading is "GENERIC OR FLATTENED PATTERN FLAGS."
+- **Score anchors and an explicit verdict map.** The seven dimensions now share a stated 1-to-5 anchor scale, so a score is reproducible rather than a feeling, and the PASS/REVISE/REWRITE rules are tied to specific dimension scores and signals instead of "a handful" or "heavy hits."
+- **The profile holdout is repaired.** The holdout is chosen and isolated before markers are extracted (a read sample cannot be made unseen); a failed holdout is spent, so a profile changed to fix it is confirmed on a new untouched sample; the flattened rewrite is produced by an editor or model blind to the profile, preserving facts and order within 10 percent length, not by deleting the profile's markers; and the impostor check uses several closely matched writers.
+- **The blind-eval protocol became a study design.** `docs/blind-eval.md` now leads with correct-profile lift (run every item under the correct, a wrong, a shuffled, and no profile, plus linter-only) as the primary result, since a pass proves nothing if the wrong profile does as well. Added within-writer register coverage, independent blind flattening with at least two variants, several hard impostors, external blinded pairwise reader judgment, role separation across model families, frozen definitions (light REVISE, run count, model and sampling, stability, thresholds), a twelve-item measurement list, an authoring arm, and pilot-versus-confirmatory sizing.
+- **Test.** Added a regression case that an empty watch-word key exits 2.
+- `VERSION` 0.4.6.
+
 ## v0.4.5 (2026-07-24)
 
 A fourth review found the mechanical layer sound and pointed the real work at the judgment layer. This pass closes the remaining linter holes, stops the linter and docs from implying provenance, and starts the highest-value work: evidence that the "sounds like you" verdict generalizes.

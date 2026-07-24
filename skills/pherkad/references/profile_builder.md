@@ -12,11 +12,13 @@ How to build `Voice_Profile.md`, the personal half of Pherkad. Run this once on 
 
 Ask for 3 to 5 pieces the user considers most "them": blog posts, essays, papers, long emails. Aim for 1,500+ words total. For each, note the register (public post, paper, informal). If the user has both formal and informal registers, say the profile will carry both and validation will use whichever fits the draft.
 
-Prefer pre-AI or lightly assisted samples. If the user suspects a sample is already AI-flattened, exclude it or mark it low-confidence.
+Prefer pre-AI or lightly assisted samples. If the user suspects a sample is already flattened, exclude it or mark it low-confidence.
+
+**Set the holdout aside first.** Before reading any sample for markers, choose one sample as the holdout for Step 4b and record its file name or a hash. Do not load its text during marker extraction, profile drafting, user correction, or config generation. Reveal it only after the profile is frozen for the check. A sample the model has already read cannot be made unseen, so the holdout has to be reserved before Step 2, not relabeled after. This means Step 1 should collect enough that one can be spared (aim for at least four).
 
 ## Step 2: Extract markers
 
-Read all samples, then draft the six personal dimensions. For each, write 2 to 4 markers plus quoted reference sentences:
+Read the non-holdout samples, then draft the six personal dimensions. For each, write 2 to 4 markers plus quoted reference sentences:
 
 1. **Grounding and authority.** Where does authority come from: lived observation, argument, data, craft, reporting? Who is the narrator relative to the subject (inside the work, above it, beside the reader)?
 2. **Epistemic calibration.** Preferred hedging verbs and confidence ceiling. Does the writer make predictions? Prescriptions? How do endings behave (resolve, open, trail off)?
@@ -40,15 +42,15 @@ Save as `Voice_Profile.md` in the user's working folder, following the shape of 
 
 ## Step 4b: Hold a sample back and check the profile generalizes
 
-A profile built and judged on the same samples can look sharper than it is: the markers were read off those exact pieces, so of course they match. Before treating the profile as ready, run one holdout check.
+A profile built and judged on the same samples can look sharper than it is: the markers were read off those exact pieces, so of course they match. Before treating the profile as ready, run one holdout check against the sample set aside in Step 1, which the profile never saw.
 
-Reserve one collected sample that did not feed marker extraction (Step 1 asked for enough that one can be spared). Then run a validation pass against three texts and read the verdicts, not to score the tool but to check the profile:
+Run a validation pass against three texts and read the verdicts, not to score the tool but to check the profile:
 
-1. The held-out sample. It should read as the writer: the positive markers should be present and the verdict should land at PASS or a light REVISE. If the profile does not recognize the writer's own unused writing, the markers are overfit to the extraction set; widen them.
-2. A flattened rewrite of the held-out sample (strip the texture, even the sentences, generic connectives). It should draw a REVISE or REWRITE on the positive-register read, even if it trips no banned phrase. If it passes, the profile is only catching tells, not carrying voice.
-3. A short piece by a different writer in the same register. It should not read as this writer. If it passes, the profile is too generic to distinguish anyone.
+1. The held-out sample. It should read as the writer: the positive markers should be present and the verdict should land at PASS or a light REVISE (a REVISE driven by minor surface hits, not by a missing-markers finding). If the profile does not recognize the writer's own unseen writing, the markers are overfit to the extraction set; widen them.
+2. A flattened rewrite of the held-out sample. Have a separate editor or a model that cannot see the profile produce it: preserve the facts and paragraph order, remove personal examples, unusual syntax, characteristic hedges, recurring transitions, and sentence-length variation, and keep it within 10 percent of the source word count. Do not build the rewrite by deleting the profile's listed markers one by one; that tests obedience to the profile, not recognition of naturally flattened prose. It should draw a REVISE or REWRITE on the positive-register read, even if it trips no banned phrase. If it passes, the profile is only catching tells, not carrying voice.
+3. Two or three short pieces by different writers in the same register, matched as closely as you can on topic, length, and level of expertise. None should read as this writer. If any passes, the profile is too generic to distinguish nearby writers, not just an obviously different one.
 
-Record the three results in the profile as a dated "Holdout check." If any of the three comes out wrong, fix the profile before use and note what changed. This is a sanity check on one writer, not a validation of the method; the method-level evidence is the multi-writer blind set in `docs/blind-eval.md`.
+Record the results in the profile as a dated "Holdout check." **A failed holdout is spent.** If a result is wrong and you change the profile to fix it, that sample has joined the development set: rechecking it only shows the fix fitted the known failure. Retire it and confirm the revised profile on a new untouched sample. This is a sanity check on one writer, not a validation of the method; the method-level evidence is the multi-writer blind set in `docs/blind-eval.md`.
 
 ## Step 5: Offer a personal linter config
 

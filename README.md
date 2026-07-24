@@ -2,7 +2,7 @@
 
 A Claude skill that helps you review whether a draft still sounds like you.
 
-AI-assisted writing drifts toward a house style that belongs to no one: balanced sentences, stock openers, three abstract nouns where one would do. The drift is gradual and invisible from inside a draft. Pherkad makes it visible, names the flattened sentences, and proposes rewrites that keep your meaning in your voice.
+AI-assisted writing drifts toward a house style that belongs to no one: balanced sentences, stock openers, three abstract nouns where one would do. The drift is gradual and hard to see from inside a draft. Pherkad runs a structured review, identifies sentences that may have flattened, and proposes local rewrites for you to inspect.
 
 Pherkad is the sibling of [Kochab](https://github.com/btmoriarty/kochab), a job-search assistant built on the same ethos. Kochab and Pherkad are the Guardians of the Pole, the two bright stars at the front of the Little Dipper's bowl. Around 1100 BC, before Polaris drifted into position, they served together as the twin pole stars navigators steered by. Kochab keeps a job search pointed true north; Pherkad does the same for a writer's voice.
 
@@ -39,7 +39,7 @@ The defaults are still my conclusions, and your register may differ. The rules a
 
 I use AI in most of what I write and build now, and Pherkad came out of that practice. The tools are good enough that people who never called themselves writers or programmers are finishing essays and shipping working software. I think that is worth defending. The people on the fence, the ones with something to say who stopped before saying it, lose the most if the answer to AI-flattened prose is to abstain.
 
-The answer I believe in is informed use. Know what the tools do to your sentences, check the output against your own voice, and keep what is yours. A draft that fails validation is not a verdict on using AI; it is a note that the machine's habits crept in where yours belong. Fix the flagged sentences and the byline stays honest.
+The answer I believe in is informed use. Know what the tools do to your sentences, check the output against your own voice, and keep what is yours. A REVISE or REWRITE verdict is not evidence of how a draft was produced; it means the review found a weak match to your profile or too many configured style patterns. Inspect the cited sentences and decide whether the diagnosis is right.
 
 So use the assistance. Write the essay you were not going to write, build the tool you were not going to build. Just read what you sign.
 

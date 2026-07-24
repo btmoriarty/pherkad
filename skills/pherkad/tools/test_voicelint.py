@@ -259,6 +259,10 @@ with tempfile.TemporaryDirectory() as d:
     open(emptyphrase, "w").write('{"add_banned_phrases": [""]}')
     code, _, _ = run(["--config", emptyphrase, clean])
     check("empty configured phrase exits 2", code == 2)
+    emptywatch = os.path.join(d, "emptywatch.json")
+    open(emptywatch, "w").write('{"watch_words": {"": 1}}')
+    code, _, _ = run(["--config", emptywatch, clean])
+    check("empty watch-word key exits 2", code == 2)
 
 
 # ---------------------------------------------------------------------------

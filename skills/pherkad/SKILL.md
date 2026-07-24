@@ -5,7 +5,7 @@ description: Validate or draft prose in the user's own voice rather than generic
 
 # Pherkad
 
-Validate that written output sounds like one specific person's voice.
+Run a structured review of whether written output matches one specific person's voice profile.
 
 Pherkad runs a structured diagnostic against text to surface generic phrasing, voice drift, and tone misalignment. It produces an actionable report with cited evidence, never a bare score.
 
@@ -58,13 +58,23 @@ Score each dimension 1 to 5. Dimensions 1-4, 6, and 7 are judged against the mar
 | 2. Epistemic calibration | How the writer hedges and how confident they allow themselves to be |
 | 3. Texture | The concrete specifics characteristic of this writer (settings, artifacts, sensory or operational detail) |
 | 4. Sentence mechanics | Rhythm, length variation, punctuation habits, fragments, humor style |
-| 5. Absence of AI artifacts | Matches against the tell catalog in `references/ai_tells.md` |
+| 5. Generic or flattened patterns | Matches against the tell catalog in `references/ai_tells.md` |
 | 6. Structural habits | How the writer opens, builds, and ends; what they leave implicit |
 | 7. Tonal identity | The overall feel, matched against the profile's tone description |
 
 Every score MUST cite a specific passage from the text as evidence. No dimension may be scored without a quote.
 
-## Step 3: Flag AI-artifact sentences (individual hits)
+**What the 1 to 5 means** (the same anchors for every dimension, so a score is reproducible and not a feeling):
+
+- **5**: the profile's markers for this dimension are clearly present; the text matches the writer here.
+- **4**: mostly matches; one marker is weak or missing.
+- **3**: mixed; some of the writer's markers, some generic or off. The dimension neither confirms nor denies the voice.
+- **2**: mostly generic or off-profile; a marker appears only faintly.
+- **1**: none of the writer's markers for this dimension; reads as anyone, or as a different writer.
+
+For Dimension 5 the scale inverts to the tell catalog: 5 means clean of tells, 1 means dense with them. Cite the quote that fixes the score at that anchor, not one step above or below.
+
+## Step 3: Flag generic or flattened sentences (individual hits)
 
 If a Python runtime is available, first run the mechanical layer for exact line-numbered hits:
 
@@ -91,9 +101,13 @@ Clustering weighs separately: two or more antithesis constructions (5c) or two o
 
 ## Step 5: Produce the verdict
 
-- **PASS**: reads as the writer's voice throughout. Minor surface edits only. No density warning, no cluster warning.
-- **REVISE**: core voice present but artifacts or drift in specific sections. Density warning OR cluster warning OR a handful of individual hits, OR the draft is clean of tells but shows none of the writer's positive markers (voice flattened toward generic).
-- **REWRITE**: voice has flattened or drifted substantially. Density warning AND multiple cluster warnings, or heavy hits across multiple dimensions.
+The verdict follows from the dimension scores (Step 2) and the signals (Steps 3 and 4), not from a general impression. "Voice dimensions" below means 1 to 4, 6, and 7; Dimension 5 is the tell read.
+
+- **PASS**: every voice dimension scores 4 or 5, Dimension 5 is 4 or 5, and there is no density warning and no cluster warning. Minor surface edits only.
+- **REVISE**: the core voice is present but a section drifts. Any one of: a voice dimension at 3; a density warning; a cluster warning; three or more individual hits; or the draft is clean of tells (Dimension 5 high) but shows none of the writer's positive markers, so a voice dimension still lands at 2 or below (voice flattened toward generic).
+- **REWRITE**: the voice has flattened or drifted across the piece. Two or more voice dimensions at 2 or below, or a density warning together with two or more cluster warnings.
+
+When the signals point at different verdicts, take the more serious one and say which signal drove it.
 
 ## Step 6: Deliver targeted rewrites
 
@@ -123,7 +137,7 @@ FINGERPRINT
 DIAGNOSTIC SCORES
   [table from Step 2, with evidence quotes]
 
-AI ARTIFACT FLAGS (individual hits)
+GENERIC OR FLATTENED PATTERN FLAGS (individual hits)
   [list from Step 3, grouped by category 5a-5i]
 
 POSITIVE REGISTER
