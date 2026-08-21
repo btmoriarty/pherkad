@@ -1,10 +1,8 @@
 {
   "_comment": "Rule set for voicelint, the mechanical layer of Pherkad. These defaults are the maintainer's house rules, added after recurring across many AI-assisted documents; the set still reflects one writer's conclusions. A hit means the configured pattern is present, not that a passage was machine-written. A user config is deep-merged onto these defaults: unlisted top-level fields and unlisted nested keys (for example one entry in watch_words) inherit; listed arrays replace, or amend a default list with add_<field> / remove_<field>. If a rule contradicts your real style (you use dashes deliberately, 'robust' is your field's vocabulary), relax it in your own copy; see examples/relaxed.json, and the Pherkad profile builder for generating a personal config from your voice profile. Case-insensitive.",
-
   "no_dashes": true,
   "dash_density_cap": 1.0,
   "load_bearing_literal_only": true,
-
   "banned_phrases": [
     "it's worth noting that",
     "it is worth noting that",
@@ -41,7 +39,6 @@
     "worth its weight",
     "worth its weight in gold"
   ],
-
   "engagement_bait": [
     "nobody's talking about",
     "everybody's talking about",
@@ -66,8 +63,7 @@
     "and here's why that matters",
     "plot twist:"
   ],
-
-  "_soft_comment": "Warnings, not errors: phrasings that are hard to ban outright but show up far too often in AI-assisted text. [word] matches one token; [verb] matches a gerund. A soft hit that lands on a stronger banned phrase is dropped as redundant.",
+  "_soft_comment": "Warnings, not errors: phrasings that are hard to ban outright but show up far too often in AI-assisted text. [word] matches one token; [verb] matches a gerund. A soft hit that lands on a stronger banned phrase is dropped as redundant. Extended 2026-08-20: the metaphorical-land heuristic (previously queued in voicelint-land-heuristic.json) and the phrase-shaped half of the structural families named in voice-authoring.md under 'The linter is the last check'. The other half (two-beat parallel, staccato run, header stance) are not expressible as phrases and live in structlint.py. Extended again 2026-08-20 after Brian's Week 9 review: the land patterns were rescoped (the queued heuristic caught 5 of 71 real uses), and the forward-pointer and named-nominalization families were added.",
   "soft_phrases": [
     "it's worth [verb]",
     "it is worth [verb]",
@@ -81,9 +77,70 @@
     "gut check",
     "where your [word] lives",
     "names a way",
-    "the [word] that never bends"
+    "the [word] that never bends",
+    "would land",
+    "did not land",
+    "didn't land",
+    "does not land",
+    "doesn't land",
+    "lands better",
+    "land better",
+    "would land easier",
+    "landing with",
+    "land with the",
+    "landed with",
+    "landscape",
+    "is the point",
+    "is the moment",
+    "is the tell",
+    "is the whole",
+    "the one that",
+    "the thing that",
+    "the part that",
+    "the one to",
+    "a first for",
+    "the first time in this course",
+    "for the first time in",
+    "let it sit",
+    "give it a beat",
+    "sit with that",
+    "stay on it",
+    "in one line",
+    "in a nutshell",
+    "put simply",
+    "the short version is",
+    "what it buys",
+    "what it buys you",
+    "buys you",
+    "stays yours",
+    "is yours to",
+    "remains yours",
+    "one buys",
+    "[word] buys you",
+    "lands there",
+    "lands here",
+    "lands on",
+    "lands at",
+    "lands in",
+    "land there",
+    "land here",
+    "land on the",
+    "landing point",
+    "where it lands",
+    "lands first",
+    "lands with",
+    "lands next",
+    "what comes next",
+    "and what comes next",
+    "what is coming",
+    "a named cost",
+    "a named criterion",
+    "as a named",
+    "actually lands",
+    "where [word] lands",
+    "lands squarely",
+    "it lands"
   ],
-
   "filler_words": [
     "significant",
     "crucial",
@@ -102,13 +159,13 @@
     "tapestry",
     "showcases"
   ],
-
   "watch_words": {
-    "quietly": 2
+    "quietly": 2,
+    "actually": 2,
+    "silently": 2
   },
   "_flag_loaded_quietly_comment": "Off by default: clause-final position alone cannot separate an insinuating 'quietly' from a plain manner adverb ('shut the door quietly'). Set true as a house rule if your register wants it; overuse is still caught by the 'quietly' watch word, and the pre-modifier case is judged in references/ai_tells.md.",
   "flag_loaded_quietly": false,
-
   "_source_comment": "aggregator_domains is source-quality policy, not a voice tell, so it is empty in the generic defaults. A team that wants a low-trust-domain check keeps its list in a config like examples/news-brief.json.",
   "aggregator_domains": []
 }

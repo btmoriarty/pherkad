@@ -1,9 +1,17 @@
 {
   "name": "pherkad",
-  "version": "0.4.9",
+  "version": "0.5.0",
   "description": "A voice validator that checks whether a draft still sounds like you, with a dependency-free linter for AI-writing tells. Sibling of Kochab.",
-  "author": { "name": "Brian Moriarty", "email": "btmoriarty@gmail.com" },
+  "author": {
+    "name": "Brian Moriarty",
+    "email": "btmoriarty@gmail.com"
+  },
   "homepage": "https://github.com/btmoriarty/pherkad",
   "license": "MIT",
-  "keywords": ["voice", "writing", "editing", "claude-skill"]
+  "keywords": [
+    "voice",
+    "writing",
+    "editing",
+    "claude-skill"
+  ]
 }

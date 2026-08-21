@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.5.0 (2026-08-20)
+
+A structural checker joins the linter. `voicelint` matches phrases; the families that actually sink a draft have no string to match, and `voice-authoring.md` has said so since 2026-08-15 under "The linter is the last check, not the check" without anything enforcing it. Guidance lost to the default register in practice, so it becomes a tool.
+
+- **`tools/structlint.py`, new.** Four checks with nothing to grep for: the clipped balanced parallel, a run of three or more short sentences, a header that strikes a pose rather than naming its subject, and density. Everything is a warning, because these are judgment calls that over-fire by design, and the output is a list for a glance rather than a verdict.
+- **It reads paragraphs, not lines.** Hard-wrapped markdown puts one sentence across several lines, and a line-by-line read saw a sentence ending mid-line as a two-beat that was not there. Blockquotes, list items, bold run-in labels and clauses ending in a colon are all skipped for the same reason: a checker that cries wolf gets ignored.
+- **`tools/test_structlint.py`, new**, wired into the test workflow beside the voicelint suite. The negative cases outnumber the positive ones, which is the right ratio for a tool whose failure mode is noise.
+- **The land heuristic is merged into `voice_config.json`**, closing a queued item, and rescoped. The queued version covered the "it did not land with the team" sense and caught 5 of 71 metaphorical uses in a real corpus; the dominant construction is "X lands somewhere."
+- **`actually` and `silently` become watch words capped at two per document** rather than bans. Both already had rules with no tooling. A ban on `silently` would have broken "silent failure," which is literally true of software.
+- **Soft phrases added** for the empty-emphasis frame, the forward pointer, the named-nominalization, and the "what it buys you" sales register.
+- **`carries` deliberately did not get a phrase ban.** Four of five uses in a real corpus's titles were precise; the header check catches the abstract one and leaves the rest.
+- `VERSION` 0.5.0.
+
 ## v0.4.9 (2026-07-24)
 
 A third Codex round refined the evaluation design. The verdict has held across rounds (a sound advisory tool, the judgment layer unproved), so this closes the doc-review loop; the remaining work is running the study, not editing it.

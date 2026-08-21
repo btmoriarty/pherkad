@@ -28,6 +28,9 @@ jobs:
       - name: Run the voicelint regression suite
         run: python3 skills/pherkad/tools/test_voicelint.py
 
+      - name: Run the structlint regression suite
+        run: python3 skills/pherkad/tools/test_structlint.py
+
       - name: Lint the self-lint-scoped docs
         # Lint the two documents covered by the repository's public self-lint
         # claim. CHANGELOG.md and references/ai_tells.md quote configured

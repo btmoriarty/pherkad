@@ -14,6 +14,7 @@ Three parts do the work:
 - **The tell catalog** (this skill plus `references/ai_tells.md`): documented AI-writing tells and the scoring protocol. Generic, shared by every user.
 - **The voice profile** (`Voice_Profile.md` in the user's working folder): what this one writer actually sounds like. Personal, built once, refined over time. Never part of this repository.
 - **The mechanical linter** (`tools/voicelint.py`): the configurable, regex-based subset of the catalog. It finds literal patterns and a small number of heuristic context checks. The model must review technical uses, quotations, and other cases that need judgment.
+- **The structural checker** (`tools/structlint.py`): the half of the catalog that has no string to match. It reads sentence and header shape, so it catches the clipped balanced parallel, a run of three or more short sentences, and a header that strikes a pose rather than naming its subject. Everything it reports is a warning, because these are judgment calls that over-fire by design. Run it alongside the linter, never instead of it.
 
 ## Modes
 
@@ -80,6 +81,7 @@ If a Python runtime is available, first run the mechanical layer for exact line-
 
 ```
 python3 tools/voicelint.py --json --strict <draft>
+python3 tools/structlint.py --json <draft>
 ```
 
 Then walk the full catalog in `references/ai_tells.md` (categories 5a through 5i) and flag each sentence with a supported tell, including the structural families the linter cannot see. List each flagged sentence with the specific tell identified. Deduplicate against the linter's findings; count each construction once.
