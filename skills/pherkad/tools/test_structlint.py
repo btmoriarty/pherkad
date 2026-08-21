@@ -86,6 +86,10 @@ def main():
           "two-beat" not in rules(
               "None of them wrong. None of them ours. <!-- structlint: ignore-line -->\n"))
 
+    check("a bracketed template placeholder is not prose",
+          "staccato" not in rules(
+              "[How are variables encoded? What does it emphasize? What does it hide?]\n"))
+
     # --- tables ---------------------------------------------------------
     check("a markdown table is not prose",
           "staccato" not in rules(

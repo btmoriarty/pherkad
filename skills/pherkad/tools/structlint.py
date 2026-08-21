@@ -105,6 +105,12 @@ QUOTED = re.compile(r'"[^"]{60,}"')
 # "Stage 1: ... Stage 2: ..." is an enumeration, not prose rhythm. Two or more
 # labeled steps on a line means the periods are separating items in a list that
 # happens to be written inline.
+# A whole line wrapped in square brackets is a fill-in placeholder in a template
+# ("[How are variables encoded? What does it de-emphasize?]"), not the author's
+# prose. The questions are prompts for the student to replace. Found 2026-08-21
+# across the A1-A5 templates.
+BRACKET_PLACEHOLDER = re.compile(r"^\s*\[.*\]\s*$", re.S)
+
 # A markdown table row is tabular data, not prose. Its cells are fragments and
 # its delimiter row is punctuation, so paragraph-grouping a rubric turned it
 # into a staccato run. Found 2026-08-21 on the A2 rubric.
@@ -188,7 +194,7 @@ def check_text(raw: str) -> list[Finding]:
     for i, ln in enumerate(lines, 1):
         if (i in skip or not ln.strip() or BLOCKQUOTE.match(ln)
                 or HEADER_LINE.match(ln) or FIELD_LINE.match(ln)
-                or TABLE_ROW.match(ln)
+                or TABLE_ROW.match(ln) or BRACKET_PLACEHOLDER.match(ln)
                 or CITATION.search(ln) or QUOTED.search(ln)):
             flush()
         else:
