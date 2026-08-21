@@ -6,3 +6,12 @@ voice-intake.md
 
 # Voice-eval study data (real writers samples/profiles stay local)
 eval/data/
+
+# Local working junk; never commit these (added 2026-08-21 after a git add -A
+# swept 140 of them into a push).
+_to_delete/
+*.bak
+*.bak[0-9]
+pherkad.rebuilt.skill
+voicelint-land-heuristic.json
+skills/pherkad/tools/sample.md
