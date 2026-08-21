@@ -86,6 +86,25 @@ def main():
           "two-beat" not in rules(
               "None of them wrong. None of them ours. <!-- structlint: ignore-line -->\n"))
 
+    # --- aphorism ----------------------------------------------------------
+    # The shape that slipped both checkers on 2026-08-21: a comparative weighed
+    # against an elliptical negation, inside a single sentence, so the two-beat
+    # check could not see the symmetry.
+    check("manufactured maxim caught",
+          "aphorism" in rules(
+              "a source you find yourself and finish is worth more than one "
+              "from this page that you do not.\n"))
+    check("elided-pronoun variant caught",
+          "aphorism" in rules(
+              "A dashboard that answers one question well is worth more than "
+              "one that does not.\n"))
+    check("plain comparison is safe",
+          "aphorism" not in rules("Position is more accurate than length.\n"))
+    check("comparison without a negation tail is safe",
+          "aphorism" not in rules("The result is better than we expected.\n"))
+    check("negation without a comparative is safe",
+          "aphorism" not in rules("Use the source that you did not expect.\n"))
+
     if _failures:
         print("FAIL ({} case(s)):".format(len(_failures)))
         for f in _failures:

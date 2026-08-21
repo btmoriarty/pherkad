@@ -84,7 +84,44 @@ BLOCKQUOTE = re.compile(r"^\s*>")
 # that is not a sentence boundary. Strip the label before splitting.
 RUNIN_LABEL = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)]\s+)?\*\*[^*]{1,90}?\*\*:?\s*")
 HEADER_LINE = re.compile(r"^\s{0,3}#{1,6}\s+(.*?)\s*#*\s*$")
-SENT_SPLIT = re.compile(r"(?<=[.!?])\s+")
+# A period is not always a sentence boundary. Initials ("W. H."), common
+# abbreviations, and ordinals in citations all end in one, and treating them as
+# boundaries turned bibliographies into staccato runs.
+ABBREV = (r"(?<!\b[A-Z])(?<!\bvs)(?<!\bcf)(?<!\bal)(?<!\beds)(?<!\bed)(?<!\bpp)"
+          r"(?<!\bno)(?<!\bvol)(?<!\bArt)(?<!\bFig)(?<!\bapprox)(?<!\best)"
+          r"(?<!\bDr)(?<!\bMr)(?<!\bMs)(?<!\bSt)(?<!\betc)(?<!\bi\.e)(?<!\be\.g)")
+SENT_SPLIT = re.compile(ABBREV + r"(?<=[.!?])\s+")
+# A line of bold field labels ("**Type:** **Title:** ...") is a form, not prose.
+FIELD_LINE = re.compile(r"^\s*(\*\*[^*]{1,40}:\*\*\s*){2,}")
+# A bibliographic entry is punctuation-dense by convention: a year in
+# parentheses, a DOI, a URL, or a volume-and-article run. Its rhythm is the
+# citation style's, not the author's, so it is not theirs to answer for.
+CITATION = re.compile(r"\((?:19|20)\d\d\)|\bDOI\b|https?://|\barXiv\b|\bpp\.\s*\d", re.I)
+# A quoted prompt or transcript line carries its speaker's rhythm, not the
+# author's, in the same way a blockquote does. Markdown gives blockquotes a
+# marker; a prompt quoted inside a slide body does not, so detect it by a
+# quoted span covering most of the line.
+QUOTED = re.compile(r'"[^"]{60,}"')
+# "Stage 1: ... Stage 2: ..." is an enumeration, not prose rhythm. Two or more
+# labeled steps on a line means the periods are separating items in a list that
+# happens to be written inline.
+LABELED_STEPS = re.compile(
+    r"\b(stage|step|round|question|phase|prompt|slide)\s+\d+\s*:", re.I)
+
+# The manufactured maxim: a comparative weighed against an elliptical negation
+# ("a source you find yourself and finish is worth more than one from this page
+# that you do not"). The symmetry sits inside one sentence, so the two-beat
+# check cannot see it. It reads as earned wisdom and asserts nothing; it is the
+# cheapest way to make a paragraph feel finished, which is why it arrives at
+# the end of one. Both halves are required, so a plain comparison is safe.
+APHORISM_CMP = re.compile(
+    r"\b(?:worth\s+(?:more|less)|more|less|better|worse|stronger|weaker|"
+    r"cheaper|faster|safer|harder|easier)\s+than\b", re.I)
+_NEG = r"(?:do|does|did|is|are|was|were|will|would|can|could|have|has|had)\s*n[o’']t"
+APHORISM_TAIL = re.compile(
+    r"\b(?:that|than|which|who)\s+"
+    r"(?:(?:you|it|they|we|one|he|she|others?|most)\s+)?"
+    + _NEG + r"\b\s*[.!?\"]*$", re.I)
 
 
 @dataclass
@@ -144,7 +181,9 @@ def check_text(raw: str) -> list[Finding]:
             buf.clear()
 
     for i, ln in enumerate(lines, 1):
-        if i in skip or not ln.strip() or BLOCKQUOTE.match(ln) or HEADER_LINE.match(ln):
+        if (i in skip or not ln.strip() or BLOCKQUOTE.match(ln)
+                or HEADER_LINE.match(ln) or FIELD_LINE.match(ln)
+                or CITATION.search(ln) or QUOTED.search(ln)):
             flush()
         else:
             if not buf:
@@ -174,7 +213,10 @@ def check_text(raw: str) -> list[Finding]:
         # A definition bullet ("- **Term:** gloss. More gloss.") naturally
         # falls into two beats without being the construction. Skip both
         # checks there; a real two-beat in running prose is still caught.
-        if is_list and body != ln:
+        if body != ln:
+            # A bold run-in label marks a field ("**Mitigation:** do this, do
+            # that"), and a field's content is usually instructions, which
+            # voice-rules says may be clipped.
             continue
 
         # two-beat: a clipped balanced parallel standing alone on the line
@@ -184,9 +226,16 @@ def check_text(raw: str) -> list[Finding]:
                 found.append(Finding(i, "two-beat", ln.strip()[:80],
                                      "clipped balanced parallel; the symmetry is the tell"))
 
+        # aphorism: comparative plus an elliptical negation tail, in one sentence
+        for s_ in sents:
+            if APHORISM_CMP.search(s_) and APHORISM_TAIL.search(s_):
+                found.append(Finding(i, "aphorism", s_.strip()[:80],
+                                     "manufactured maxim; state the point or cut it"))
+                break
+
         # staccato: a run of consecutive short sentences, prose only
         run = 0
-        if is_list:
+        if is_list or len(LABELED_STEPS.findall(ln)) >= 2:
             continue
         for s in sents:
             run = run + 1 if len(s) <= SHORT else 0
