@@ -81,7 +81,7 @@ Report, per writer, not only pooled:
 
 ## Preregistration
 
-Write these down before collecting a single verdict, and do not change them after seeing results. This is what separates a study from a story.
+Write these down before collecting a single verdict, and do not change them after seeing results. Without that, the result is anecdote.
 
 - **Estimand.** The average correct-profile lift: the paired discrimination margin (authentic minus flattened, and authentic minus impostor) under the correct profile minus the same margins under the pooled controls (wrong, shuffled, none), across writers.
 - **Analysis unit.** The writer, not the passage. Passages within a writer are correlated, so the writer is the independent unit and the count that drives the result.

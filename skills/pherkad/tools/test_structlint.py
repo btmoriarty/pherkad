@@ -86,6 +86,14 @@ def main():
           "two-beat" not in rules(
               "None of them wrong. None of them ours. <!-- structlint: ignore-line -->\n"))
 
+    # --- tables ---------------------------------------------------------
+    check("a markdown table is not prose",
+          "staccato" not in rules(
+              "| Criterion | Points | What it covers |\n"
+              "|-----------|--------|----------------|\n"
+              "| **Critical analysis** | 3 | Source docs. |\n"
+              "| **Redesign** | 3 | The rebuild. |\n"))
+
     # --- aphorism ----------------------------------------------------------
     # The shape that slipped both checkers on 2026-08-21: a comparative weighed
     # against an elliptical negation, inside a single sentence, so the two-beat

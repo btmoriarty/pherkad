@@ -105,6 +105,11 @@ QUOTED = re.compile(r'"[^"]{60,}"')
 # "Stage 1: ... Stage 2: ..." is an enumeration, not prose rhythm. Two or more
 # labeled steps on a line means the periods are separating items in a list that
 # happens to be written inline.
+# A markdown table row is tabular data, not prose. Its cells are fragments and
+# its delimiter row is punctuation, so paragraph-grouping a rubric turned it
+# into a staccato run. Found 2026-08-21 on the A2 rubric.
+TABLE_ROW = re.compile(r"^\s*\|.*\|\s*$")
+
 LABELED_STEPS = re.compile(
     r"\b(stage|step|round|question|phase|prompt|slide)\s+\d+\s*:", re.I)
 
@@ -183,6 +188,7 @@ def check_text(raw: str) -> list[Finding]:
     for i, ln in enumerate(lines, 1):
         if (i in skip or not ln.strip() or BLOCKQUOTE.match(ln)
                 or HEADER_LINE.match(ln) or FIELD_LINE.match(ln)
+                or TABLE_ROW.match(ln)
                 or CITATION.search(ln) or QUOTED.search(ln)):
             flush()
         else:
