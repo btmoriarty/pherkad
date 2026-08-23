@@ -111,6 +111,16 @@ QUOTED = re.compile(r'"[^"]{60,}"')
 # across the A1-A5 templates.
 BRACKET_PLACEHOLDER = re.compile(r"^\s*\[.*\]\s*$", re.S)
 
+# A heading that opens with a question word is a fragment standing in where a
+# name should be: the heading asks and the section immediately answers, so the
+# question does no work. One or two is fine and often clearest, so this is a
+# RATE check across a document rather than a per-heading rule. Genuine questions
+# ending in "?" are correct usage and excluded. Calibrated 2026-08-23 across
+# fourteen decks: documents that read well sat at 4-16%, flagged ones at 20-25%.
+INTERROGATIVE_HEAD = re.compile(r"^(what|where|why|how|when|which|who)\b", re.I)
+INTERROGATIVE_PCT = 18.0     # percent of headings before it counts
+INTERROGATIVE_MIN = 6        # headings needed before the rate means anything
+
 # A markdown table row is tabular data, not prose. Its cells are fragments and
 # its delimiter row is punctuation, so paragraph-grouping a rubric turned it
 # into a staccato run. Found 2026-08-21 on the A2 rubric.
@@ -255,6 +265,24 @@ def check_text(raw: str) -> list[Finding]:
                 found.append(Finding(i, "staccato", ln.strip()[:80],
                                      f"{run} short sentences in a row; merge them"))
                 break
+
+    # interrogative headings: a document-level rate, not a per-line judgement
+    heads = []
+    for i, ln in enumerate(lines, 1):
+        if i in skip:
+            continue
+        hm = HEADER_LINE.match(ln)
+        if hm:
+            heads.append((i, hm.group(1).strip()))
+    if len(heads) >= INTERROGATIVE_MIN:
+        q = [(i, h) for i, h in heads
+             if INTERROGATIVE_HEAD.match(h) and not h.rstrip().endswith("?")]
+        pct = 100.0 * len(q) / len(heads)
+        if pct > INTERROGATIVE_PCT:
+            found.append(Finding(q[0][0], "interrogative-headers",
+                                 f"{len(q)}/{len(heads)} headings",
+                                 f"{pct:.0f}% of headings open with a question word; "
+                                 f"name the sections instead"))
 
     words = len(re.findall(r"\b\w+\b", "\n".join(lines)))
     if words >= 100:
