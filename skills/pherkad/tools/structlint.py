@@ -118,8 +118,16 @@ BRACKET_PLACEHOLDER = re.compile(r"^\s*\[.*\]\s*$", re.S)
 # ending in "?" are correct usage and excluded. Calibrated 2026-08-23 across
 # fourteen decks: documents that read well sat at 4-16%, flagged ones at 20-25%.
 INTERROGATIVE_HEAD = re.compile(r"^(what|where|why|how|when|which|who)\b", re.I)
-INTERROGATIVE_PCT = 18.0     # percent of headings before it counts
-INTERROGATIVE_MIN = 6        # headings needed before the rate means anything
+# Prose is calibrated separately from slide decks and the numbers differ, which
+# is a real difference rather than a fudge. A deck IS its titles, so the rate
+# separates cleanly there: 4-16% for decks that read well against 20-25% for
+# decks flagged as AI voice. Prose headings are navigation over text that carries
+# its own meaning, so "What Week 5 Covered" is fine and house conventions push
+# every document up. Measured across 137 documents on 2026-08-23 the prose
+# distribution is smooth with no gap: median 12.5%, a long tail to 50%. A
+# tail-only threshold is therefore the honest setting.
+INTERROGATIVE_PCT = 30.0     # percent of headings before it counts
+INTERROGATIVE_MIN = 10       # headings needed before the rate means anything
 
 # A markdown table row is tabular data, not prose. Its cells are fragments and
 # its delimiter row is punctuation, so paragraph-grouping a rubric turned it

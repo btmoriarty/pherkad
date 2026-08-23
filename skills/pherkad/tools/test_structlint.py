@@ -93,15 +93,15 @@ def main():
     # --- interrogative headings -------------------------------------------
     # A rate check, added 2026-08-23. Brian flagged the habit in FA550 slide
     # titles and judged it a universal issue rather than a personal preference.
-    _many_q = "\n\n".join(["# D"] + [f"## What thing {i} does" for i in range(5)]
-                          + [f"## Section {i}" for i in range(3)])
-    _few_q = "\n\n".join(["# D"] + [f"## Section {i}" for i in range(8)]
-                         + ["## What a filter does"])
-    _real_q = "\n\n".join(["# D"] + ["## Which one was yours?"] * 5
-                          + [f"## Section {i}" for i in range(3)])
+    _many_q = "\n\n".join(["# D"] + [f"## What thing {i} does" for i in range(6)]
+                          + [f"## Section {i}" for i in range(6)])
+    _few_q = "\n\n".join(["# D"] + [f"## Section {i}" for i in range(10)]
+                         + ["## What a filter does", "## What Week 5 Covered"])
+    _real_q = "\n\n".join(["# D"] + ["## Which one was yours?"] * 6
+                          + [f"## Section {i}" for i in range(6)])
     check("interrogative headings flagged above the rate",
           "interrogative-headers" in rules(_many_q))
-    check("one interrogative heading is fine",
+    check("house-convention headings are fine",
           "interrogative-headers" not in rules(_few_q))
     check("genuine questions are not interrogative headings",
           "interrogative-headers" not in rules(_real_q))
