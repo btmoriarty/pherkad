@@ -355,6 +355,11 @@ def _soft_to_regex(phrase: str) -> str:
     """Turn a readable soft phrase into a regex. [word] -> one token,
     [verb] -> a gerund (\\w+ing), [det] -> a determiner, [adj] -> an optional
     adjective and its space. Everything else is matched literally."""
+    if phrase.startswith("re:"):
+        # A raw regex, for the rare rule that needs a negative lookahead. The
+        # honest-adjective ban needs one: it covers every noun except the term
+        # of art, and a noun list cannot express "everything but broker".
+        return phrase[3:]
     parts = re.split(r"(\[word\]|\[verb\]|\[det\]|\[adj\])", phrase)
     out = []
     for p in parts:
