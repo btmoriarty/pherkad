@@ -157,7 +157,12 @@
     "the honest move",
     "the honest thing to do",
     "the honest position",
-    "the honest framing"
+    "the honest framing",
+    "worth more to [word] than",
+    "worth less to [word] than",
+    "worth more to me than",
+    "worth more to you than",
+    "worth less to you than"
   ],
   "filler_words": [
     "significant",
