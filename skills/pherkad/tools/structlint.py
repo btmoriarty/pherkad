@@ -70,6 +70,10 @@ HEADER_STANCE = [
     # this fires only in a header, where the construction is doing rhetoric.
     r"^(design|structure|the \w+)\s+that\s+carr(ies|y)\b",
     r"\bcarr(ies|y)\s+(a|the)\s+(decision|argument|weight|meaning|story)\b",
+    # Positioning rather than naming: "Where Stage 3 Sits", "Where this sits".
+    # "lives" and "goes" are out on purpose. They also mean literal placement,
+    # and "Where data lives" over a file path is naming its subject, not posing.
+    r"^where\s+.{0,40}?\s*(sits|fits|stands|belongs)\b",
 ]
 
 CODE_FENCE = re.compile(r"^\s*(```|~~~)")

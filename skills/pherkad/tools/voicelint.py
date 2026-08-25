@@ -345,16 +345,27 @@ def _iter(pattern: str, text: str, flags=re.IGNORECASE):
     return re.finditer(pattern, text, flags)
 
 
+# A determiner slot. The honest-framing family was twelve literals all beginning
+# "the", so "One Honest First Look" walked past it. Same failure the land rule
+# and the comparative-worth rule each had: the ban covered the shapes that were
+# in front of whoever wrote it.
+_DET = r"(?:the|a|an|one|another|my|our|your|their|his|her|its|this|that|some)"
+
 def _soft_to_regex(phrase: str) -> str:
     """Turn a readable soft phrase into a regex. [word] -> one token,
-    [verb] -> a gerund (\\w+ing). Everything else is matched literally."""
-    parts = re.split(r"(\[word\]|\[verb\])", phrase)
+    [verb] -> a gerund (\\w+ing), [det] -> a determiner, [adj] -> an optional
+    adjective and its space. Everything else is matched literally."""
+    parts = re.split(r"(\[word\]|\[verb\]|\[det\]|\[adj\])", phrase)
     out = []
     for p in parts:
         if p == "[word]":
             out.append(r"\w+")
         elif p == "[verb]":
             out.append(r"\w+ing")
+        elif p == "[det]":
+            out.append(_DET)
+        elif p == "[adj]":
+            out.append(r"(?:\w+ )?")
         elif p:
             out.append(re.escape(p))
     return "".join(out)
