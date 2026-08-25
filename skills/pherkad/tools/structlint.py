@@ -74,6 +74,10 @@ HEADER_STANCE = [
     # "lives" and "goes" are out on purpose. They also mean literal placement,
     # and "Where data lives" over a file path is naming its subject, not posing.
     r"^where\s+.{0,40}?\s*(sits|fits|stands|belongs)\b",
+    # A header that poses the definition as a question instead of naming the
+    # thing: "What Counts as Working", "What Makes a Prompt Analytical". The
+    # subject is the definition, so the header can be the term itself.
+    r"^what\s+(counts as|makes|qualifies as)\b",
 ]
 
 CODE_FENCE = re.compile(r"^\s*(```|~~~)")
