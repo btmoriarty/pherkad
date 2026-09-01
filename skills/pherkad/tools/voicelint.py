@@ -132,7 +132,8 @@ _LIST_FIELDS = (
 
 # Boolean fields, type-checked so a stray "false" string (which is truthy in
 # Python) cannot silently enable or disable a rule.
-_BOOL_FIELDS = ("no_dashes", "load_bearing_literal_only", "flag_loaded_quietly")
+_BOOL_FIELDS = ("no_dashes", "load_bearing_literal_only", "flag_loaded_quietly",
+                "no_honest_framing")
 
 # Every recognized top-level key. An unknown non-comment key (a typo like
 # "no_dash") is rejected rather than silently ignored. Keys beginning with "_"
