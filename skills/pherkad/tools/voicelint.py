@@ -449,6 +449,27 @@ def check_counting(text: str, cfg: dict):
             add(m, "warning", "load-bearing-context",
                 "'load-bearing' with a non-structural object; confirm this is literal, not metaphor")
 
+    # THE HONEST X, PROMOTED FROM WARNING TO ERROR AND MOVED UPSTREAM 2026-09-01.
+    #
+    # The soft_phrases list already carries a broad `honest \w+` regex, which fires as a warning.
+    # Brian's standing rule is stronger than that and is stated as absolute: never write "the honest
+    # answer / version / limit / truth / read / case / part / thing". It announces candour instead of
+    # exercising it, it reads as a finding when it is a throat-clear, and it is nearly always
+    # deletable, because the sentence after it is the thing.
+    #
+    # This check existed only in a downstream vendored copy, added there 2026-08-13, so the rule
+    # declared global was enforced in exactly one repository and everywhere else it was a warning.
+    # That is the failure mode a single source of truth exists to prevent, and it was found on
+    # 2026-09-01 when the phrase turned up at warning level in a research protocol.
+    #
+    # Narrow on purpose. The broad regex stays a warning because "honest broker" and "honest enough"
+    # are ordinary; this pattern names the constructions that are always the tic.
+    if cfg.get("no_honest_framing", True):
+        pat = r"\bthe honest (answer|version|limit|truth|read|reading|case|part|thing|note|one)\b"
+        for m in _iter(pat, text):
+            add(m, "error", "honest-framing",
+                "'the honest X' performs candour instead of exercising it; cut it and say the thing")
+
     for phrase in cfg.get("banned_phrases", []):
         for m in _iter_phrase(re.escape(phrase), phrase, text):
             add(m, "error", "banned-phrase", f"canned phrase: '{phrase}'")
