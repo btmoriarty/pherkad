@@ -437,6 +437,18 @@ def check(text: str, cfg: dict) -> list[Finding]:
 
 def check_counting(text: str, cfg: dict):
     """Like :func:`check`, but return ``(findings, suppressed_count)``."""
+    # A FILE THAT DEFINES THE PROHIBITIONS HAS TO BE ABLE TO NAME THEM. Without this,
+    # a rules document reports an error for every phrase it bans, which trains a reader
+    # to ignore the linter on the one file that must stay exact. `voice-rules.md` here has
+    # the same problem a downstream project's voice file had: 15 errors for quoting its own
+    # list. Ported from a downstream vendored copy 2026-09-01, added there 2026-08-10.
+    #
+    # Opt in per file, visible in the source, rather than hardcoded to a path. It is the
+    # bluntest instrument in this file and it is meant to be rare: it silences everything,
+    # so it belongs on rule sets and nothing else.
+    if "<!-- voicelint: rules-file -->" in text:
+        return [], 0
+
     text = normalize_quotes(text)
     at = _linecol_fn(text)
     # Match against a copy with code spans blanked; offsets are preserved, so
