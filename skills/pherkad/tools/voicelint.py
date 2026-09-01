@@ -377,6 +377,33 @@ def _soft_to_regex(phrase: str) -> str:
     return "".join(out)
 
 
+def _allow_phrases(text: str) -> set:
+    """Phrases exempted for a whole file by a declared marker, with the reason in it:
+
+        <!-- voicelint-allow: lean in (literal: leaning into a car window) -->
+
+    THIS COMPLEMENTS ``voicelint: ignore-line`` RATHER THAN DUPLICATING IT, and the two
+    answer different questions. The line directive says *not here*, which is right for a
+    one-off and wrong for a phrase a document uses correctly throughout. This says *not
+    this phrase, in this file, and here is why*, which survives edits that move lines and
+    puts the reason in the diff instead of in tool config.
+
+    Ported from a downstream vendored copy 2026-09-01, where it was added 2026-08-13 and
+    then generalised on an author ruling. Some bans cannot be decided by regex: a
+    character who leans into a car window is doing the physical act, and two proper nouns can
+    genuinely rhyme. Guessing is worse than not checking, so the exemption is
+    declared and visible.
+
+    Scope is the whole file, which is coarse on purpose. A file that uses a phrase
+    literally in one place and figuratively in another should split the entry or rewrite
+    the figurative one.
+    """
+    return {
+        m.group(1).strip().lower()
+        for m in re.finditer(r"<!--\s*voicelint-allow:\s*([^(\-][^(\n]*?)\s*(?:\(|-->)", text)
+    }
+
+
 def _suppression_map(text: str) -> dict:
     """Map a 1-based line number to the rules suppressed there by an inline
     directive. A directive is recognized only inside an HTML comment:
@@ -418,6 +445,7 @@ def check_counting(text: str, cfg: dict):
     # real finding.
     text = mask_code(text)
     suppress = _suppression_map(text)
+    allow = _allow_phrases(text)
     out: list[Finding] = []
 
     def add(m, severity, rule, message):
@@ -526,11 +554,19 @@ def check_counting(text: str, cfg: dict):
     err_starts = {(f.line, f.col) for f in out if f.severity == "error"}
     out = [f for f in out if not (f.rule == "soft-cliche" and (f.line, f.col) in err_starts)]
 
-    if suppress:
+    if suppress or allow:
         kept, dropped = [], 0
         for f in out:
             names = suppress.get(f.line)
             if names and ("*" in names or f.rule in names):
+                dropped += 1
+                continue
+            # A marker declares the PHRASE ("it is worth") while a rule fires on the
+            # realised text ("it is worth nothing"), so equality would never suppress
+            # one. Containment either way, on collapsed whitespace, covers the forms a
+            # rule actually matches.
+            hit = " ".join(f.match.split()).strip().lower()
+            if any(e and (e in hit or hit in e) for e in allow):
                 dropped += 1
                 continue
             kept.append(f)
