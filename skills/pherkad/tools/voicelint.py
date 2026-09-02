@@ -388,10 +388,10 @@ def _allow_phrases(text: str) -> set:
     this phrase, in this file, and here is why*, which survives edits that move lines and
     puts the reason in the diff instead of in tool config.
 
-    Ported from a downstream vendored copy 2026-09-01, where it was added 2026-08-13 and
-    then generalised on an author ruling. Some bans cannot be decided by regex: a
-    character who leans into a car window is doing the physical act, and two proper nouns can
-    genuinely rhyme. Guessing is worse than not checking, so the exemption is
+    Adopted upstream 2026-09-01 from a downstream project that had implemented it
+    locally. Some bans cannot be decided by regex. A phrase banned as a figure of speech
+    still has a literal sense: a person can lean into a car window, and two proper nouns
+    can genuinely rhyme. Guessing is worse than not checking, so the exemption is
     declared and visible.
 
     Scope is the whole file, which is coarse on purpose. A file that uses a phrase
@@ -440,8 +440,8 @@ def check_counting(text: str, cfg: dict):
     # A FILE THAT DEFINES THE PROHIBITIONS HAS TO BE ABLE TO NAME THEM. Without this,
     # a rules document reports an error for every phrase it bans, which trains a reader
     # to ignore the linter on the one file that must stay exact. `voice-rules.md` here has
-    # the same problem a downstream project's voice file had: 15 errors for quoting its own
-    # list. Ported from a downstream vendored copy 2026-09-01, added there 2026-08-10.
+    # the problem in its own right, and so does any downstream rule set: an error for every
+    # phrase it quotes. Adopted upstream 2026-09-01 from a project that had it locally.
     #
     # Opt in per file, visible in the source, rather than hardcoded to a path. It is the
     # bluntest instrument in this file and it is meant to be rare: it silences everything,
@@ -498,10 +498,10 @@ def check_counting(text: str, cfg: dict):
     # exercising it, it reads as a finding when it is a throat-clear, and it is nearly always
     # deletable, because the sentence after it is the thing.
     #
-    # This check existed only in a downstream vendored copy, added there 2026-08-13, so the rule
-    # declared global was enforced in exactly one repository and everywhere else it was a warning.
-    # That is the failure mode a single source of truth exists to prevent, and it was found on
-    # 2026-09-01 when the phrase turned up at warning level in a research protocol.
+    # This check existed only in a downstream vendored copy, so the rule declared global was
+    # enforced in exactly one repository and everywhere else it was a warning. That is the
+    # failure mode a single source of truth exists to prevent, and it was found on 2026-09-01
+    # when the phrase turned up at warning level in a document that should have been gated.
     #
     # Narrow on purpose. The broad regex stays a warning because "honest broker" and "honest enough"
     # are ordinary; this pattern names the constructions that are always the tic.
