@@ -1,0 +1,406 @@
+# voice-rules.md
+
+Canonical hard rules for writing under Brian Moriarty's name. Single source of truth. Every other voice file's ban list is derived from this one; do not maintain a second copy. Merged from the Voice Markers Reference, the anti-slop instructions, the Voice Guide, Voice File v2, VOICE_AND_FIREWALL, project memory, and mined session corrections. Conflicts resolved per the five rulings recorded at the end.
+
+Four buckets: phrase bans, structural tells, mechanical bans, context-specific bans. A single appearance in the right context can be correct; the tell is reflex and repetition. Density rule applies throughout: more than two flagged constructions per 100 words is a warning even when no single hit forces a revision.
+
+---
+
+## Bucket 1: Hard phrase bans
+
+The organizing test, in Brian's words: most of the words he dislikes sound like product marketing. If a word would be at home in a product launch, a sales deck, or a marketing landing page, cut it. That one test catches most of the list below. The list is the worked-out consequence, not a set to memorize. The word itself is rarely the problem; the pitch register is.
+
+Banned as filler, intensifier, or connective tissue. Where a substitution is known, it follows.
+
+### AI filler and inflated vocabulary (the union of every list)
+
+significant, crucial, essential, important, key (as adjective), vital, pivotal, meaningful, robust, holistic, intricate, nuanced, valuable, leverage (as verb; use "use"), utilize, delve / delves / delving, tapestry, showcases, underscores (as verb), navigating (as metaphor), emphasizing, enhance, highlighting, showcasing, aligns with, fostering, landscape (as abstract noun), in the realm of, essentially, fundamentally, ultimately (when hedging, not when sequencing), in many ways, a testament to, speaks to, seamless / seamlessly, unlock (as verb), synergy / synergistic, impactful, journey (for a program or transition), best-in-class, world-class, cutting-edge, transformative, revolutionary, game-changer, paradigm shift, "it's worth noting" / "it is worth noting" / "it's important to note."
+
+**Persistent crutch, scan for it first: "important."** It is banned above, and it is the word Brian reaches for most: the AISHK-endorsement placeholder plus two more times in the same short draft (2026-07-19). Treat it as the first thing to check in any draft, not just one entry in the list. Preferred replacements depend on the sentence: "serious," "worth doing," "worth backing," or cut it and let the specifics carry the weight.
+
+### Hype and boosters
+
+incredibly, truly, really, very, extremely, thrilled to, excited to, passionate about, "real work" / "doing real work."
+
+### Authenticity-signaling words (tell when used to sound human)
+
+genuinely, honestly, truthfully, frankly, candidly, "to be honest," "in all honesty," "I'll be real with you," "I'll be straight with you," "owning it." This includes the mid-sentence filler use, for example "watch its tier rise, honestly"; cut it or restructure.
+
+### Personal bans with substitutions (from your files and mined corrections)
+
+- "genuinely / genuine" → "substantive"
+- "shape" (as filler verb or noun), "co-actor" → name the specific action
+- "sounds like a good fit" / "exactly the right move" → "right up my alley"
+- "Here's the catch" → "The problem is"
+- "quiet" / "going quiet" meaning someone went silent → "dropped off the radar" (this is the noun/silence sense; the adverb "quietly" is handled in Bucket 2)
+- "silently" as an insinuating adverb ("silently upgraded," "silently dropped") → "without notice," or restructure. Same insinuating-adverb family as trailing "quietly" (Bucket 2, RULING C2)
+- "I'll turn it around" → "I'll review and work on it"
+- "Here's the short version" → "Here's the quick version"
+- "a review happened" → "a review occurred"
+- metaphorical "land" / "lands" / "landing" ("would land easier," "work landing in the repo," "didn't land with the team") → "would be easier," "would be preferable," "committed in the repo," "resonate," "make sense to," "sound good"
+- "responsible for" (career writing) → what was built, directed, designed, founded, delivered
+- overused "on paper" and "decreased" → vary; keep only where a template forces it
+- "Good to hear" → "Glad to hear"; prefer "Glad"
+- "a read from the group" → "feedback from the group"
+- "on my end" / "on my end for now" → "on my side" / "on my side at the moment"
+- figurative phrasing → the plain, common word. Prefer plain over figurative throughout
+- "significant improvement" → "marked improvement"
+- "leverage [X]" → "take advantage of [X]"
+- tool value: prefer plain "worth the money" over "earns its keep"
+- "pays for itself" -> state the benefit plainly: what you get back, and roughly when. Do not use the idiom.
+- "worth its weight" (in gold or otherwise) -> say plainly what it is worth, or drop it
+- deployment, turning a system on: "going live in production," not "stood up" or "deployed"
+- abstract emotional framing → the concrete result. "losing my own voice" → "getting results that didn't sound like me" (2026-07-21)
+- vague pointer phrase "the thing that pushed me" / "the thing that [X]" → "what inspired me," or name the cause plainly (2026-07-21)
+- capability-contrast "does the part a regex cannot" → "complements the regex" (see Bucket 2; 2026-07-21)
+- "terrain" (figurative, for someone's area) → "domain of expertise," name the field plainly (2026-08)
+- "react to" → "respond to" (2026-08)
+- internal or deployment slang in reader-facing material, for example "the box" (our server), "spun up," "stood up" → name it plainly ("live," "running now," "the server"), or drop it. Flagged on the platform one-pager (2026-08-21)
+- do not stamp the audience on an artifact, for example a masthead meta line "for the core faculty" → drop it; the audience is who you send it to, not a label on the page (2026-08-21)
+
+### The test
+
+If a sentence needs one of these to work, the sentence is wrong. Rewrite with specific, observational, or operational language.
+
+---
+
+## Bucket 2: Structural tells
+
+### Antithesis family (single instance can be your voice; two or more in a paragraph is the tell)
+
+"not X, but Y"; "not just X, it's Y"; "it doesn't just X, it Y"; "this is not X, it is Y"; "X isn't just Y, it's Z"; "not merely X but Y." Includes negative parallelisms dressed as insight.
+
+### Triplet noun piling (single ok; two or more per paragraph is the tell)
+
+Three abstract nouns coordinated where one or two serve ("clarity, transparency, and accountability"). Also the rule of three in adjectives or short phrases chained for rhythm.
+
+### Copulative avoidance
+
+Use "is" and "are." Do not replace with "serves as," "stands as," "represents," "marks," "features," "boasts," "offers."
+
+### Elegant variation
+
+Do not swap synonyms to avoid repeating a name or term. Second reference to Claude is "Claude," not "the assistant" or "the tool."
+
+### Scene-setting and hedge openers
+
+"In a world where," "In the rapidly evolving landscape of," "As we navigate," "Today, more than ever," "In recent years," "Picture this:," "Imagine [scenario]," "Situated [phrase], the [noun]..."
+
+### Engagement-bait transitions
+
+"But here's the part no one is talking about," "Here's what they don't tell you," "And that's the thing," "Here's the real question," "The truth is," "Let me tell you why," "And here's why that matters," "Plot twist:."
+
+### Paragraph-opener connectives
+
+"Furthermore," "Moreover," "Additionally," "In conclusion," "To summarize," "In summary," "Overall," "Ultimately."
+
+### Portentous transitions and forward pointers (personal)
+
+"Which is where the real question sits," "the one almost no one is asking," "I keep returning to that," "the next thing worth looking at," "the move that starts many of these," "worth about ten minutes," "the thing worth knowing is," "what X looks like" nominalizations.
+
+### The watching construction (personal, kill on sight)
+
+"I have watched," "watched enough of these go in," "one tool go into a place." De-identify and vary instead.
+
+### Interrogative headers (2026-08-23)
+
+A heading that opens **What, Where, Why, How, When, Which or Who** is a question
+fragment standing in where a name should be: "What the prompt decides", "Where
+tonight sits", "What multi-agent costs". The heading asks something and the
+section immediately answers it, so the question does no work; it is a throat-clear
+with a capital letter.
+
+**This is a rate, not a rule.** One or two in a document is often the clearest
+option and a genuine question ("Which one was yours?", ending in a question mark)
+is correct usage. The tell is density: a document where a fifth or more of the
+headings do it has stopped naming its sections and started interviewing itself.
+
+Replace with a noun phrase or an imperative, which is what the heading was for:
+"Six parts of an analytical prompt", "The cost of coordination", "Define success
+first", "Check the seams".
+
+**Decks and prose need different thresholds, and the difference is real.** A deck
+is its titles, so the rate separates cleanly: measured across fourteen on
+2026-08-23, decks that read well sat at 4-16% and ones flagged as AI voice sat at
+20-25%, with a clean gap between. Prose headings are navigation over text that
+carries its own meaning, so "What Week 5 Covered" is fine and document conventions
+lift every file. Across 137 prose documents the distribution is smooth with no
+gap: median 12.5%, tail to 50%.
+
+So `structlint` flags prose only at 30% with ten or more headings, which catches
+the tail without fighting house conventions. Slide decks want a stricter setting;
+FA550 uses a dedicated tool at 18%.
+
+### Cheeseball aphorism
+
+A clipped line whose only job is to sound wise ("Knowing did not move it"). Cut it or fold it into the surrounding prose. This includes the balanced "X is A, Y is B" one-liner ("Your instinct was right, the measuring told us which structure"): the neat parallel is the tell. Flag it even as a single instance, unlike the antithesis family which needs two or more.
+
+**The move outlives any phrase that carries it (2026-08-21).** Brian's observation:
+as figurative "load-bearing" left the output, "is worth more than" arrived to do the
+same job. Current vehicles are the comparative-worth family, "X is worth more than
+Y," "is what separates X from Y," "counts for more than." Expect the list to be
+incomplete, because banning a token relocates the habit instead of removing it. The
+reliable check is functional rather than lexical: if a closing sentence asserts the
+relative worth of two abstractions, and the paragraph stands without it, cut it. The
+reflex to give a paragraph a final beat is the thing to refuse; the phrasing is only
+where it happens to land this month.
+
+### Invented specificity for cadence (personal, 2026-07-21)
+
+An incidental precise detail supplied for rhythm or verisimilitude when it is not true or not known: a time-beat ("a day later"), a round count ("271 em dashes"). Distinct from the telling-wrong-detail archetype in Voice_Profile.md, which is powerful precisely because it is real. If the detail did not happen or is not known, cut it and understate. Reinforces the Factual-accuracy guard.
+
+### Capability-contrast construction (personal, 2026-07-21)
+
+The tidy "X does the part Y cannot," "does what Y can't," "the part a regex cannot reach." A capability antithesis dressed as insight. Replace with a plain verb: "complements," "works with," "adds what Y misses." Related to the antithesis family above.
+
+### Present-participle significance tails
+
+"...contributing to the broader history of," "...reflecting the enduring spirit of," "...highlighting its role as."
+
+### Significance inflation
+
+Do not describe routine facts as pivotal moments or turning points.
+
+### Outline-style and summary closers
+
+"Despite its challenges, X continues to thrive," "The future of X lies in," a "Challenges and Future Directions" section not called for by the source, summary paragraphs that restate the introduction, "In conclusion," "To summarize."
+
+### Counter-X constructions
+
+"counter-" prefixed to an abstract noun where a plain word serves; "counter-intuitive" (hyphenated form); "a [noun] of [hyphenated abstract]."
+
+### Hedge-stacking and balanced-nothing sentences
+
+Piling "may," "potentially," "somewhat" into one sentence. "While X is important, Y is equally critical."
+
+### Compound-hyphen abstractions
+
+"better-serving-the-question." Expand into a clause.
+
+### Harsh rhetorical dismissals
+
+"useless," "dumb," flat "bad" with no specifics. Critique by naming the specific failure.
+
+### Reflexive praise
+
+No hollow compliment openers ("Good work getting X already"). Convert praise into a curiosity question, or cut it.
+
+### Register drop (personal)
+
+A slang or throwaway beat that undercuts an otherwise controlled piece ("the raise that feels kinda meh"). In a measured op-ed, paper, or brief, cut the slang or lift it to the register around it. Casual chat and email are exempt; this is about tonal consistency within a controlled surface.
+
+### Slide closers (2026-08-06)
+
+On a slide, a trailing italic one-liner under the bullets is usually a cheeseball closer that exists only to sound wise; cut it. A plain directive or instruction as a closer is fine ("build carefully," "run it on Mentimeter"). The tell is the wise-sounding aphorism, not the closing position. Related to Cheeseball aphorism above.
+
+### Empty-emphasis frame (2026-08-06)
+
+The frame that promises weight and never delivers a verb: "the one(s) that ...," "is the thing that ...," "are the ones that ...." Use the direct verb. "The measuring told us which structure," not "measuring is the thing that told us." Judgment rule; the linter over-fires on the bare strings.
+
+### Dramatic stance headers (2026-08-06)
+
+A header that strikes a pose instead of naming its subject: "The one thing that sinks it," "Why this matters," "The part everyone misses." Headers name the subject plainly: "Failure modes," "The masthead," "What the footnote is for." Same product-launch tell as body hype, in title case.
+
+### Comma-series fragment as a sentence (2026-08-06)
+
+A comma series standing in for a sentence: "A claim, the experiment, and a baseline." It reads like a slide header and detaches the list from any action. Write a clause: "Each entry pairs a claim with the experiment that tests it and a baseline to beat." Same family as First person and active over telegraphic fragments in voice-authoring.md.
+
+### Compressed pronoun antithesis (2026-08)
+
+The punchy "X; it didn't Y" with a semicolon and a bare pronoun reads as manufactured cadence: "AI distorts it; it didn't invent it." Spell out the noun and join with "but": "AI distorts it, but it didn't invent the surrender scenario." Same family as the antithesis family above and the specific-noun move in voice-authoring.md.
+
+### Staccato runs (RULING C1)
+
+A single emphatic short sentence after a longer one is correct and is your voice. A run of consecutive short sentences is the tell; merge them. Be selective: reserve the short sentence for emphasis only.
+
+### Trailing "quietly" (RULING C2, positional)
+
+Flag "quietly" only when it ends a clause or sentence, the insinuating position that implies concealed intent ("shut it down quietly," "the numbers moved quietly"). Pre-modifier stance is your voice and is not flagged ("quietly skeptical," "quietly noticing"). This is the rule shipped in Pherkad; it supersedes the older outright ban.
+
+### Crutch overuse, density-weighted
+
+"exactly," "actually," "precisely." Keep the one load-bearing use; cut the rest and count them toward density.
+
+### Absolutes
+
+Avoid "no" and "never" as blanket claims. Prefer "rarely," "seldom," "almost never," "few." Hedge structurally, not defensively.
+
+---
+
+## Bucket 3: Mechanical bans
+
+### Dashes
+
+No em dashes anywhere; this is the single most reinforced rule and is enforced by a grep sweep before delivery. Use commas, semicolons, colons, or restructure. En dashes are acceptable only in numeric and date ranges. Compound hyphens ("AI-assisted," "high-risk") are fine.
+
+### Capitalization after a colon
+
+Capitalize the first letter of the first word after a colon, in slide text, field labels, and headings. "Clarity: Understandable in seconds," not "clarity: understandable." Applies to a value after a label ("AMR mark: Accept") and to a clause after a colon ("How we'll work: The AI-forward thesis"). Confirmed on the 2026-08-06 Week 1 deck edits.
+
+### Colon stack-ups
+
+Do not stack colon constructions during bulk edits; rewrite the worst readability spots.
+
+### Parentheticals for prior context
+
+Do not carry prior context in inline parentheticals; surface it directly. When a file is referenced in a working or terminal context, give the full path, not a parenthetical. In finished prose, refer to files by name only.
+
+### Type and format
+
+No Arial anywhere; use a system sans-serif or a Google Font.
+
+### Density
+
+More than two flagged constructions per 100 words raises a warning even when no single hit would.
+
+---
+
+## Bucket 4: Context-specific bans
+
+### First person, by surface (RULING C3)
+
+| Surface | First person |
+|---------|--------------|
+| Research papers | Royal "we"; no first-person singular, including the introduction |
+| Blog posts | First person allowed |
+| Op-eds | First person allowed |
+| Email | First person, warm and direct |
+
+### Email register
+
+More friendly and colloquial, less email-formal. Contractions, casual openers. After any back-and-forth, make it exceptionally short. Standing live note: shorten.
+
+Salutation punctuation is loose: "Hi Bernard." with a period, "Hi Pavel" with nothing, and "Hi [Name]," with a comma all occur. Do not enforce one; leave it as written. Sign-off is "Best, Brian" for faculty and external contacts; the terse "-Brian" is the internal or casual form. Cut routine logistical gratitude: do not thank someone for a routine step, go straight to the forward-looking line.
+
+Moves from the 2026-07-20 faculty-reply batch (his edits on four near-identical drafts):
+
+- Keep the concrete tech noun. "UI and backend," not a smoothed generic like "the platform"; he reverts that generalization every time.
+- Defuse dangling paperwork with a warm, plain reassurance ("don't worry it's not too much," "nothing too formal") rather than leaving "release form" or "the survey" hanging as an abstract object, which reads as ominous. Name what it is, lightly, or defer it as "what's involved."
+- Tailor the closer to the person: "Glad you're able to assist" for someone who offered to assist, not a generic "Glad you're in."
+
+Moves from the 2026-08 Ho-Dac intro-request rewrite (writing to a known or senior contact):
+
+- Acknowledge what the recipient already shares with him; do not explain as if cold. When the reader has prior involvement, name it: "As you know since you helped me conceptualize it, my planned brief argues ...," and "As I think I shared, my thinking behind the brief didn't start with AI," not a cold "My brief argues for ...."
+- Hedge claims about other people's expertise, and admit his own uncertainty plainly: "From my brief read, that's Marion's domain of expertise," not "That's Ho-Dac's terrain"; "Two things she'd help me with, given that I am a little uncertain in these areas," not a flat "Two things she'd help me with."
+- First name for a mutual contact. Writing to someone who knows the person, use the first name ("Marion"), not the surname ("Ho-Dac").
+- Courteous register in an ask to a senior or external contact: "which is part of why I would appreciate the introduction," not "which is part of why I want the intro."
+- Do not let a set of similar emails share one skeleton (apology, then process line, then a warm button). Parallel structure across recipients reads as canned even when the words differ; vary shape and length per message.
+- Prefer concrete active phrasing over vague coverage: "before we put them to use," not "before anything goes further with them."
+
+Moves from the 2026-08-01 team security-update email (his edits on the draft):
+
+- Group greeting: open with "Hi everyone" or "Hi all," never "Hi team" (he dislikes it). Single named recipient still takes "Hi [Name]".
+- First person for what he did; "we" only for the shared ask. "I ran two passes," "I found seven issues," "I set up" for his own work; "we should set up," "we should confirm," "we should hold" for the collective, forward-looking asks. Do not fold his solo work into a collective "we."
+- Link issues and pull requests as markdown links (`[#86](url)`), not bare "#86."
+
+### Practitioner versus academic register (novelty firewall)
+
+Papers may use the full research vocabulary. Practitioner surfaces (Substack, SREcon, GitHub Universe, LinkedIn) stay at the symptom and observation level. Reserved vocabulary never appears on practitioner surfaces. Details live in the private firewall file, not here.
+
+### Policy and lay-jury audiences
+
+Flatten jargon into plain, connectable language. "Is the scaling case something people can connect to," not "is the scaling case tight enough for the jury."
+
+### Documents meant to be read (agendas, briefs)
+
+Much shorter, scannable in under a minute. Lead with the recommendation. Answer the question actually asked. Translate jargon or skip it. Lead with the institution name, not an internal acronym.
+
+### Student communications
+
+Plain, direct, warm but not promotional. Stepwise for procedures. Assume limited command-line familiarity.
+
+### Career writing (resume, cover letter, LinkedIn)
+
+No "responsible for"; open bullets with a strong specific verb (built, directed, founded, designed, converted, delivered). Precise numbers when known, honestly approximate ("roughly 300") when not; never fake precision. No hype. Program over "project" for multi-year or cross-team work.
+
+### Factual-accuracy guard
+
+Do not credit Brian with coining terms he only researches. Do not fabricate plausible-but-false specifics; say "no course moves this" rather than invent a study target. This includes numbers and time-beats supplied for effect ("271," "a day later") in casual prose, not only formal claims: understate rather than embellish (see Bucket 2, invented specificity).
+
+---
+
+## Caveats (what NOT to flag)
+
+- Technical-literal uses of a banned word (key as API key, load-bearing in structural engineering, delve in archaeology, navigating as actual navigation).
+- "holistic" is banned as marketing filler ("a holistic approach") but allowed for a genuine whole-system property. This is the general meaning-versus-decoration condition that governs the erudite register in voice-authoring.md.
+- Direct quotes from sources using a banned phrase.
+- Single instances of antithesis, triplet, or hedge constructions. Density is the tell.
+- Informal registers (chat, casual email) where a relaxed voice is appropriate.
+- Documents that teach this list, including this file, the profile, and any text that names the patterns. Flag only the prose proper.
+- The "quiet / quietly" material inside prior published titles ("When Governance Works Quietly") or inside quotes of prior work.
+- "quite" is an accepted softener / downtoner in his register ("quite welcome"), not a banned booster like "very" or "really." Confirmed on the 2026-07-20 Bernard reply.
+
+---
+
+## Rulings applied (2026-07-17)
+
+- **C1 staccato:** lone emphatic short sentence after a longer one is fine; runs are banned. Use short sentences selectively, for emphasis only.
+- **C2 quietly:** positional. Trailing "quietly" flagged; pre-modifier stance kept. Supersedes the outright ban.
+- **C3 first person:** per-surface table above.
+- **C4 banned vocabulary:** the union of all prior lists, merged here.
+- **C5 clean prose:** this file avoids using its own banned words in its framing.
+
+## Open minor notes
+
+- **En dash:** the Voice Guide permits en dashes in numeric and date ranges, while VOICE_AND_FIREWALL bans en dashes anywhere. This file follows the Voice Guide (en dash allowed in ranges only). Flag if you want it stricter.
+- **Sign-off (resolved 2026-07-20):** context-dependent, confirmed on the faculty-reply batch. "Best, Brian" for faculty and external contacts; "-Brian" for internal or casual. No longer open.
+- **Salutation punctuation (resolved 2026-07-20):** loose, not fixed. Period, comma, or none all occur across his own sends. Leave as written rather than normalizing to a comma.
+- **"stood up" retired:** the Voice Guide said "deployed, not stood up" and Voice File v2 said "stood up." Your quiz answer settles it: "going live in production." Both older forms are demoted.
+- **sequence versus prioritize (resolved):** "prioritize" is the primary word; "sequence" stays in rotation occasionally, roughly 10 to 25 percent of the time. A weighted preference, not a ban.
+- **"reveal" (resolved):** allowed in your prose, despite the older avoid-list entry.
+
+## Mined corrections (2026-08-06)
+
+Three phrasings Brian flagged as problematic in a draft reply, to catch and avoid. They read as constructed or momentum language rather than his plain register.
+
+- "if it proves worth pushing" (and "worth pushing" as momentum framing) -> name the condition plainly: "if we take it further," "if it's worth continuing."
+- "the part to take" ("the design and the numbers are the part to take") -> plain: "the design and the numbers are yours to build on," or "take the design and the numbers."
+- the clipped credit-plus-parallel close, e.g. "Your instinct to structure the target first was right. The measuring told us which structure." -> keep the credit, drop the neat parallel second beat; state the point plainly and do not end on the wise-sounding clip. Same family as the cheeseball-aphorism tell in Bucket 2.
+- "give it a spin" (and "take it for a spin") -> not his; the specific "spin" idiom is the tell, not casual invitations in general. He would say "give it a go" or "give it a test run," which are his. Casual invitations are fine; the "spin" phrasing is the one to avoid.
+
+## Mined corrections (2026-08-09, Week 2 deck)
+
+Mined from Brian's hand edits on the Week 2 FA550 deck.
+
+- Acronym on first use (student communications): Spell an acronym out the first time, then use the short form. "AMR (Accept/Modify/Reject)" on first mention, "AMR" after. Applies to student-facing slides and handouts; do not assume the cohort knows the expansion.
+- "top of the night" / "top of the [event]" (figurative time reference) -> name the literal moment: "beginning of lecture," "earlier tonight." A specific instance of the figurative-phrasing ban in Bucket 1.
+- Slide closers, reconfirmed: Brian cut a trailing "Random call is on. Pass-once-per-term applies." and trimmed a "goal is conversation, not gotcha" gloss. Confirms the Slide closers rule (Bucket 2): a closer that only restates or postures gets cut; a plain instruction can stay.
+- "shape" ban, reconfirmed: "assignment shape" -> "assignment approach." The filler-noun use is the target; he left "same shape for everyone" (identical structure) in place, so keep the ban to the filler use, not to structural "shape."
+- Word preferences observed (low weight, not bans): "hand-waving" -> "abdicating"; "where it fits" -> "where it belongs"; figurative "lives here" -> "exists here" (he keeps "authority lives" elsewhere, so this one is not firm).
+
+## Mined corrections (2026-08-14, Steve update email and deck)
+
+Phrasings Brian replaced in a Steve-facing email and deck. Apply the right side. He does not want the left side either in his voice or as on-screen statements from Claude to him.
+
+- "one honest note" (and framing something as an "honest note") -> "one observation". The "honest" framing is authenticity-signaling (Bucket 1); state the observation.
+- Headers that pose a definition rather than name it: `What Counts as Working`, `What Makes a Prompt Analytical`. The subject **is** the definition, so the header can be the term. Enforced in `structlint` alongside `Where X sits`.
+
+- The whole `[det] honest [adj]NOUN` family, not the twelve `the honest X` literals it used to be. `One Honest First Look` shipped into a course document on 2026-08-25 because the ban began with "the". The nouns are the ones that name the utterance (answer, version, truth, read, take, look, note, framing, thing, part, case, move, position, limit, summary), not the ones that name a real object. `honest broker`, `honest axis`, `honest accounting` and `honest assessment` are subject matter and do not fire.
+- "where things landed" -> "where I was able to complete". Avoid the vague momentum idiom; say what was completed.
+- "plainly" as a candor tag ("reports it plainly," "state plainly") -> lead with "Here is the reality," or just state it. Do not lean on "plainly" to carry candor. (Distinct from the positive "name it plainly" in voice-authoring; the tell is "plainly" as filler.)
+- "reusable surface" (for the thing being built) -> "reusable instrument".
+- "adding a course is one script" / overstating automation -> "one mostly automated script". Do not claim full automation.
+- "connections worth a look" / "worth exploring" -> "connections worth reviewing".
+- "I would pose these as" -> "I would suggest these as".
+- Strike self-justifying trailing clauses such as "but that is the kind of thing X is for." Cut the justification and let the point stand.
+
+## Mined corrections (2026-08-20, FA550 terminology pass)
+
+- **"shape" as a filler noun, reconfirmed a second time.** Brian's edit of "in the shape it takes here" to "in the form it takes here" confirms the Bucket 1 ban is right and that the target is the filler use. Structural "shape" (identical structure, the shape of a deliverable) stays allowed, as ruled 2026-08-09.
+- **Acronym on first use, scoped.** The rule covers a term the audience is meeting for the first time. It does not cover established vocabulary for the venue, course, or body of work. AMR in FA550 set the scope: The practice carried over from the prior term and the acronym is used bare, never re-expanded, in any deck, spec or handout. Check whether a term is actually new before spelling it out, and check the whole body of work rather than the earliest document you happen to have read.
+
+## Naming: Stevens Institute of Technology (2026-08-15)
+
+- Spell out "Stevens Institute of Technology" in full on first mention in a given output; the short form "Stevens" is fine on later mentions in the same message. The colloquial short form alone wrongly assumes the reader knows the institution. Same shape as the acronym-on-first-use rule. Applies to every output shown to Brian, not only sent prose.
+
+## Mined correction (2026-09-01, Heron Gate 05 hazard doc)
+
+### Anthropomorphized abstractions (kill on sight)
+
+Do not give a non-agent wants, needs, desires, or intent. A check, a document, a schema, a metric, a
+system, or a concept like "reproducibility" does not "want everything recorded," "need," "ask for,"
+"care about," or "be hungry for" anything. Name the real actor, or state the requirement plainly:
+"a replayable run has to have everything on the record," not "reproducibility wants everything
+recorded." Brian flagged this as nonsense writing. Conventional storage/containment verbs (a package
+"keeps" a record, a doc "has" a section) are fine; the tell is desire or intent attributed to an
+abstraction.
