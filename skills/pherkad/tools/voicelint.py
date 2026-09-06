@@ -531,11 +531,18 @@ def check_counting(text: str, cfg: dict):
         for m in _iter(rf"\b{re.escape(word)}\b", text):
             add(m, "warning", "filler", f"filler/intensifier: '{word}'")
 
+    # Watch-word overuse scales with length, like dash_density_cap above. The configured cap applies
+    # at a baseline piece length; longer texts (a long entry, an assembled work) get proportional
+    # headroom, floored at the cap so short pieces stay strict. Without this, a word used three times
+    # across a multi-scene whole trips a cap meant for a single vignette.
+    _ww_words = len(re.findall(r"\w+", text))
+    _WW_BASELEN = 600
     for word, limit in cfg.get("watch_words", {}).items():
         hits = list(_iter(rf"\b{re.escape(word)}\b", text))
-        if len(hits) > int(limit):
-            add(hits[int(limit)], "warning", "overuse",
-                f"'{word}' used {len(hits)} times (soft cap {limit}); vary it")
+        cap = max(int(limit), round(int(limit) * _ww_words / _WW_BASELEN))
+        if len(hits) > cap:
+            add(hits[cap], "warning", "overuse",
+                f"'{word}' used {len(hits)} times (cap {cap} for {_ww_words} words); vary it")
 
     domains = [d.lower().strip(".") for d in cfg.get("aggregator_domains", []) if d.strip(".")]
     if domains:
