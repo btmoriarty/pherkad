@@ -75,6 +75,9 @@
   ],
   "_soft_comment": "Warnings, not errors: phrasings that are hard to ban outright but show up far too often in AI-assisted text. [word] matches one token; [verb] matches a gerund. A soft hit that lands on a stronger banned phrase is dropped as redundant. Extended 2026-08-20: the metaphorical-land heuristic (previously queued in voicelint-land-heuristic.json) and the phrase-shaped half of the structural families named in voice-authoring.md under 'The linter is the last check'. The other half (two-beat parallel, staccato run, header stance) are not expressible as phrases and live in structlint.py. Extended again 2026-08-20 after Brian's Week 9 review: the land patterns were rescoped (the queued heuristic caught 5 of 71 real uses), and the forward-pointer and named-nominalization families were added.",
   "soft_phrases": [
+    "re:\\bno way to (?:say|tell|know)\\b",
+    "re:\\bnever (?:said|told \\w+|says) which\\b",
+    "re:\\bcould not say (?:which|whose|why|how|whether)\\b",
     "it's worth [verb]",
     "it is worth [verb]",
     "i want to be plain",
