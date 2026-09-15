@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.5.3 (2026-09-15)
+
+Item 1 of `docs/ROADMAP.md`: stable rule ids, as additive metadata. The string lists and the `add_`/`remove_` contract are unchanged, so a vendored copy and its overlay keep working as they were.
+
+- **Every rule has an id.** A string entry derives one from its pattern (`banned.game-changer`, `soft.worth-more-to-word-than`; a regex gets `soft.re-<8 hex>`); two strings that slug alike (`gut-check`, `gut check`) stay distinct. The fixed rules are `dash`, `dash-density`, `load-bearing-context`, `honest-framing`, `loaded-adverb`, `overuse.<word>`, and `source.<domain>`.
+- **An entry may be an object** `{"id", "pattern", "rationale", "since", "fires", "clean"}`. The five shipped regex rules are now objects with ids (`soft.mystery-tail-no-way`, `soft.mystery-tail-never-said`, `soft.mystery-tail-could-not-say`, `soft.abstract-landscape`, `soft.authenticity-tag`), a rationale, and examples. The test suite runs every `fires` and `clean` example, so a rule with examples is a tested rule. A duplicate explicit id, an unknown key, or a missing pattern is a config error.
+- **Findings carry `rule_id`**, in the JSON and in the text line (`soft-cliche (soft.abstract-landscape)`). A soft finding's message shows the rule's rationale when it has one, instead of the raw regex.
+- **`remove_<field>` accepts an id**, so an overlay drops a shipped regex without pasting it. `add_<field>` skips an entry whose id or pattern is already present. An inline `ignore-line` can name an id as well as a family.
+- **`--list-rules`** prints every rule the effective config runs (id, family, severity, pattern, rationale), or the same as JSON with `--json`.
+- A read directive comment is blanked before matching, so `ignore-line banned.game-changer` no longer lints its own words.
+- The saga corpus reports 6 errors and 293 warnings against 0.5.2's 294, with 4 suppressed against 9: the five findings that used to fire on directive comments and then be suppressed are gone, and so is one that fired inside an allow-comment's own text and was never suppressed.
+- `VERSION` 0.5.3.
+
 ## v0.5.2 (2026-09-15)
 
 The second half of the Codex review: the rule-level bugs, then a calibration of the shipped set against a 200-file downstream corpus. Everything in the calibration was counted before it was kept.
