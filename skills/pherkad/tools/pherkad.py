@@ -50,7 +50,8 @@ fails when a file beside the script no longer matches, which is how a vendored
 copy proves it is what it says it is. ``check-overlay`` loads a downstream
 overlay on this base and reports what would silently do nothing: a
 ``remove_<field>`` naming a rule that is not here, an ``add_<field>`` that
-duplicates a shipped rule, a structure key the base does not know.
+duplicates a shipped rule, a structure key the base does not know; and it
+runs every ``fires``/``clean`` example the overlay's rule objects carry.
 
 Finding schema (every engine, every format): line, col, severity, rule,
 match, message, rule_id, engine. ``engine`` is voice, structure, or combined
@@ -384,7 +385,7 @@ MANIFEST_SCHEMA = 1
 # The five a gate needs are required wherever the bundle is vendored; the rest
 # are listed so their hashes travel, but a vendored copy may leave them out.
 REQUIRED_FILES = ("pherkad.py", "voicelint.py", "structlint.py", "mdmask.py", "voice_config.json")
-BUNDLE_FILES = REQUIRED_FILES + ("replycheck.py", "replycheck-hook.py", "corpusscan.py")
+BUNDLE_FILES = REQUIRED_FILES + ("replycheck.py", "replycheck-hook.py", "corpusscan.py", "corrections.py")
 
 
 def _file_sha(path: str) -> str:
@@ -497,6 +498,25 @@ def check_overlay(overlay_path: str) -> tuple[list[str], list[str]]:
     for k in (ov.get("structure") or {}):
         if not k.startswith("_") and k not in voicelint._STRUCTURE_KEYS:
             errors.append(f"structure.{k}: not a threshold this base knows")
+    # The overlay's own fixtures: every rule object with examples is a tested
+    # rule, and a promoted correction's tests live here.
+    cfg = voicelint.load_config(overlay_path)
+    for field in voicelint._LIST_FIELDS:
+        for item in ov.get("add_" + field, []) + ov.get(field, []):
+            if not isinstance(item, dict):
+                continue
+            e = voicelint._norm_entry(field, item)
+            # Each rule is tested alone: under the full set a shipped rule can win
+            # the same span on a tie and hide a fixture that does fire.
+            solo = json.loads(json.dumps(cfg))
+            for f_ in voicelint._LIST_FIELDS:
+                solo[f_] = [x for x in cfg.get(f_, []) if voicelint._norm_entry(f_, x)["id"] == e["id"]]
+            for text in e.get("fires", []):
+                if e["id"] not in {f.rule_id for f in voicelint.check(text, solo)}:
+                    errors.append(f"{e['id']}: fires example does not fire: {text!r}")
+            for text in e.get("clean", []):
+                if e["id"] in {f.rule_id for f in voicelint.check(text, solo)}:
+                    errors.append(f"{e['id']}: clean example fires: {text!r}")
     return errors, warnings
 
 

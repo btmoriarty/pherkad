@@ -1,6 +1,6 @@
 {
   "tool": "pherkad",
-  "version": "0.5.11",
+  "version": "0.5.12",
   "schema": 1,
   "generated": "2026-09-15",
   "required": [
@@ -11,7 +11,7 @@
     "voice_config.json"
   ],
   "files": {
-    "pherkad.py": "aa9d60d39f0307c7af85d9b1d6a16d7f8b9ab5f46727fad18d5d8ff63d3c221b",
+    "pherkad.py": "e3d31d0f7bfadae75349e74008cb2e2801ecd8932aec47ddb1eface5ad3550bf",
     "voicelint.py": "ab3447b5faee3999be803e19b71c1172b0282676f6d2292c7a621c278708d2ee",
     "structlint.py": "f9d1e3a21aed7a0a3864640082335d0f5892a17810b58fc53f588210c98d38e3",
     "mdmask.py": "a6bc483a2bccc0559d8bbfd408c471b14d45b345fc47aad91ca9cdec250bfe41",
@@ -19,6 +19,7 @@
     "replycheck.py": "11264a4163b2efff9ef82ef4cfb9201e97067f87ebf13da5db77513c75761901",
     "replycheck-hook.py": "74af116bb1a487db85633ba78b7067ec9f79446afcaf074d1f89cb65a4b99c45",
     "corpusscan.py": "67b22e05a8fbe4fd3a65c238b4e178bb365ec6415174c340a151f41d7633f74d",
+    "corrections.py": "a3ed804826a3f9a0901e65182ecff958fe4c31f982066f40d7841d5810aee6a0",
     "surfaces/assistant-chat.json": "dce206008075451c335c5ab696cc7195035221cd4492af6056fa397de149778b"
   },
   "rule_ids": [

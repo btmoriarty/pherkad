@@ -46,6 +46,9 @@ jobs:
       - name: Run the corpusscan tests
         run: python3 skills/pherkad/tools/test_corpusscan.py
 
+      - name: Run the correction-ledger tests
+        run: python3 skills/pherkad/tools/test_corrections.py
+
       - name: Run the eval scorer tests
         run: python3 eval/test_study.py
 
