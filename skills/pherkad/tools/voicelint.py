@@ -332,7 +332,8 @@ def _soft_to_regex(phrase: str) -> str:
         if p == "[word]":
             out.append(r"\w+")
         elif p == "[verb]":
-            out.append(r"\w+ing")
+            # A gerund, not any word ending in -ing: "worth nothing" is not "worth [verb]".
+            out.append(r"(?!(?:nothing|something|anything|everything|things?|during|morning|evening)\b)\w+ing")
         elif p == "[det]":
             out.append(_DET)
         elif p == "[adj]":
@@ -367,6 +368,11 @@ def _allow_phrases(text: str) -> set:
         m.group(1).strip().lower()
         for m in re.finditer(r"<!--\s*voicelint-allow:\s*([^(\-][^(\n]*?)\s*(?:\(|-->)", text)
     }
+
+
+def _phrase_within(needle: str, hay: str) -> bool:
+    """True if ``needle`` occurs in ``hay`` as whole words."""
+    return re.search(r"(?<!\w)" + re.escape(needle) + r"(?!\w)", hay) is not None
 
 
 def _suppression_map(text: str) -> dict:
@@ -429,11 +435,18 @@ def check_counting(text: str, cfg: dict):
     allow = _allow_phrases(text)
     out: list[Finding] = []
 
+    spans: list[tuple[int, int]] = []  # parallel to out: character offsets of each match
+
     def add(m, severity, rule, message):
         line, col = at(m.start())
         out.append(Finding(line, col, severity, rule, m.group(0).strip(), message))
+        spans.append((m.start(), m.end()))
 
-    dash_hits = list(_iter(r"[—–―]", text, flags=0))  # em / en / horizontal bar
+    # em / en / horizontal bar. An en dash between digits is a range (pages 10–12,
+    # 1914–18), which the prose rules allow, so it is not a hit.
+    dash_hits = [m for m in _iter(r"[—–―]", text, flags=0)
+                 if not (m.group(0) == "–" and m.start() > 0 and text[m.start() - 1].isdigit()
+                         and m.end() < len(text) and text[m.end()].isdigit())]
     if cfg.get("no_dashes", True):
         for m in dash_hits:
             add(m, "error", "dash", "em/en dash; use a comma, colon, or full stop")
@@ -461,21 +474,22 @@ def check_counting(text: str, cfg: dict):
 
     # THE HONEST X, PROMOTED FROM WARNING TO ERROR AND MOVED UPSTREAM 2026-09-01.
     #
-    # The soft_phrases list already carries a broad `honest \w+` regex, which fires as a warning.
-    # Brian's standing rule is stronger than that and is stated as absolute: never write "the honest
-    # answer / version / limit / truth / read / case / part / thing". It announces candour instead of
-    # exercising it, it reads as a finding when it is a throat-clear, and it is nearly always
-    # deletable, because the sentence after it is the thing.
+    # Brian's standing rule is absolute: never write "the honest answer / version / limit / truth /
+    # read / case / part / thing". It announces candour instead of exercising it, it reads as a
+    # finding when it is a throat-clear, and it is nearly always deletable, because the sentence
+    # after it is the thing.
     #
-    # This check existed only in a downstream vendored copy, so the rule declared global was
-    # enforced in exactly one repository and everywhere else it was a warning. That is the
-    # failure mode a single source of truth exists to prevent, and it was found on 2026-09-01
-    # when the phrase turned up at warning level in a document that should have been gated.
-    #
-    # Narrow on purpose. The broad regex stays a warning because "honest broker" and "honest enough"
-    # are ordinary; this pattern names the constructions that are always the tic.
+    # Widened 2026-09-15 to the family voice-rules.md actually states: any determiner, an optional
+    # adjective, and a noun that names the utterance (answer, take, look, note, framing...). It had
+    # been twelve literals beginning "the", so "One Honest First Look" walked past it and, in a
+    # downstream corpus, "the honest obstacle is that" only warned. The nouns that name a real
+    # object (broker, axis, accounting, assessment) are subject matter and do not fire; the copular
+    # form "[det] honest NOUN is that" fires whatever the noun, because the shape is the tic.
     if cfg.get("no_honest_framing", True):
-        pat = r"\bthe honest (answer|version|limit|truth|read|reading|case|part|thing|note|one)\b"
+        nouns = (r"(?:answer|answers|version|limit|limits|truth|read|reading|take|look|note|notes|"
+                 r"framing|thing|part|case|move|position|summary|one|assessment\s+is\s+that)")
+        pat = (rf"\b{_DET}\s+honest\s+(?:\w+\s+)?{nouns}\b"
+               rf"|\b{_DET}\s+honest\s+(?:\w+\s+)?\w+\s+is\s+(?:that|this)\b")
         for m in _iter(pat, text):
             add(m, "error", "honest-framing",
                 "'the honest X' performs candour instead of exercising it; cut it and say the thing")
@@ -536,11 +550,7 @@ def check_counting(text: str, cfg: dict):
                     add(m, "error", "source", f"low-trust/aggregator source: {domain}")
                     break
 
-    out.sort(key=lambda f: (f.line, f.col))
-    # A soft-cliche that lands exactly where a stronger error already fired
-    # (e.g. "it's worth noting that") is redundant; keep the error only.
-    err_starts = {(f.line, f.col) for f in out if f.severity == "error"}
-    out = [f for f in out if not (f.rule == "soft-cliche" and (f.line, f.col) in err_starts)]
+    out = _collapse_overlaps(out, spans)
 
     if suppress or allow:
         kept, dropped = [], 0
@@ -551,15 +561,49 @@ def check_counting(text: str, cfg: dict):
                 continue
             # A marker declares the PHRASE ("it is worth") while a rule fires on the
             # realised text ("it is worth nothing"), so equality would never suppress
-            # one. Containment either way, on collapsed whitespace, covers the forms a
-            # rule actually matches.
+            # one. Containment either way, on collapsed whitespace and at word
+            # boundaries, covers the forms a rule actually matches without letting
+            # an allowance for "land" swallow a "landscape" finding.
             hit = " ".join(f.match.split()).strip().lower()
-            if any(e and (e in hit or hit in e) for e in allow):
+            if any(e and _phrase_within(e, hit) or _phrase_within(hit, e) for e in allow if e):
                 dropped += 1
                 continue
             kept.append(f)
         return kept, dropped
     return out, 0
+
+
+# Rules that match a stretch of text and can pile up on one another. Overlapping hits
+# among these collapse to one finding; the counting and context rules (overuse, dash
+# density, load-bearing-context, source) are left alone, because losing "quietly used
+# four times" to a soft phrase that happens to contain "quietly" would hide a real count.
+_PHRASE_RULES = frozenset({"banned-phrase", "engagement-bait", "soft-cliche", "honest-framing", "filler"})
+_SEVERITY_RANK = {"error": 0, "warning": 1}
+
+
+def _collapse_overlaps(out: list[Finding], spans: list[tuple[int, int]]) -> list[Finding]:
+    """Keep one finding per stretch of text among the phrase rules.
+
+    "This is what it buys you" used to produce four warnings for one tic, and the
+    honest-framing error came with the broad honest warning on the same words.
+    Errors beat warnings; at equal severity the longer match wins; ties keep the
+    earlier-registered rule. Non-phrase rules pass through untouched."""
+    order = sorted(range(len(out)), key=lambda i: (
+        _SEVERITY_RANK.get(out[i].severity, 9), -(spans[i][1] - spans[i][0]), spans[i][0], i))
+    kept_spans: list[tuple[int, int]] = []
+    keep = set()
+    for i in order:
+        if out[i].rule not in _PHRASE_RULES:
+            keep.add(i)
+            continue
+        s0, e0 = spans[i]
+        if any(s0 < e1 and e0 > s1 for s1, e1 in kept_spans):
+            continue
+        kept_spans.append((s0, e0))
+        keep.add(i)
+    result = [out[i] for i in sorted(keep, key=lambda i: (spans[i][0], i))]
+    result.sort(key=lambda f: (f.line, f.col))
+    return result
 
 
 def read_source(path: str, as_html: bool) -> str:

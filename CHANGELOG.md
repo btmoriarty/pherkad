@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.5.2 (2026-09-15)
+
+The second half of the Codex review: the rule-level bugs, then a calibration of the shipped set against a 200-file downstream corpus. Everything in the calibration was counted before it was kept.
+
+- **The honest-framing error covers the family voice-rules.md states**, `[det] honest [adj] NOUN` with the nouns that name an utterance (answer, take, look, note, framing, part, case, move, position, summary, and so on), plus the copular form `[det] honest NOUN is that` whatever the noun. It had been twelve literals beginning "the", so `One Honest First Look` and `the honest obstacle is that` walked past it. Subject-matter nouns (broker, assessment, accounting) do not fire, and the broad `honest \w+` warning is gone: 39 corpus hits, most of them literal adjectives.
+- **Overlapping phrase hits collapse to one finding.** `This is what it buys you` produced four warnings for one tic. Errors beat warnings, the longer match wins at equal severity, and the counting rules (overuse, dash density, source, load-bearing context) are left alone so a soft phrase cannot swallow a real count.
+- **`voicelint-allow` matches whole words.** Allowing `land` used to silence a `landscape` finding.
+- **A numeric en-dash range is not a dash hit.** `Pages 10–12` was an error; the prose rule allows it.
+- **`[verb]` means a gerund.** `worth nothing` no longer matches `worth [verb]`. `it is worth noting` is banned with or without `that`.
+- **Calibration, dropped:** `the one that` (25 corpus hits, all ordinary relative clauses), the bare `lands at/in/on` and `land here/there` placement forms (the plane lands at noon), the good/great/fair-question block. `landscape` is narrowed to the abstract forms (`the current landscape`, `landscape of`). `rhymes with` and `the mirror image of` are warnings, since their literal senses were errors. Kept on the evidence: `is the whole`, `is the point`, `the part that`, `the thing that`, 136 corpus hits that read as the announcing-significance tell.
+- **Calibration, added**, the bans voice-rules.md states that nothing enforced: `important` and the boosters (`very`, `really`, `extremely`) as filler; `in all honesty` banned; `frankly`, `candidly`, `truthfully`, `to be honest` warned in their comma-tagged form only (bare `answers it truthfully` is literal); `the truth is,` as bait in its comma form only (`the truth is stupider than the myth` is a sentence); `moreover`, `furthermore`, `in recent years` as warnings; clause-final `quietly` on by default rather than opt-in.
+- Net on the corpus: warnings 313 to 294, errors 1 to 6, every new error a real instance of the honest-framing tell.
+- `VERSION` 0.5.2.
+
 ## v0.5.1 (2026-09-15)
 
 A Codex review of the tools, recorded in `docs/codex-review-2026-09-15.md`, found four correctness bugs. This release fixes those four and nothing in the rule set; the calibration findings in that review wait on a separate decision.

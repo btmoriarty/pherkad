@@ -82,8 +82,35 @@ FIRING = [
      "The load-bearing beam passed inspection.", "load-bearing-context", False),
     ("dash fires by default", "We shipped it — then paused.", "dash", True),
     ("mathematical minus is not a dash", "The result is 5 − 3.", "dash", False),
-    ("plain manner quietly is silent by default",
-     "She shut the nursery door quietly.", "loaded-adverb", False),
+    ("clause-final quietly warns by default (on since 0.5.2)",
+     "The project was shut down quietly.", "loaded-adverb", True),
+    ("pre-modifier quietly is silent",
+     "A quietly skeptical engineer watched.", "loaded-adverb", False),
+    ("numeric en-dash range is not a dash hit", "Pages 10–12 and 1914–18.", "dash", False),
+    ("en dash between words is still a dash", "We shipped – then paused.", "dash", True),
+    ("worth nothing is not worth [verb]", "It is worth nothing to us.", "soft-cliche", False),
+    ("worth noting without that is still banned", "It is worth noting the gap.", "banned-phrase", True),
+    ("honest family: any determiner", "One Honest First Look at the data.", "honest-framing", True),
+    ("honest family: optional adjective", "An honest first take on it.", "honest-framing", True),
+    ("honest family: copular form with any noun",
+     "The honest obstacle is that nobody checked.", "honest-framing", True),
+    ("honest subject-matter noun does not fire", "It was an honest assessment.", "honest-framing", False),
+    ("honest broker does not fire", "He is an honest broker.", "honest-framing", False),
+    ("honest literal adjective draws no warning either", "An honest dog, an honest animal.", "soft-cliche", False),
+    ("literal placement does not fire", "The plane lands at noon.", "soft-cliche", False),
+    ("abstract landing still fires", "That is where it lands.", "soft-cliche", True),
+    ("desert landscape is literal", "The desert landscape changes after rain.", "soft-cliche", False),
+    ("abstract landscape fires", "In the current landscape, nobody checks.", "soft-cliche", True),
+    ("the one that is an ordinary relative clause", "The one that got out.", "soft-cliche", False),
+    ("rhymes with is a warning now", "Cat rhymes with hat.", "banned-phrase", False),
+    ("rhymes with still warns", "Cat rhymes with hat.", "soft-cliche", True),
+    ("truth-is opener with comma is bait", "The truth is, it failed.", "engagement-bait", True),
+    ("truth-is as a sentence is not bait", "The truth is stupider than the myth.", "engagement-bait", False),
+    ("comma-tagged frankly warns", "Frankly, it failed.", "soft-cliche", True),
+    ("literal truthfully does not warn", "He answers it truthfully.", "soft-cliche", False),
+    ("in all honesty is banned", "In all honesty it was fine.", "banned-phrase", True),
+    ("boosters are filler", "This is very important.", "filler", True),
+    ("paragraph connective warns", "Moreover, the build passed.", "soft-cliche", True),
     ("watch-word overuse fires past the cap",
      "quietly quietly quietly it went", "overuse", True),
     ("no aggregator domains in the generic defaults",
@@ -106,11 +133,24 @@ class RuleFiring(unittest.TestCase):
                          "phrase after a decomposed accent must not fire")
         self.assertIn("banned-phrase", rules("that game-changer café"))
 
-    def test_quietly_rule_is_opt_in(self):
-        on = dict(voicelint.load_config(None))
-        on["flag_loaded_quietly"] = True
-        self.assertIn("loaded-adverb", rules("The project was shut down quietly.", on))
-        self.assertNotIn("loaded-adverb", rules("A quietly skeptical engineer watched.", on))
+    def test_quietly_rule_can_be_switched_off(self):
+        off = dict(voicelint.load_config(None))
+        off["flag_loaded_quietly"] = False
+        self.assertNotIn("loaded-adverb", rules("The project was shut down quietly.", off))
+
+    def test_overlapping_phrase_hits_collapse_to_one(self):
+        fs = voicelint.check("This is what it buys you.", DEFAULT)
+        self.assertEqual(len(fs), 1)
+        self.assertEqual(fs[0].match, "what it buys you")
+        fs = voicelint.check("The honest answer is no.", DEFAULT)
+        self.assertEqual([f.rule for f in fs], ["honest-framing"])
+
+    def test_counting_rules_survive_an_overlap(self):
+        # A soft phrase must not swallow the overuse count on a word inside it.
+        cfg = dict(DEFAULT)
+        cfg["watch_words"] = {"quietly": 0}
+        cfg["soft_phrases"] = ["went quietly"]
+        self.assertEqual(rules("It went quietly.", cfg), {"soft-cliche", "overuse", "loaded-adverb"})
 
     def test_dash_density_floor(self):
         relaxed = dict(DEFAULT)
@@ -305,6 +345,12 @@ class Suppression(unittest.TestCase):
     def test_rules_file_marker_in_prose_is_text(self):
         kept, _ = self.counting("Add <!-- voicelint: rules-file --> to opt in. This is a game-changer.\n")
         self.assertEqual(len(kept), 1)
+
+    def test_allow_marker_is_whole_words(self):
+        # The regression: allowing "land" used to swallow a "landscape" finding.
+        kept, dropped = self.counting(
+            "<!-- voicelint-allow: land (literal: aircraft) -->\n\nIn the current landscape, nobody checks.\n")
+        self.assertEqual((len(kept), dropped), (1, 0))
 
     def test_allow_marker_exempts_the_phrase(self):
         kept, dropped = self.counting(
