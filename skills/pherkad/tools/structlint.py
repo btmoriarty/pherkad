@@ -33,6 +33,18 @@ Usage:
     structlint.py FILE [FILE ...]
     structlint.py --json FILE
     structlint.py --strict FILE     # warnings become a non-zero exit
+    structlint.py --config OVERLAY  # thresholds from a "structure" object
+
+Thresholds live in the same JSON file voicelint reads, under a "structure"
+object, with the same overlay semantics (a downstream config sets only the
+keys it changes):
+
+    "structure": {"short_chars": 46, "two_beat_diff": 14, "staccato_run": 3,
+                  "density_per_100": 2.0, "interrogative_pct": 30,
+                  "interrogative_min": 10}
+
+Findings carry voicelint's shape (line, col, severity, rule, match, message,
+rule_id), so one consumer can read both tools; rule ids are structure.<check>.
 
 Exit codes: 0 clean (or warnings without --strict), 1 warnings under --strict,
 2 on a usage or IO problem. Safe in CI.
@@ -45,13 +57,23 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from dataclasses import dataclass, asdict
 
-SHORT = 46          # chars; a "short" sentence for the run and parallel checks
-STACCATO_RUN = 3    # consecutive short sentences before it counts as a run
-DENSITY_PER_100 = 2.0
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+# Thresholds. These are the defaults; a "structure" object in the voicelint
+# config (shipped or overlay) overrides any of them, see load_thresholds().
+DEFAULT_THRESHOLDS = {
+    "short_chars": 46,        # a "short" sentence for the run and parallel checks
+    "two_beat_diff": 14,      # max length difference between the two beats
+    "staccato_run": 3,        # consecutive short sentences before it counts as a run
+    "density_per_100": 2.0,   # flagged constructions per 100 words
+    "interrogative_pct": 30.0,  # percent of headings before the rate fires
+    "interrogative_min": 10,    # headings needed before the rate means anything
+}
 
 # Headers that pose rather than name. Deliberately narrow: each is a stance,
 # not a subject. Broad patterns here produce noise and get ignored, which is
@@ -62,7 +84,10 @@ HEADER_STANCE = [
     r"^what\s+(everyone|nobody|no one|most people)\s+(misses|gets wrong|forgets)\b",
     r"^the\s+\w+\s+(nobody|no one)\s+\w+",
     r"^here'?s\s+(the|what|why)\b",
-    r"^(the real|the actual)\s+\w+",
+    # "The real problem", "The actual question": a stance noun after the
+    # adjective. "The actual results" names its subject and is left alone.
+    r"^(the real|the actual)\s+(problem|question|issue|reason|cost|point|story|answer|"
+    r"lesson|risk|danger|work|win|fix|test|challenge|trick|secret|lever|tell)\b",
     r"^what\s+.{0,40}\s+is\s+really\b",
     r"\bis\s+the\s+(point|moment|whole|tell)\b",
     # An abstract subject that "carries" an abstract object. Literal and
@@ -73,7 +98,13 @@ HEADER_STANCE = [
     # Positioning rather than naming: "Where Stage 3 Sits", "Where this sits".
     # "lives" and "goes" are out on purpose. They also mean literal placement,
     # and "Where data lives" over a file path is naming its subject, not posing.
-    r"^where\s+.{0,40}?\s*(sits|fits|stands|belongs)\b",
+    # The subject has to be an abstraction or a pointer: "Where this sits",
+    # "Where Stage 3 Sits", "Where the argument stands". "Where the chair sits"
+    # is a chair.
+    r"^where\s+(this|that|it|we|you|each|the\s+(?:\w+\s+)?(?:stage|step|phase|work|argument|"
+    r"claim|decision|method|tool|course|project|lab|study|paper|idea|risk|value|cost|"
+    r"reader|user|field|line)|(?:stage|step|phase|week|round|part|section)\s+\w+)"
+    r"\s+(sits|fits|stands|belongs)\b",
     # A header that poses the definition as a question instead of naming the
     # thing: "What Counts as Working", "What Makes a Prompt Analytical". The
     # subject is the definition, so the header can be the term itself.
@@ -134,8 +165,7 @@ INTERROGATIVE_HEAD = re.compile(r"^(what|where|why|how|when|which|who)\b", re.I)
 # every document up. Measured across 137 documents on 2026-08-23 the prose
 # distribution is smooth with no gap: median 12.5%, a long tail to 50%. A
 # tail-only threshold is therefore the honest setting.
-INTERROGATIVE_PCT = 30.0     # percent of headings before it counts
-INTERROGATIVE_MIN = 10       # headings needed before the rate means anything
+# (interrogative_pct 30 and interrogative_min 10 live in DEFAULT_THRESHOLDS.)
 
 # A markdown table row is tabular data, not prose. Its cells are fragments and
 # its delimiter row is punctuation, so paragraph-grouping a rubric turned it
@@ -163,10 +193,97 @@ APHORISM_TAIL = re.compile(
 
 @dataclass
 class Finding:
+    """voicelint's finding shape, so one consumer reads both tools. ``rule``
+    is the check (two-beat, staccato, header, aphorism, interrogative-headers,
+    density) and ``rule_id`` is structure.<check>. ``col`` is 1 for a paragraph
+    or heading finding and 0 for the document-level density."""
     line: int
+    col: int
+    severity: str
     rule: str
-    excerpt: str
+    match: str
     message: str
+    rule_id: str = ""
+
+    def __init__(self, line, rule, match, message, col=None, severity="warning", rule_id=None):
+        self.line = line
+        self.col = (1 if line else 0) if col is None else col
+        self.severity = severity
+        self.rule = rule
+        self.match = match
+        self.message = message
+        self.rule_id = rule_id or "structure." + rule
+
+    @property
+    def excerpt(self):  # the old name, kept for callers that used it
+        return self.match
+
+
+# Masked in place, not dropped with the line: a URL, a DOI, an arXiv id, a
+# year in parentheses, a page run, or a long quoted span. The rest of the
+# line is still the author's prose and still gets checked. A whole
+# bibliographic entry (author-and-initial opener, or two or more markers) is
+# the citation style's rhythm and is dropped as before.
+_MASK_SPANS = re.compile(
+    r'https?://[^\s)\]>"\']+|\bDOI\b:?\s*\S+|\barXiv\b:?\s*\S+'
+    r'|\((?:19|20)\d\d[a-z]?\)|\bpp\.\s*\d+(?:\s*[-–]\s*\d+)?|"[^"]{60,}"', re.I)
+_BIB_LINE = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)]\s+)?[A-Z][\w'’-]+,\s+(?:[A-Z]\.\s*)+")
+
+
+def _mask_spans(ln: str) -> str:
+    """Blank the spans that are not the author's prose; keep the line."""
+    return _MASK_SPANS.sub(lambda m: "URL" if m.group(0).lower().startswith("http") else " ", ln)
+
+
+def _is_bibliographic(ln: str) -> bool:
+    return bool(_BIB_LINE.match(ln)) or len(CITATION.findall(ln)) >= 2
+
+
+_STOP = frozenset("a an the of to in on at for and or but is are was were be it its this that these those".split())
+_NEG = re.compile(r"\b(?:not|no|never|none|nothing|nobody|nor)\b|n[o’']t\b", re.I)
+
+
+def _parallel(a: str, b: str) -> bool:
+    """Do two short sentences share a shape, not just a length?
+
+    A two-beat is a construction, and the construction shows in the words:
+    the same opener ("None of them wrong. None of them ours."), matched
+    negation, the same closing word, or the same token count with a repeated
+    content word. Two short sentences that merely sit side by side ("The
+    meeting starts at nine. Lunch follows at noon.") share none of that."""
+    ta = re.findall(r"[\w'’]+", a.lower())
+    tb = re.findall(r"[\w'’]+", b.lower())
+    if not ta or not tb:
+        return False
+    if ta[0] == tb[0]:
+        return True
+    if ta[-1] == tb[-1]:
+        return True
+    if _NEG.search(a) and _NEG.search(b):
+        return True
+    shared = (set(ta) & set(tb)) - _STOP
+    return abs(len(ta) - len(tb)) <= 1 and len(shared) >= 1
+
+
+def load_thresholds(config_path: str | None) -> dict:
+    """DEFAULT_THRESHOLDS updated by the "structure" object of the voicelint
+    config: the shipped file beside this script, then the overlay given here.
+    Uses voicelint's own loader so overlay semantics are identical; when
+    voicelint is not beside this script the defaults stand."""
+    t = dict(DEFAULT_THRESHOLDS)
+    try:
+        sys.path.insert(0, HERE)
+        import voicelint  # noqa: WPS433
+    except ImportError:
+        if config_path:
+            sys.stderr.write("structlint: voicelint.py not found beside structlint.py; "
+                             "--config ignored, default thresholds used\n")
+        return t
+    cfg = voicelint.load_config(config_path)
+    for k, v in (cfg.get("structure") or {}).items():
+        if k in t:
+            t[k] = v
+    return t
 
 
 def _suppressed(lines: list[str]) -> set[int]:
@@ -199,7 +316,10 @@ def _sentences(text: str) -> list[str]:
     return [p for p in parts if len(p) > 1 and not p.endswith(":")]
 
 
-def check_text(raw: str) -> list[Finding]:
+def check_text(raw: str, thresholds: dict | None = None) -> list[Finding]:
+    t = dict(DEFAULT_THRESHOLDS)
+    t.update(thresholds or {})
+    SHORT, STACCATO_RUN = int(t["short_chars"]), int(t["staccato_run"])
     lines = raw.splitlines()
     skip = _suppressed(lines)
     lines = _strip_code(lines)
@@ -221,12 +341,12 @@ def check_text(raw: str) -> list[Finding]:
         if (i in skip or not ln.strip() or BLOCKQUOTE.match(ln)
                 or HEADER_LINE.match(ln) or FIELD_LINE.match(ln)
                 or TABLE_ROW.match(ln) or BRACKET_PLACEHOLDER.match(ln)
-                or CITATION.search(ln) or QUOTED.search(ln)):
+                or _is_bibliographic(ln)):
             flush()
         else:
             if not buf:
                 start = i
-            buf.append(ln)
+            buf.append(_mask_spans(ln))
             continue
         if i in skip or not ln.strip() or BLOCKQUOTE.match(ln):
             continue
@@ -260,7 +380,8 @@ def check_text(raw: str) -> list[Finding]:
         # two-beat: a clipped balanced parallel standing alone on the line
         if len(sents) == 2 and all(len(s) <= SHORT for s in sents):
             a, b = sents
-            if abs(len(a) - len(b)) <= 14 and a[:1].isupper() and b[:1].isupper():
+            if (abs(len(a) - len(b)) <= int(t["two_beat_diff"]) and a[:1].isupper()
+                    and b[:1].isupper() and _parallel(a, b)):
                 found.append(Finding(i, "two-beat", ln.strip()[:80],
                                      "clipped balanced parallel; the symmetry is the tell"))
 
@@ -290,22 +411,23 @@ def check_text(raw: str) -> list[Finding]:
         hm = HEADER_LINE.match(ln)
         if hm:
             heads.append((i, hm.group(1).strip()))
-    if len(heads) >= INTERROGATIVE_MIN:
+    if len(heads) >= int(t["interrogative_min"]):
         q = [(i, h) for i, h in heads
              if INTERROGATIVE_HEAD.match(h) and not h.rstrip().endswith("?")]
         pct = 100.0 * len(q) / len(heads)
-        if pct > INTERROGATIVE_PCT:
+        if pct > float(t["interrogative_pct"]):
             found.append(Finding(q[0][0], "interrogative-headers",
                                  f"{len(q)}/{len(heads)} headings",
                                  f"{pct:.0f}% of headings open with a question word; "
                                  f"name the sections instead"))
 
     words = len(re.findall(r"\b\w+\b", "\n".join(lines)))
+    cap = float(t["density_per_100"])
     if words >= 100:
         per100 = len(found) * 100.0 / words
-        if per100 > DENSITY_PER_100:
+        if per100 > cap:
             found.append(Finding(0, "density", f"{len(found)} hits / {words} words",
-                                 f"{per100:.1f} per 100 words, over the {DENSITY_PER_100} cap"))
+                                 f"{per100:.1f} per 100 words, over the {cap} cap"))
     return found
 
 
@@ -314,25 +436,28 @@ def main() -> int:
     ap.add_argument("files", nargs="+", help="files to check, or - for stdin")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     ap.add_argument("--strict", action="store_true", help="warnings cause a non-zero exit")
+    ap.add_argument("--config", help="voicelint config (overlay) whose \"structure\" object sets the thresholds")
     args = ap.parse_args()
 
-    total, payload = 0, []
+    thresholds = load_thresholds(args.config)
+    total, payload = 0, {}
     for path in args.files:
         try:
             raw = sys.stdin.read() if path == "-" else open(path, encoding="utf-8").read()
         except OSError as exc:
             sys.stderr.write(f"structlint: cannot read {path}: {exc}\n")
             return 2
-        for f in check_text(raw):
+        findings = check_text(raw, thresholds)
+        payload[path] = [asdict(f) for f in findings]
+        for f in findings:
             total += 1
-            if args.json:
-                payload.append({"file": path, **asdict(f)})
-            else:
-                where = f"{path}:{f.line}" if f.line else path
-                print(f"{where} [warning] {f.rule}: {f.message}  ->  {f.excerpt!r}")
+            if not args.json:
+                where = f"{path}:{f.line}:{f.col}" if f.line else path
+                print(f"{where} [{f.severity}] {f.rule} ({f.rule_id}): {f.message}  ->  {f.match!r}")
 
     if args.json:
-        print(json.dumps(payload, indent=2))
+        # The same envelope as voicelint --json, so one consumer reads both.
+        print(json.dumps({"suppressed": 0, "files": payload}, indent=2, ensure_ascii=False))
     else:
         print(f"structlint: {total} warning(s) across {len(args.files)} file(s).")
     return 1 if (args.strict and total) else 0
