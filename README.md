@@ -18,6 +18,16 @@ A validation run fingerprints the draft (the three sentences most and least like
 
 ## The linter alone
 
+One command runs both mechanical engines, the phrase linter and the structural checker, and prints one list in one format:
+
+```sh
+python3 skills/pherkad/tools/pherkad.py check draft.md                    # both engines, one list
+python3 skills/pherkad/tools/pherkad.py check --format sarif draft.md     # for an editor or CI
+python3 skills/pherkad/tools/pherkad.py check --advisory structure. --strict draft.md   # structural findings reported, never counted
+```
+
+Every finding carries the same fields (line, col, severity, rule, match, message, rule_id, engine), the two engines' overlap is removed, and one density is computed over both. The pieces still run on their own:
+
 The judgment layer needs Claude; the linter does not. Put it in a pre-commit hook or CI step and it flags the mechanical tells in any Markdown, plain-text, or HTML draft:
 
 ```sh
