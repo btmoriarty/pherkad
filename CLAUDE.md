@@ -1,6 +1,6 @@
 # Pherkad
 
-The voice tools live in `skills/pherkad/tools/`. Run the suites with `python3 <abs path>/test_voicelint.py`, `test_structlint.py`, `test_replycheck.py`, `test_corpusscan.py`, and `eval/test_study.py`; all five are unittest modules and pytest collects them too.
+The voice tools live in `skills/pherkad/tools/`. Run the suites with `python3 <abs path>/test_voicelint.py`, `test_mdmask.py`, `test_structlint.py`, `test_replycheck.py`, `test_corpusscan.py`, and `eval/test_study.py`; all six are unittest modules and pytest collects them too.
 
 ## Reply preflight
 

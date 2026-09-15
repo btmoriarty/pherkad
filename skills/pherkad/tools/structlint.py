@@ -63,6 +63,8 @@ import sys
 from dataclasses import dataclass, asdict
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import mdmask  # noqa: E402  (the shared reading of Markdown structure)
 
 # Thresholds. These are the defaults; a "structure" object in the voicelint
 # config (shipped or overlay) overrides any of them, see load_thresholds().
@@ -111,18 +113,14 @@ HEADER_STANCE = [
     r"^what\s+(counts as|makes|qualifies as)\b",
 ]
 
-CODE_FENCE = re.compile(r"^\s*(```|~~~)")
-# A list item or a numbered step is a format, not prose rhythm. RULING C1 is
-# about consecutive short sentences in running prose; clipped instructions are
-# correct, and voice-rules says so explicitly for slide closers.
-LIST_ITEM = re.compile(r"^\s*([-*+]|\d+[.)])\s+")
-# A blockquote is usually a quoted prompt or a transcript, not the author's
-# prose, so its rhythm is not theirs to answer for.
-BLOCKQUOTE = re.compile(r"^\s*>")
+# Which lines are code, blockquotes, tables, headings, field lines, and list
+# items is decided once, in mdmask.py, for this tool and voicelint alike.
+LIST_ITEM = mdmask.LIST_ITEM
+BLOCKQUOTE = mdmask.BLOCKQUOTE
 # A bold run-in label ("**Null propagation.** The rest...") ends in a period
 # that is not a sentence boundary. Strip the label before splitting.
 RUNIN_LABEL = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)]\s+)?\*\*[^*]{1,90}?\*\*:?\s*")
-HEADER_LINE = re.compile(r"^\s{0,3}#{1,6}\s+(.*?)\s*#*\s*$")
+HEADER_LINE = mdmask.HEADING
 # A period is not always a sentence boundary. Initials ("W. H."), common
 # abbreviations, and ordinals in citations all end in one, and treating them as
 # boundaries turned bibliographies into staccato runs.
@@ -130,17 +128,14 @@ ABBREV = (r"(?<!\b[A-Z])(?<!\bvs)(?<!\bcf)(?<!\bal)(?<!\beds)(?<!\bed)(?<!\bpp)"
           r"(?<!\bno)(?<!\bvol)(?<!\bArt)(?<!\bFig)(?<!\bapprox)(?<!\best)"
           r"(?<!\bDr)(?<!\bMr)(?<!\bMs)(?<!\bSt)(?<!\betc)(?<!\bi\.e)(?<!\be\.g)")
 SENT_SPLIT = re.compile(ABBREV + r"(?<=[.!?])\s+")
-# A line of bold field labels ("**Type:** **Title:** ...") is a form, not prose.
-FIELD_LINE = re.compile(r"^\s*(\*\*[^*]{1,40}:\*\*\s*){2,}")
+FIELD_LINE = mdmask.FIELD_LINE
 # A bibliographic entry is punctuation-dense by convention: a year in
 # parentheses, a DOI, a URL, or a volume-and-article run. Its rhythm is the
 # citation style's, not the author's, so it is not theirs to answer for.
 CITATION = re.compile(r"\((?:19|20)\d\d\)|\bDOI\b|https?://|\barXiv\b|\bpp\.\s*\d", re.I)
-# A quoted prompt or transcript line carries its speaker's rhythm, not the
-# author's, in the same way a blockquote does. Markdown gives blockquotes a
-# marker; a prompt quoted inside a slide body does not, so detect it by a
-# quoted span covering most of the line.
-QUOTED = re.compile(r'"[^"]{60,}"')
+# A quoted span of sixty characters or more carries its speaker's rhythm, not
+# the author's; it is masked in place by _MASK_SPANS below, and the rest of the
+# line is still the author's prose.
 # "Stage 1: ... Stage 2: ..." is an enumeration, not prose rhythm. Two or more
 # labeled steps on a line means the periods are separating items in a list that
 # happens to be written inline.
@@ -167,10 +162,7 @@ INTERROGATIVE_HEAD = re.compile(r"^(what|where|why|how|when|which|who)\b", re.I)
 # tail-only threshold is therefore the honest setting.
 # (interrogative_pct 30 and interrogative_min 10 live in DEFAULT_THRESHOLDS.)
 
-# A markdown table row is tabular data, not prose. Its cells are fragments and
-# its delimiter row is punctuation, so paragraph-grouping a rubric turned it
-# into a staccato run. Found 2026-08-21 on the A2 rubric.
-TABLE_ROW = re.compile(r"^\s*\|.*\|\s*$")
+TABLE_ROW = mdmask.TABLE_ROW
 
 LABELED_STEPS = re.compile(
     r"\b(stage|step|round|question|phase|prompt|slide)\s+\d+\s*:", re.I)
@@ -298,15 +290,8 @@ def _suppressed(lines: list[str]) -> set[int]:
 
 
 def _strip_code(lines: list[str]) -> list[str]:
-    """Blank out fenced code and inline code, keeping line numbers intact."""
-    out, in_fence = [], False
-    for ln in lines:
-        if CODE_FENCE.match(ln):
-            in_fence = not in_fence
-            out.append("")
-            continue
-        out.append("" if in_fence else re.sub(r"`[^`]*`", " ", ln))
-    return out
+    """Blank fenced and inline code, keeping line numbers intact (mdmask)."""
+    return mdmask.mask("\n".join(lines), ("code",)).split("\n")
 
 
 def _sentences(text: str) -> list[str]:

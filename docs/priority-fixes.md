@@ -1,6 +1,6 @@
 # Priority fixes (2026-09-15)
 
-Status 2026-09-15 evening: rows 1, 2, 3, 8, 9, and 12's first half are done (0.5.3 gave rules ids; 0.5.6 fixed structlint). Rows 4, 5, 6, 7, 10, 11, and the overlay check remain.
+Status 2026-09-15 evening: rows 1, 2, 3, 4, 8, and 9 are done (0.5.3 gave rules ids; 0.5.6 fixed structlint; 0.5.7 shared the Markdown reading). Rows 5, 6, 7, 10, 11, and 12 remain.
 
 What is left after the Codex review of 2026-09-15 (`docs/codex-review-2026-09-15.md`) and the two releases that answered it (0.5.1, the correctness bugs; 0.5.2, the rule fixes and the counted calibration). Fixes only; features are a separate list. Ranked by what a wrong answer costs, then by size. Each row names its evidence so the fix can be tested before it is believed.
 
