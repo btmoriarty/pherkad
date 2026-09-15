@@ -4,8 +4,8 @@
   "dash_density_cap": 1.0,
   "load_bearing_literal_only": true,
   "banned_phrases": [
-    "it's worth noting that",
-    "it is worth noting that",
+    "it's worth noting",
+    "it is worth noting",
     "make no mistake",
     "at the end of the day",
     "the bottom line is",
@@ -16,8 +16,6 @@
     "double-edged sword",
     "moved the needle",
     "closed the loop",
-    "the mirror image of",
-    "rhymes with",
     "the flip side of",
     "in the realm of",
     "navigating the complexities",
@@ -37,7 +35,8 @@
     "watch the move",
     "pays for itself",
     "worth its weight",
-    "worth its weight in gold"
+    "worth its weight in gold",
+    "in all honesty"
   ],
   "engagement_bait": [
     "nobody's talking about",
@@ -71,7 +70,8 @@
     "here's the reality",
     "here's the truth",
     "here's the problem",
-    "here's the point"
+    "here's the point",
+    "the truth is,"
   ],
   "_soft_comment": "Warnings, not errors: phrasings that are hard to ban outright but show up far too often in AI-assisted text. [word] matches one token; [verb] matches a gerund. A soft hit that lands on a stronger banned phrase is dropped as redundant. Extended 2026-08-20: the metaphorical-land heuristic (previously queued in voicelint-land-heuristic.json) and the phrase-shaped half of the structural families named in voice-authoring.md under 'The linter is the last check'. The other half (two-beat parallel, staccato run, header stance) are not expressible as phrases and live in structlint.py. Extended again 2026-08-20 after Brian's Week 9 review: the land patterns were rescoped (the queued heuristic caught 5 of 71 real uses), and the forward-pointer and named-nominalization families were added.",
   "soft_phrases": [
@@ -83,7 +83,6 @@
     "i want to be plain",
     "i want to be clear",
     "i want to be honest",
-    "re:\\bhonest[ \\t]+(?!(?:brokers?|and|or|but|about|in|on|as|is|are|was|were|enough|with|to|for|than|when|if|so|yet|because|the|a|an)\\b)\\w+",
     "i want to be upfront",
     "i want to be direct",
     "i want to be transparent",
@@ -103,12 +102,12 @@
     "landing with",
     "land with the",
     "landed with",
-    "landscape",
+    "re:\\bthe (?:current|changing|evolving|shifting|broader|wider|competitive|political|regulatory|digital|ai|media|modern|new|whole|entire) landscape\\b",
+    "landscape of",
     "is the point",
     "is the moment",
     "is the tell",
     "is the whole",
-    "the one that",
     "the thing that",
     "the part that",
     "the one to",
@@ -131,14 +130,6 @@
     "remains yours",
     "one buys",
     "[word] buys you",
-    "lands there",
-    "lands here",
-    "lands on",
-    "lands at",
-    "lands in",
-    "land there",
-    "land here",
-    "land on the",
     "landing point",
     "where it lands",
     "lands first",
@@ -182,14 +173,12 @@
     "lands the",
     "one thing about",
     "this is one of those",
-    "that's a good question",
-    "that is a good question",
-    "that's a great question",
-    "that is a great question",
-    "that's a fair question",
-    "that is a fair question",
-    "a fair question",
-    "a fair point"
+    "the mirror image of",
+    "rhymes with",
+    "moreover",
+    "furthermore",
+    "in recent years",
+    "re:\\b(?:frankly|candidly|truthfully|to be honest)\\s*,"
   ],
   "filler_words": [
     "significant",
@@ -207,15 +196,20 @@
     "delves",
     "delving",
     "tapestry",
-    "showcases"
+    "showcases",
+    "important",
+    "very",
+    "really",
+    "extremely"
   ],
   "watch_words": {
     "quietly": 2,
     "actually": 2,
     "silently": 2
   },
-  "_flag_loaded_quietly_comment": "Off by default: clause-final position alone cannot separate an insinuating 'quietly' from a plain manner adverb ('shut the door quietly'). Set true as a house rule if your register wants it; overuse is still caught by the 'quietly' watch word, and the pre-modifier case is judged in references/ai_tells.md.",
-  "flag_loaded_quietly": false,
+  "_flag_loaded_quietly_comment": "On by default since 2026-09-15 (it had been opt-in). Clause-final position cannot separate an insinuating 'quietly' from a plain manner adverb ('shut the door quietly'), so it is a warning that asks for a look, not an error. Set false if your register wants it off; overuse is still caught by the 'quietly' watch word, and the pre-modifier case is judged in references/ai_tells.md.",
+  "flag_loaded_quietly": true,
   "_source_comment": "aggregator_domains is source-quality policy, not a voice tell, so it is empty in the generic defaults. A team that wants a low-trust-domain check keeps its list in a config like examples/news-brief.json.",
-  "aggregator_domains": []
+  "aggregator_domains": [],
+  "_calibration_comment": "2026-09-15 calibration, from a Codex review checked against a 200-file downstream corpus: dropped 'the one that' (25 hits, all ordinary relative clauses), the broad 'honest \\\\w+' warning (39 hits, most literal adjectives; the honest-framing error in voicelint.py now covers the whole [det] honest [adj] NOUN family), the bare 'lands at/in/on' placement forms (literal placement fired), and the good/great/fair-question block (ordinary conversation). 'landscape' narrowed to the abstract forms. 'rhymes with' and 'the mirror image of' demoted to warnings (their literal senses were errors). Added the bans voice-rules.md states but nothing enforced: 'important' and the boosters as filler, 'in all honesty' as a ban, the other authenticity signals (frankly, candidly, truthfully, to be honest) as a warning in their comma-tagged form only (bare 'answers it truthfully' is literal), 'the truth is,' as bait in its comma form only ('the truth is stupider than the myth' is a sentence), and moreover/furthermore/in recent years as soft. 'is the whole', 'is the point', 'the part that', 'the thing that' were kept: 136 corpus hits read as the announcing-significance tell, not noise."
 }
