@@ -16,6 +16,8 @@ and prints one format.
     pherkad.py check --strict FILE                   # warnings fail too
     pherkad.py check --no-structure FILE             # voicelint only
     pherkad.py rules [--config OVERLAY] [--json]     # every rule both engines would run
+    pherkad.py manifest [--write | --verify]         # the release manifest: version, file hashes, rule ids
+    pherkad.py check-overlay OVERLAY                 # does a downstream overlay still fit this base?
     pherkad.py check --decisions FILE ...            # hide findings the author has decided on
     pherkad.py decide --decisions FILE --reason "..." path:line[:rule_id] ...
     pherkad.py decisions --decisions FILE [--prune] FILE...   # which decisions still match
@@ -39,6 +41,16 @@ Dispositions: accepted (the author's usage), intentional (a deliberate
 choice), deferred (known, fix later; still hidden, counted separately so the
 debt stays visible). Paths are relative to ``--root`` (default: the decision
 file's directory).
+
+Release manifest (roadmap item 8). ``bundle-manifest.json`` beside this
+script records the version, a schema number, the sha256 of every vendored
+file, and every rule id the shipped base runs. ``manifest --write`` is run at
+release; ``manifest --verify`` (in CI here, and in a downstream sync check)
+fails when a file beside the script no longer matches, which is how a vendored
+copy proves it is what it says it is. ``check-overlay`` loads a downstream
+overlay on this base and reports what would silently do nothing: a
+``remove_<field>`` naming a rule that is not here, an ``add_<field>`` that
+duplicates a shipped rule, a structure key the base does not know.
 
 Finding schema (every engine, every format): line, col, severity, rule,
 match, message, rule_id, engine. ``engine`` is voice, structure, or combined
@@ -74,10 +86,17 @@ SURFACES = os.path.join(HERE, "surfaces")
 
 
 def _version() -> str:
+    """VERSION from the skill root when this runs in the repository; the
+    manifest's version when this is a vendored copy, which carries no VERSION."""
     try:
         with open(os.path.join(HERE, "..", "VERSION"), encoding="utf-8") as fh:
             return fh.read().strip()
     except OSError:
+        pass
+    try:
+        with open(os.path.join(HERE, "bundle-manifest.json"), encoding="utf-8") as fh:
+            return json.load(fh).get("version", "unknown")
+    except (OSError, json.JSONDecodeError):
         return "unknown"
 
 
@@ -357,6 +376,143 @@ def cmd_check(args) -> int:
     return 1 if errors or (args.strict and warnings) else 0
 
 
+# ---------------------------------------------------------------------------
+# Release manifest and overlay check
+# ---------------------------------------------------------------------------
+MANIFEST = os.path.join(HERE, "bundle-manifest.json")
+MANIFEST_SCHEMA = 1
+# The five a gate needs are required wherever the bundle is vendored; the rest
+# are listed so their hashes travel, but a vendored copy may leave them out.
+REQUIRED_FILES = ("pherkad.py", "voicelint.py", "structlint.py", "mdmask.py", "voice_config.json")
+BUNDLE_FILES = REQUIRED_FILES + ("replycheck.py", "replycheck-hook.py", "corpusscan.py")
+
+
+def _file_sha(path: str) -> str:
+    with open(path, "rb") as fh:
+        return hashlib.sha256(fh.read()).hexdigest()
+
+
+def build_manifest() -> dict:
+    import datetime
+    files = {}
+    for name in BUNDLE_FILES:
+        p = os.path.join(HERE, name)
+        if os.path.exists(p):
+            files[name] = _file_sha(p)
+    if os.path.isdir(SURFACES):
+        for f in sorted(os.listdir(SURFACES)):
+            if f.endswith(".json"):
+                files["surfaces/" + f] = _file_sha(os.path.join(SURFACES, f))
+    cfg = voicelint.load_config(voicelint.DEFAULTS_PATH)
+    return {"tool": "pherkad", "version": _version(), "schema": MANIFEST_SCHEMA,
+            "generated": datetime.date.today().isoformat(), "required": list(REQUIRED_FILES),
+            "files": files, "rule_ids": sorted(r["id"] for r in all_rules(cfg))}
+
+
+def verify_manifest(manifest_path: str = MANIFEST) -> list[str]:
+    """Problems between the manifest and the files beside it; empty when clean."""
+    if not os.path.exists(manifest_path):
+        return [f"no manifest at {manifest_path}"]
+    try:
+        with open(manifest_path, encoding="utf-8") as fh:
+            m = json.load(fh)
+    except (OSError, json.JSONDecodeError) as exc:
+        return [f"cannot read manifest: {exc}"]
+    problems = []
+    here = os.path.dirname(os.path.abspath(manifest_path))
+    if m.get("schema") != MANIFEST_SCHEMA:
+        problems.append(f"manifest schema {m.get('schema')} is not {MANIFEST_SCHEMA}")
+    version_file = os.path.join(here, "..", "VERSION")
+    in_repo = os.path.exists(version_file)
+    if in_repo and m.get("version") != _version():
+        problems.append(f"manifest version {m.get('version')} is not VERSION {_version()}")
+    required = set(m.get("required") or REQUIRED_FILES)
+    for name, sha in (m.get("files") or {}).items():
+        p = os.path.join(here, name)
+        if not os.path.exists(p):
+            if name in required or in_repo:
+                problems.append(f"missing: {name}")
+        elif _file_sha(p) != sha:
+            problems.append(f"changed: {name}")
+    if in_repo:
+        current = build_manifest()
+        for name in current["files"]:
+            if name not in (m.get("files") or {}):
+                problems.append(f"not in manifest: {name}")
+        if current["rule_ids"] != m.get("rule_ids"):
+            problems.append("rule ids differ from the shipped config")
+    else:
+        cfg = voicelint.load_config(voicelint.DEFAULTS_PATH)
+        if sorted(r["id"] for r in all_rules(cfg)) != m.get("rule_ids"):
+            problems.append("rule ids differ from the vendored config")
+    return problems
+
+
+def cmd_manifest(args) -> int:
+    if args.write:
+        m = build_manifest()
+        with open(MANIFEST, "w", encoding="utf-8") as fh:
+            json.dump(m, fh, indent=2, ensure_ascii=False)
+            fh.write("\n")
+        print(f"pherkad: wrote {MANIFEST} ({len(m['files'])} file(s), {len(m['rule_ids'])} rule id(s), version {m['version']})")
+        return 0
+    if args.verify:
+        problems = verify_manifest()
+        for p in problems:
+            print(f"manifest: {p}")
+        print(f"pherkad: manifest {'verified' if not problems else 'does not match: ' + str(len(problems)) + ' problem(s)'}")
+        return 1 if problems else 0
+    print(json.dumps(build_manifest(), indent=2, ensure_ascii=False))
+    return 0
+
+
+def check_overlay(overlay_path: str) -> tuple[list[str], list[str]]:
+    """(errors, warnings) for a downstream overlay against the shipped base."""
+    errors, warnings = [], []
+    try:
+        with open(overlay_path, encoding="utf-8") as fh:
+            ov = json.load(fh)
+    except (OSError, json.JSONDecodeError) as exc:
+        return [f"cannot read overlay: {exc}"], []
+    voicelint._validate(ov)  # exits 2 on a structural problem, as the linter would
+    base = voicelint.load_config(voicelint.DEFAULTS_PATH)
+    for field in voicelint._LIST_FIELDS:
+        shipped = voicelint.rule_entries(base, field)
+        ids = {e["id"] for e in shipped}
+        pats = {e["pattern"] for e in shipped}
+        for r in ov.get("remove_" + field, []):
+            rid = r if isinstance(r, str) else r.get("id")
+            pat = r if isinstance(r, str) else r.get("pattern")
+            if rid not in ids and pat not in pats:
+                errors.append(f"remove_{field}: {rid or pat!r} names no shipped rule; the removal does nothing")
+        for a in ov.get("add_" + field, []):
+            e = voicelint._norm_entry(field, a)
+            if e["id"] in ids:
+                warnings.append(f"add_{field}: {e['id']} is already a shipped rule; the addition is skipped")
+            elif e["pattern"] in pats:
+                warnings.append(f"add_{field}: {e['pattern']!r} is already shipped (as a different id); the addition is skipped")
+        if field in ov and shipped:
+            warnings.append(f"{field}: the overlay replaces the whole shipped list ({len(shipped)} rules) with {len(ov[field])}; "
+                            f"use add_/remove_ to inherit")
+    for k in (ov.get("structure") or {}):
+        if not k.startswith("_") and k not in voicelint._STRUCTURE_KEYS:
+            errors.append(f"structure.{k}: not a threshold this base knows")
+    return errors, warnings
+
+
+def cmd_check_overlay(args) -> int:
+    errors, warnings = check_overlay(args.overlay)
+    for w in warnings:
+        print(f"warning: {w}")
+    for e in errors:
+        print(f"error: {e}")
+    cfg = voicelint.load_config(args.overlay)
+    n = len(all_rules(cfg))
+    print(f"pherkad: overlay {args.overlay} on base {_version()}: {len(errors)} error(s), {len(warnings)} warning(s); "
+          f"{n} rule(s) effective")
+    return 1 if errors else 0
+
+
 def _parse_location(loc: str):
     """path:line or path:line:rule_id."""
     parts = loc.rsplit(":", 2)
@@ -508,6 +664,13 @@ def main(argv=None) -> int:
     pdd.add_argument("--root")
     pdd.add_argument("--no-structure", action="store_true")
     pdd.set_defaults(fn=cmd_decisions)
+    pm = sub.add_parser("manifest", help="the release manifest: print, --write at release, --verify in CI and downstream")
+    pm.add_argument("--write", action="store_true")
+    pm.add_argument("--verify", action="store_true")
+    pm.set_defaults(fn=cmd_manifest)
+    po = sub.add_parser("check-overlay", help="does a downstream overlay still fit this base?")
+    po.add_argument("overlay")
+    po.set_defaults(fn=cmd_check_overlay)
     pr = sub.add_parser("rules", help="list every rule both engines would run")
     pr.add_argument("--surface")
     pr.add_argument("--config")

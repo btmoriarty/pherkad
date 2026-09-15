@@ -26,7 +26,7 @@ python3 skills/pherkad/tools/pherkad.py check --format sarif draft.md     # for 
 python3 skills/pherkad/tools/pherkad.py check --advisory structure. --strict draft.md   # structural findings reported, never counted
 ```
 
-Every finding carries the same fields (line, col, severity, rule, match, message, rule_id, engine), the two engines' overlap is removed, and one density is computed over both. A warning you have read and ruled on can be recorded once (`pherkad.py decide --decisions FILE --reason "..." path:line`) and stays quiet, uncounted, until the line, the rule, or the number of occurrences changes; `pherkad.py decisions` says which records still match and `--prune` drops the stale ones, and nothing writes a decision without a reason. The pieces still run on their own:
+Every finding carries the same fields (line, col, severity, rule, match, message, rule_id, engine), the two engines' overlap is removed, and one density is computed over both. A warning you have read and ruled on can be recorded once (`pherkad.py decide --decisions FILE --reason "..." path:line`) and stays quiet, uncounted, until the line, the rule, or the number of occurrences changes; `pherkad.py decisions` says which records still match and `--prune` drops the stale ones, and nothing writes a decision without a reason. `pherkad.py manifest --verify` proves a vendored copy is what it says it is, and `pherkad.py check-overlay OVERLAY` says whether a downstream overlay still fits this base. The pieces still run on their own:
 
 The judgment layer needs Claude; the linter does not. Put it in a pre-commit hook or CI step and it flags the mechanical tells in any Markdown, plain-text, or HTML draft:
 

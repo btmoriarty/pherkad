@@ -25,7 +25,7 @@ One ordered list, drawn from `docs/priority-fixes.md` (what is still wrong) and 
 | 5 | Done, 0.5.7. **Shared Markdown extraction** for both tools: code, blockquotes, tables, headings, lists, directives, masked once. voicelint stops linting quoted text. | 4 | One masking function, tested once, imported by both. | 1 |
 | 6 | Done, 0.5.8. **Combined runner.** `pherkad.py check --surface X --format text|json|sarif FILE...`: both engines, one finding schema, one dedup, one density over both. | 4, 5 | `lint-voice.sh` calls one command and parses one format. | 3 |
 | 7 | Done, 0.5.9. **Decision file.** A project-owned record `{rule_id, path, context_hash, occurrence_count, rule_hash, disposition, reason}`; an accepted warning stays quiet until the text, the rule, or the count changes; new findings are reported separately; never auto-accept. | 6 | The saga's 294 advisory warnings can be triaged once and stay triaged. | 3 |
-| 8 | **Release manifest and overlay check.** `bundle-manifest.json` with version, schema, hashes, rule IDs; `--check-overlay` reports `remove_` entries that match nothing; `sync-voicelint.sh` verifies against the manifest. | 1 | A downstream `remove_` for a dropped rule fails loudly. | 1 |
+| 8 | Done, 0.5.10. **Release manifest and overlay check.** `bundle-manifest.json` with version, schema, hashes, rule IDs; `--check-overlay` reports `remove_` entries that match nothing; `sync-voicelint.sh` verifies against the manifest. | 1 | A downstream `remove_` for a dropped rule fails loudly. | 1 |
 
 ## Phase 3: the judgment layer and the loop
 

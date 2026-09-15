@@ -1,6 +1,6 @@
 # Priority fixes (2026-09-15)
 
-Status 2026-09-15 evening: rows 1, 2, 3, 4, 8, and 9 are done (0.5.3 gave rules ids; 0.5.6 fixed structlint; 0.5.7 shared the Markdown reading). Row 5 closed in 0.5.8 (one density over both engines); row 7's count came back zero in 0.5.5 and the phrases stay. Rows 6, 10, 11, and 12 remain.
+Status 2026-09-15 evening: rows 1, 2, 3, 4, 8, and 9 are done (0.5.3 gave rules ids; 0.5.6 fixed structlint; 0.5.7 shared the Markdown reading). Row 5 closed in 0.5.8 (one density over both engines); row 7's count came back zero in 0.5.5 and the phrases stay. Row 12 closed in 0.5.10 (check-overlay). Rows 6, 10, and 11 remain: two are the author's prose, one is the eval harness.
 
 What is left after the Codex review of 2026-09-15 (`docs/codex-review-2026-09-15.md`) and the two releases that answered it (0.5.1, the correctness bugs; 0.5.2, the rule fixes and the counted calibration). Fixes only; features are a separate list. Ranked by what a wrong answer costs, then by size. Each row names its evidence so the fix can be tested before it is believed.
 
