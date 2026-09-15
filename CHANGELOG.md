@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.5.14 (2026-09-15)
+
+Item 12 of `docs/ROADMAP.md`, the revision experiment.
+
+- **`eval/study.py plan --task revise`** plans the question the tools exist to answer: does their feedback improve a draft more than another editing pass would? One starting draft per writer, five arms: `untouched`, `generic` (a self-review with no Pherkad input, the control, and required), `mechanical` (the findings of `pherkad.py check` and nothing else), `judgment` (the skill's quick-mode rules against the profile, every mechanical call disabled), `both`. `--repeats N` runs each arm N times on the same source so stability is measured. `prompts` writes one prompt per item with the right blocks (the mechanical arms carry the findings, the judgment arms the profile, the untouched arm is copied) and `--model` records what runs them. `sheet` shuffles the arms per writer under blind ids and asks for voice, a fidelity flag, useful and unnecessary edit counts, and minutes. `score` reports per writer and arm, with a flagged draft counting as a failure of its arm whatever its rating, and each arm's rating minus the generic arm's as the primary outcome, pooled across writers.
+- **Provenance on every item**, in both tasks: the tool version, the effective rule set's hash, the profile's hash, the prompt's hash, and the model. A result can be traced to what made it.
+- The authoring task is unchanged apart from the provenance fields; the two tasks share the writers, briefs, sheet, and ratings machinery. `eval/README.md` documents the revision task.
+- `eval/test_study.py` gains an end-to-end run of the revision task in a temporary data directory: plan, missing-source report, prompts with the right blocks per arm, sheet, ratings, score with a flagged repeat.
+- `VERSION` 0.5.14.
+
 ## v0.5.13 (2026-09-15)
 
 Item 11 of `docs/ROADMAP.md`, surfaces, which closes phase 3.
