@@ -34,6 +34,9 @@ jobs:
       - name: Run the replycheck tests
         run: python3 skills/pherkad/tools/test_replycheck.py
 
+      - name: Run the corpusscan tests
+        run: python3 skills/pherkad/tools/test_corpusscan.py
+
       - name: Run the eval scorer tests
         run: python3 eval/test_study.py
 

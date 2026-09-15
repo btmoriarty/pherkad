@@ -336,7 +336,7 @@ def _read_json(path: str, what: str) -> dict:
     return cfg
 
 
-def load_config(path: str | None) -> dict:
+def load_config(path: str | None, base: str | None = None) -> dict:
     """Load the effective rule set: the shipped defaults, then one user overlay.
 
     The base is always ``voice_config.json`` beside this script. If it is
@@ -347,20 +347,28 @@ def load_config(path: str | None) -> dict:
     base: unlisted top-level fields and unlisted nested keys inherit, listed
     objects merge key by key, listed arrays replace, and add_/remove_ keys amend
     a shipped list without restating it. ``--print-config`` shows the result.
+
+    ``base`` names another file to use as the base instead of the shipped one;
+    the corpus tools use it to run an older release's rule set under the same
+    overlay. It is not a CLI option: the linter itself always runs the shipped
+    base, so a vendored copy cannot be pointed at a stale one by accident.
     """
-    if not os.path.exists(DEFAULTS_PATH):
+    base_path = base or DEFAULTS_PATH
+    if not os.path.exists(base_path):
+        if base:
+            _fail(f"base rule set not found at {base_path}")
         _fail(f"shipped rule set not found at {DEFAULTS_PATH}; "
               "voice_config.json must sit beside voicelint.py")
-    base = _apply_list_ops(_read_json(DEFAULTS_PATH, "shipped rule set"))
+    base_cfg = _apply_list_ops(_read_json(base_path, "shipped rule set"))
 
     overlay = path
     if not overlay:
         cwd_cfg = os.path.join(os.getcwd(), "voice_config.json")
         if os.path.exists(cwd_cfg) and not os.path.samefile(cwd_cfg, DEFAULTS_PATH):
             overlay = cwd_cfg
-    if not overlay or (os.path.exists(overlay) and os.path.samefile(overlay, DEFAULTS_PATH)):
-        return base
-    merged = _deep_merge(base, _read_json(overlay, "config"))
+    if not overlay or (os.path.exists(overlay) and os.path.samefile(overlay, base_path)):
+        return base_cfg
+    merged = _deep_merge(base_cfg, _read_json(overlay, "config"))
     return _apply_list_ops(merged)
 
 
