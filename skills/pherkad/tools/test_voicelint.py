@@ -266,6 +266,110 @@ class ConfigLayering(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# 3b. Stable rule ids
+# ---------------------------------------------------------------------------
+class RuleIds(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.d = self.tmp.name
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def load(self, body):
+        return voicelint.load_config(write(self.d, "c.json", json.dumps(body)))
+
+    def test_every_rule_has_a_unique_id(self):
+        ids = [r["id"] for r in voicelint.all_rules(DEFAULT)]
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertTrue(all(voicelint._ID_RE.match(i) for i in ids))
+
+    def test_string_entries_derive_ids(self):
+        self.assertEqual(voicelint._derive_id("banned_phrases", "game-changer"), "banned.game-changer")
+        self.assertEqual(voicelint._derive_id("soft_phrases", "worth more to [word] than"),
+                         "soft.worth-more-to-word-than")
+        self.assertTrue(voicelint._derive_id("soft_phrases", r"re:\bx\b").startswith("soft.re-"))
+
+    def test_colliding_slugs_stay_distinct(self):
+        ids = {r["id"] for r in voicelint.all_rules(DEFAULT)}
+        self.assertIn("soft.gut-check", ids)
+        self.assertEqual(sum(1 for i in ids if i.startswith("soft.gut-check")), 2)
+
+    def test_findings_carry_the_id(self):
+        fs = voicelint.check("This is a game-changer. In the current landscape, nobody checks.", DEFAULT)
+        self.assertEqual({f.rule_id for f in fs}, {"banned.game-changer", "soft.abstract-landscape"})
+        fs = voicelint.check("We shipped — then paused. quietly quietly quietly it went.", DEFAULT)
+        self.assertIn("dash", {f.rule_id for f in fs})
+        self.assertIn("overuse.quietly", {f.rule_id for f in fs})
+
+    def test_remove_by_id(self):
+        # The point of the change: an overlay drops a shipped regex without pasting it.
+        cfg = self.load({"remove_soft_phrases": ["soft.abstract-landscape"]})
+        self.assertNotIn("soft-cliche", rules("In the current landscape, nobody checks.", cfg))
+        self.assertIn("soft-cliche", rules("The landscape of the field.", cfg), "other rules untouched")
+
+    def test_remove_by_pattern_still_works(self):
+        cfg = self.load({"remove_banned_phrases": ["game-changer"]})
+        self.assertNotIn("banned-phrase", rules("This is a game-changer.", cfg))
+
+    def test_add_an_object_rule(self):
+        cfg = self.load({"add_banned_phrases": [
+            {"id": "banned.circle-back", "pattern": "circle back", "rationale": "meeting filler",
+             "fires": ["Let us circle back."], "clean": ["The circle is back."]}]})
+        fs = voicelint.check("Let us circle back.", cfg)
+        self.assertEqual([f.rule_id for f in fs], ["banned.circle-back"])
+
+    def test_add_skips_a_duplicate_by_id_or_pattern(self):
+        cfg = self.load({"add_banned_phrases": ["game-changer", {"id": "banned.game-changer", "pattern": "gamechanger"}]})
+        n = sum(1 for e in voicelint.rule_entries(cfg, "banned_phrases") if e["id"] == "banned.game-changer")
+        self.assertEqual(n, 1)
+
+    def test_duplicate_explicit_ids_are_a_config_error(self):
+        p = write(self.d, "dup.json", json.dumps({"banned_phrases": [
+            {"id": "banned.x", "pattern": "one"}, {"id": "banned.x", "pattern": "two"}]}))
+        self.assertEqual(run(["--config", p, "-"], "ok")[0], 2)
+
+    def test_bad_rule_objects_are_config_errors(self):
+        for desc, body in {
+            "no pattern": {"banned_phrases": [{"id": "banned.x"}]},
+            "bad id": {"banned_phrases": [{"id": "Banned X", "pattern": "x"}]},
+            "unknown key": {"banned_phrases": [{"pattern": "x", "why": "y"}]},
+            "fires not a list": {"banned_phrases": [{"pattern": "x", "fires": "x"}]},
+        }.items():
+            with self.subTest(desc):
+                p = write(self.d, "bad.json", json.dumps(body))
+                self.assertEqual(run(["--config", p, "-"], "ok")[0], 2)
+
+    def test_ignore_line_by_id(self):
+        kept, dropped = voicelint.check_counting(
+            "This is a game-changer. <!-- voicelint: ignore-line banned.game-changer -->", DEFAULT)
+        self.assertEqual((kept, dropped), ([], 1))
+
+    def test_json_output_has_rule_id(self):
+        p = write(self.d, "t.md", "This is a game-changer.\n")
+        code, out, _ = run(["--json", p])
+        self.assertEqual(json.loads(out)["files"][p][0]["rule_id"], "banned.game-changer")
+
+    def test_list_rules(self):
+        code, out, _ = run(["--list-rules"])
+        self.assertEqual(code, 0)
+        self.assertIn("banned.game-changer\tbanned-phrase\terror\tgame-changer", out)
+        code, out, _ = run(["--list-rules", "--json"])
+        self.assertTrue(any(r["id"] == "honest-framing" for r in json.loads(out)))
+
+    def test_shipped_examples_hold(self):
+        # Every rule object that carries examples is a tested rule.
+        for field in voicelint._LIST_FIELDS:
+            for e in voicelint.rule_entries(DEFAULT, field):
+                for text in e.get("fires", []):
+                    with self.subTest(rule=e["id"], fires=text):
+                        self.assertIn(e["id"], {f.rule_id for f in voicelint.check(text, DEFAULT)})
+                for text in e.get("clean", []):
+                    with self.subTest(rule=e["id"], clean=text):
+                        self.assertNotIn(e["id"], {f.rule_id for f in voicelint.check(text, DEFAULT)})
+
+
+# ---------------------------------------------------------------------------
 # 4. Domain matching reads the host, not the whole URL
 # ---------------------------------------------------------------------------
 class DomainMatching(unittest.TestCase):

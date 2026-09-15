@@ -24,6 +24,7 @@ Usage:
     voicelint.py --json FILE       # machine-readable output
     voicelint.py --strict FILE     # warnings fail too (non-zero exit)
     voicelint.py --print-config    # the effective rule set as JSON
+    voicelint.py --list-rules      # every rule with its stable id
 
 Rules: the shipped voice_config.json beside this script is the base; --config
 (or ./voice_config.json in the working directory) is one overlay merged onto it.
@@ -37,6 +38,7 @@ Stdlib only. Runs on Python 3.8+ (exercised in CI across 3.8 through 3.12).
 from __future__ import annotations
 import argparse
 import bisect
+import hashlib
 import html
 import json
 import copy
@@ -101,9 +103,100 @@ class Finding:
     line: int
     col: int
     severity: str  # "error" | "warning"
-    rule: str
+    rule: str      # the family: banned-phrase, soft-cliche, filler, dash, ...
     match: str
     message: str
+    rule_id: str = ""  # the stable id of the one rule that fired: soft.is-the-point, dash, overuse.quietly
+
+
+# STABLE RULE IDS (2026-09-15). A list entry is either a plain string (the pattern) or an
+# object {"id", "pattern", "rationale", "since", "fires", "clean"}. A string gets its id
+# derived from the pattern (soft.is-the-point; a regex gets soft.re-<8 hex>), so every rule
+# has an id whether or not anyone wrote one, and the shipped lists stay strings where they
+# always were. The id is what a finding reports, what a downstream overlay names in
+# remove_<field> (it no longer has to paste a regex character for character), and what a
+# later decision file or corpus scan keys on. "fires" and "clean" are example sentences the
+# test suite runs, so a rule with examples is a tested rule.
+_RULE_PREFIX = {
+    "banned_phrases": "banned", "engagement_bait": "bait", "soft_phrases": "soft",
+    "filler_words": "filler", "aggregator_domains": "source",
+}
+_ID_RE = re.compile(r"^[a-z0-9][a-z0-9.-]*$")
+_ENTRY_KEYS = frozenset({"id", "pattern", "rationale", "since", "fires", "clean"})
+
+
+def _slug(text: str, limit: int = 48) -> str:
+    text = re.sub(r"\[(word|verb|det|adj)\]", r"\1", text.lower())
+    text = re.sub(r"[^a-z0-9]+", "-", text).strip("-")
+    return text[:limit].rstrip("-") or "x"
+
+
+def _derive_id(field: str, pattern: str) -> str:
+    prefix = _RULE_PREFIX.get(field, field)
+    if pattern.startswith("re:"):
+        return f"{prefix}.re-{hashlib.sha1(pattern.encode('utf-8')).hexdigest()[:8]}"
+    return f"{prefix}.{_slug(pattern)}"
+
+
+def _norm_entry(field: str, item) -> dict:
+    """A list item as an entry dict. Strings become {id, pattern}; objects keep their keys."""
+    if isinstance(item, str):
+        return {"id": _derive_id(field, item), "pattern": item}
+    entry = dict(item)
+    if not entry.get("id"):
+        entry["id"] = _derive_id(field, entry["pattern"])
+    return entry
+
+
+def rule_entries(cfg: dict, field: str) -> list[dict]:
+    """Every rule in ``field`` as an entry dict with a unique id.
+
+    Two plain strings that slug to the same id (``gut-check`` and ``gut check``)
+    keep the first id and give the second a short hash suffix, so derived ids
+    are unique and stable for a given list."""
+    out, seen = [], set()
+    for item in cfg.get(field, []):
+        entry = _norm_entry(field, item)
+        if entry["id"] in seen:
+            if isinstance(item, str):
+                entry["id"] += "-" + hashlib.sha1(item.encode("utf-8")).hexdigest()[:4]
+            else:
+                _fail(f"config field '{field}' has two rules with id '{entry['id']}'")
+        seen.add(entry["id"])
+        out.append(entry)
+    return out
+
+
+def all_rules(cfg: dict) -> list[dict]:
+    """Every rule the effective config would run, list rules and fixed rules alike,
+    as {id, family, severity, pattern, rationale}. What ``--list-rules`` prints."""
+    fam = {"banned_phrases": ("banned-phrase", "error"), "engagement_bait": ("engagement-bait", "error"),
+           "soft_phrases": ("soft-cliche", "warning"), "filler_words": ("filler", "warning"),
+           "aggregator_domains": ("source", "error")}
+    rows = []
+    for field, (family, sev) in fam.items():
+        for e in rule_entries(cfg, field):
+            rows.append({"id": e["id"], "family": family, "severity": sev,
+                         "pattern": e["pattern"], "rationale": e.get("rationale", "")})
+    if cfg.get("no_dashes", True):
+        rows.append({"id": "dash", "family": "dash", "severity": "error", "pattern": "[—–―]",
+                     "rationale": "em/en dash; use a comma, colon, or full stop"})
+    elif float(cfg.get("dash_density_cap", 0) or 0) > 0:
+        rows.append({"id": "dash-density", "family": "dash-density", "severity": "warning",
+                     "pattern": f"> {cfg['dash_density_cap']} per 100 words", "rationale": ""})
+    if cfg.get("load_bearing_literal_only", True):
+        rows.append({"id": "load-bearing-context", "family": "load-bearing-context", "severity": "warning",
+                     "pattern": "load-bearing + non-structural noun", "rationale": ""})
+    if cfg.get("no_honest_framing", True):
+        rows.append({"id": "honest-framing", "family": "honest-framing", "severity": "error",
+                     "pattern": "[det] honest [adj] NOUN", "rationale": ""})
+    if cfg.get("flag_loaded_quietly", True):
+        rows.append({"id": "loaded-adverb", "family": "loaded-adverb", "severity": "warning",
+                     "pattern": "clause-final quietly", "rationale": ""})
+    for word, cap in cfg.get("watch_words", {}).items():
+        rows.append({"id": "overuse." + _slug(word), "family": "overuse", "severity": "warning",
+                     "pattern": f"{word} > {cap} per 600 words", "rationale": ""})
+    return rows
 
 
 def _fail(msg: str) -> "NoReturn":  # type: ignore[name-defined]
@@ -121,11 +214,35 @@ def _validate(cfg: dict) -> None:
     for key in list_keys:
         if key in cfg:
             v = cfg[key]
-            if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
-                _fail(f"config field '{key}' must be a list of strings")
-            if not all(x.strip() for x in v):
-                _fail(f"config field '{key}' must not contain an empty string "
-                      "(an empty pattern would match everywhere)")
+            if not isinstance(v, list):
+                _fail(f"config field '{key}' must be a list")
+            for x in v:
+                if isinstance(x, str):
+                    if not x.strip():
+                        _fail(f"config field '{key}' must not contain an empty string "
+                              "(an empty pattern would match everywhere)")
+                    continue
+                if not isinstance(x, dict):
+                    _fail(f"config field '{key}' entries must be strings or rule objects")
+                unknown = set(x) - _ENTRY_KEYS
+                if unknown:
+                    _fail(f"config field '{key}' rule object has unknown key(s) {sorted(unknown)}")
+                if key.startswith("remove_"):
+                    if not (isinstance(x.get("id"), str) or isinstance(x.get("pattern"), str)):
+                        _fail(f"config field '{key}' rule object needs an 'id' or a 'pattern'")
+                elif not isinstance(x.get("pattern"), str) or not x["pattern"].strip():
+                    _fail(f"config field '{key}' rule object needs a non-empty 'pattern'")
+                if "id" in x and (not isinstance(x["id"], str) or not _ID_RE.match(x["id"])):
+                    _fail(f"config field '{key}' rule id {x.get('id')!r} must match [a-z0-9][a-z0-9.-]*")
+                for lk in ("fires", "clean"):
+                    if lk in x and not (isinstance(x[lk], list) and all(isinstance(t, str) for t in x[lk])):
+                        _fail(f"config field '{key}' rule '{x.get('id') or x.get('pattern')}' "
+                              f"'{lk}' must be a list of strings")
+                for sk in ("rationale", "since"):
+                    if sk in x and not isinstance(x[sk], str):
+                        _fail(f"config field '{key}' rule '{sk}' must be a string")
+            if not key.startswith("remove_"):
+                rule_entries({key: v}, key if key in _LIST_FIELDS else key[4:])  # duplicate-id check
     if "watch_words" in cfg:
         ww = cfg["watch_words"]
         if not isinstance(ww, dict) or not all(
@@ -182,11 +299,30 @@ def _apply_list_ops(cfg: dict) -> dict:
         if not adds and not removes:
             continue
         merged = list(cfg.get(field, []))
+        present = {(e["id"], e["pattern"]) for e in rule_entries({field: merged}, field)}
+        ids = {i for i, _ in present}
+        pats = {p for _, p in present}
         for item in adds:
-            if item not in merged:
-                merged.append(item)
-        drop = set(removes)
-        cfg[field] = [x for x in merged if x not in drop]
+            e = _norm_entry(field, item)
+            if e["id"] in ids or e["pattern"] in pats:
+                continue
+            merged.append(item)
+            ids.add(e["id"]); pats.add(e["pattern"])
+        # A remove entry names a rule by id or by pattern; either form works for
+        # either kind of entry, so an overlay can drop a shipped regex by its id.
+        drop_ids, drop_pats = set(), set()
+        for r in removes:
+            if isinstance(r, str):
+                drop_ids.add(r); drop_pats.add(r)
+            else:
+                if r.get("id"): drop_ids.add(r["id"])
+                if r.get("pattern"): drop_pats.add(r["pattern"])
+        kept = []
+        for item, e in zip(merged, rule_entries({field: merged}, field)):
+            if e["id"] in drop_ids or e["pattern"] in drop_pats:
+                continue
+            kept.append(item)
+        cfg[field] = kept
     return cfg
 
 
@@ -380,9 +516,10 @@ def _suppression_map(text: str) -> dict:
     directive. A directive is recognized only inside an HTML comment:
     ``<!-- voicelint: ignore-line -->`` suppresses the line it sits on;
     ``<!-- voicelint: ignore-next-line -->`` suppresses the following line.
-    Rule names after the verb limit it to those rules
-    (``<!-- voicelint: ignore-line filler -->``); with none, the whole line is
-    suppressed (``*``).
+    Rule names after the verb limit it to those rules, by family
+    (``<!-- voicelint: ignore-line filler -->``) or by rule id
+    (``<!-- voicelint: ignore-line soft.is-the-point -->``); with none, the
+    whole line is suppressed (``*``).
 
     The comment requirement, plus running this over the code-masked text, is
     deliberate: a directive written in prose or backticked as code must not be
@@ -393,7 +530,7 @@ def _suppression_map(text: str) -> dict:
             r"<!--\s*voicelint:\s*ignore(-next-line|-line)?\b(.*?)-->",
             line, re.IGNORECASE):
             target = i + 1 if m.group(1) == "-next-line" else i
-            names = set(re.findall(r"[A-Za-z][\w-]*", m.group(2))) or {"*"}
+            names = set(re.findall(r"[A-Za-z][\w.-]*", m.group(2))) or {"*"}
             supp.setdefault(target, set()).update(names)
     return supp
 
@@ -433,13 +570,17 @@ def check_counting(text: str, cfg: dict):
         return [], 0
     suppress = _suppression_map(text)
     allow = _allow_phrases(text)
+    # Once read, a directive comment is blanked so its own words are not linted:
+    # "ignore-line banned.game-changer" names the phrase it silences.
+    text = re.sub(r"<!--\s*voicelint(?:-allow)?:.*?-->",
+                  lambda m: re.sub(r"[^\n]", " ", m.group(0)), text, flags=re.S)
     out: list[Finding] = []
 
     spans: list[tuple[int, int]] = []  # parallel to out: character offsets of each match
 
-    def add(m, severity, rule, message):
+    def add(m, severity, rule, message, rule_id=None):
         line, col = at(m.start())
-        out.append(Finding(line, col, severity, rule, m.group(0).strip(), message))
+        out.append(Finding(line, col, severity, rule, m.group(0).strip(), message, rule_id or rule))
         spans.append((m.start(), m.end()))
 
     # em / en / horizontal bar. An en dash between digits is a range (pages 10–12,
@@ -494,25 +635,30 @@ def check_counting(text: str, cfg: dict):
             add(m, "error", "honest-framing",
                 "'the honest X' performs candour instead of exercising it; cut it and say the thing")
 
-    for phrase in cfg.get("banned_phrases", []):
+    for e in rule_entries(cfg, "banned_phrases"):
+        phrase = e["pattern"]
         for m in _iter_phrase(re.escape(phrase), phrase, text):
-            add(m, "error", "banned-phrase", f"canned phrase: '{phrase}'")
+            add(m, "error", "banned-phrase", f"canned phrase: '{phrase}'", e["id"])
 
-    for phrase in cfg.get("engagement_bait", []):
+    for e in rule_entries(cfg, "engagement_bait"):
+        phrase = e["pattern"]
         for m in _iter_phrase(re.escape(phrase), phrase, text):
-            add(m, "error", "engagement-bait", f"manufactured-stance opener: '{phrase}'")
+            add(m, "error", "engagement-bait", f"manufactured-stance opener: '{phrase}'", e["id"])
 
-    for phrase in cfg.get("soft_phrases", []):
+    for e in rule_entries(cfg, "soft_phrases"):
+        phrase = e["pattern"]
+        label = e.get("rationale") or phrase
         for m in _iter_phrase(_soft_to_regex(phrase), phrase, text):
-            add(m, "warning", "soft-cliche", f"overused AI phrasing: '{phrase}'")
+            add(m, "warning", "soft-cliche", f"overused AI phrasing: '{label}'", e["id"])
 
     if cfg.get("flag_loaded_quietly", True):
         for m in _iter(r"\bquietly\b(?=\s*(?:[.,;:!?)\]]|$))", text, flags=re.IGNORECASE | re.MULTILINE):
             add(m, "warning", "loaded-adverb", "trailing 'quietly'; the insinuating position. Put it before the verb or cut it")
 
-    for word in cfg.get("filler_words", []):
+    for e in rule_entries(cfg, "filler_words"):
+        word = e["pattern"]
         for m in _iter(rf"\b{re.escape(word)}\b", text):
-            add(m, "warning", "filler", f"filler/intensifier: '{word}'")
+            add(m, "warning", "filler", f"filler/intensifier: '{word}'", e["id"])
 
     # Watch-word overuse scales with length, like dash_density_cap above. The configured cap applies
     # at a baseline piece length; longer texts (a long entry, an assembled work) get proportional
@@ -525,9 +671,11 @@ def check_counting(text: str, cfg: dict):
         cap = max(int(limit), round(int(limit) * _ww_words / _WW_BASELEN))
         if len(hits) > cap:
             add(hits[cap], "warning", "overuse",
-                f"'{word}' used {len(hits)} times (cap {cap} for {_ww_words} words); vary it")
+                f"'{word}' used {len(hits)} times (cap {cap} for {_ww_words} words); vary it",
+                "overuse." + _slug(word))
 
-    domains = [d.lower().strip(".") for d in cfg.get("aggregator_domains", []) if d.strip(".")]
+    domains = [(e["pattern"].lower().strip("."), e["id"])
+               for e in rule_entries(cfg, "aggregator_domains") if e["pattern"].strip(".")]
     if domains:
         # Only scheme-bearing URLs are scanned; a bare "msn.com/x" with no
         # scheme is left to the judgment layer, since a loose host regex would
@@ -537,7 +685,7 @@ def check_counting(text: str, cfg: dict):
             if not host:
                 continue
             labels = host.split(".")
-            for domain in domains:
+            for domain, rule_id in domains:
                 # A dotted domain matches as a host suffix (msn.com in
                 # www.msn.com); a bare label matches a whole label
                 # (timesofindia in timesofindia.indiatimes.com). Neither
@@ -547,7 +695,7 @@ def check_counting(text: str, cfg: dict):
                 else:
                     hit = domain in labels
                 if hit:
-                    add(m, "error", "source", f"low-trust/aggregator source: {domain}")
+                    add(m, "error", "source", f"low-trust/aggregator source: {domain}", rule_id)
                     break
 
     out = _collapse_overlaps(out, spans)
@@ -556,7 +704,7 @@ def check_counting(text: str, cfg: dict):
         kept, dropped = [], 0
         for f in out:
             names = suppress.get(f.line)
-            if names and ("*" in names or f.rule in names):
+            if names and ("*" in names or f.rule in names or f.rule_id in names):
                 dropped += 1
                 continue
             # A marker declares the PHRASE ("it is worth") while a rule fires on the
@@ -627,11 +775,22 @@ def main(argv=None) -> int:
     ap.add_argument("--quiet", action="store_true", help="only print the summary")
     ap.add_argument("--print-config", action="store_true",
                     help="print the effective rule set (defaults plus overlay) as JSON and exit")
+    ap.add_argument("--list-rules", action="store_true",
+                    help="print every rule the effective config runs (id, family, severity, pattern, rationale) and exit")
     args = ap.parse_args(argv)
 
     cfg = load_config(args.config or None)
     if args.print_config:
         print(json.dumps(cfg, indent=2, ensure_ascii=False))
+        return 0
+    if args.list_rules:
+        rows = all_rules(cfg)
+        if args.json:
+            print(json.dumps(rows, indent=2, ensure_ascii=False))
+        else:
+            for r in rows:
+                tail = f"\t{r['rationale']}" if r["rationale"] else ""
+                print(f"{r['id']}\t{r['family']}\t{r['severity']}\t{r['pattern']}{tail}")
         return 0
     if not args.files:
         ap.error("no files given (or - for stdin)")
@@ -663,7 +822,7 @@ def main(argv=None) -> int:
         if not args.quiet:
             for path, findings in results:
                 for f in findings:
-                    print(f"{path}:{f.line}:{f.col} [{f.severity}] {f.rule}: "
+                    print(f"{path}:{f.line}:{f.col} [{f.severity}] {f.rule} ({f.rule_id}): "
                           f"{f.message}  ->  {f.match!r}")
         tail = f", {suppressed} suppressed" if suppressed else ""
         print(f"voicelint: {errors} error(s), {warnings} warning(s){tail} "
