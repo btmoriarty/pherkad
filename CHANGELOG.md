@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.5.12 (2026-09-15)
+
+Item 10 of `docs/ROADMAP.md`, the correction ledger.
+
+- **`tools/corrections.py`**, new. A JSONL ledger, project-owned and never committed here, one record per correction: before, after, context, source, surface, kind, rationale, the proposed field and matcher, the examples, the trial, the status, and a history. `add` records a correction and classifies it (literal, templated, structural, judgment, preference, factual, exception; `--kind` overrides the guess), proposing the matcher and a `fires`/`clean` pair from the context. `trial` counts the candidate on a corpus with the pattern alone (under the full set a shipped rule wins a shared span on a tie and the candidate looks silent), stores hits, files, rate, and contexts on the record, checks the examples, and names any shipped rule that overlaps. `promote` refuses an untrialled rule, refuses a factual correction however often it recurs, and otherwise writes the overlay entry (an `add_<field>` object with id, rationale, since, fires, clean), which is where the fixtures live, and appends the mined-corrections line under a dated, sourced heading in the prose file; a judgment or preference kind gets the prose line only. `list`, `show`, `retire`.
+- **The prose is generated from the record.** The ledger is the transaction log; the mined-corrections section is a view of it.
+- **`pherkad.py check-overlay` runs an overlay's fixtures**, each rule alone, so a promoted correction's tests run wherever the overlay is checked.
+- A promotion into the shipped base joins the list itself rather than an `add_`; the tool says to write the manifest, count it, and record it.
+- `tools/test_corrections.py`, 16 tests, in CI. `corrections.jsonl` is gitignored beside the personal voice documents.
+- `VERSION` 0.5.12.
+
 ## v0.5.11 (2026-09-15)
 
 Item 9 of `docs/ROADMAP.md`, the compact judgment mode. A change to the skill's instructions, not to code.
