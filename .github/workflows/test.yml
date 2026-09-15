@@ -31,6 +31,9 @@ jobs:
       - name: Run the structlint regression suite
         run: python3 skills/pherkad/tools/test_structlint.py
 
+      - name: Run the replycheck tests
+        run: python3 skills/pherkad/tools/test_replycheck.py
+
       - name: Run the eval scorer tests
         run: python3 eval/test_study.py
 

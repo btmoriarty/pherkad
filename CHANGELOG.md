@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.5.4 (2026-09-15)
+
+Item 2 of `docs/ROADMAP.md`: the reply preflight, for the gap where nothing checked an assistant's chat replies.
+
+- **`tools/replycheck.py`**, new. Both scanners over a drafted reply under a surface overlay, one line per finding, a verdict (`PASS` exits 0, `FIX` exits 1, could-not-run exits 2), `--strict`, `--json`, `--no-structure`. Structural findings are advisory and never change the verdict; a checker that fails every terse answer gets switched off.
+- **`tools/surfaces/assistant-chat.json`**, new. An overlay for an assistant speaking to the author: the demonstrative pointer, `worth noting` and `worth saying`, question praise, markdown links, tilde paths, the section sign, the `plainly` tag, the coy withhold. Each rule carries an id, a rationale, and examples the tests run. Chat-only rules live here so the shipped defaults stay general.
+- **`tools/replycheck-hook.py`**, new. A Claude Code `Stop` hook: reads the assistant text since the last human message from the transcript, runs the same check, and on an error exits 2 with the findings so the assistant sends a corrected follow-up. One enforced revision per reply (`stop_hook_active` is honoured), warnings block only under `REPLYCHECK_STRICT=1`, and a hook that cannot read its input exits 0 rather than wedging the session.
+- **`banned_phrases` and `engagement_bait` accept `re:` patterns**, as `soft_phrases` already did, with no word-edge guard on a regex. A banned finding's message shows the rule's rationale when it has one.
+- **`docs/reply-preflight.md`** and a repository `CLAUDE.md` carry the recipe: draft to a file, check, revise at most three times, send the exact buffer that passed, and a check that did not run is not a pass. The habit it will keep catching is quoting a banned phrase in plain quotation marks; backticks are masked.
+- Evidence from the session that built it: two of eight long assistant replies would have been sent back, all on quoted examples.
+- `tools/test_replycheck.py`, 22 tests, in CI.
+- `VERSION` 0.5.4.
+
 ## v0.5.3 (2026-09-15)
 
 Item 1 of `docs/ROADMAP.md`: stable rule ids, as additive metadata. The string lists and the `add_`/`remove_` contract are unchanged, so a vendored copy and its overlay keep working as they were.
