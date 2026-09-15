@@ -193,6 +193,18 @@ class CodeMasking(unittest.TestCase):
     def test_same_phrase_in_prose_fires(self):
         self.assertIn("banned-phrase", rules("that game-changer here"))
 
+    def test_blockquote_is_someone_elses_words(self):
+        # voice-rules.md exempts direct quotations; structlint already skipped
+        # blockquotes and voicelint did not, until the shared masking layer.
+        self.assertNotIn("banned-phrase", rules("> This is a game-changer.\n"))
+        self.assertNotIn("banned-phrase", rules("> > This is a game-changer.\n"))
+        fs = voicelint.check("> quoted\n\nThis is a game-changer.\n", DEFAULT)
+        self.assertEqual([(f.rule, f.line, f.col) for f in fs], [("banned-phrase", 3, 11)])
+
+    def test_inline_quotation_is_still_prose(self):
+        # Dialogue is the author's voice; adjudicating a direct quote is the judgment layer's.
+        self.assertIn("banned-phrase", rules('She said, "this is a game-changer," and left.'))
+
     def test_masking_preserves_offsets(self):
         fs = voicelint.check("```\nx\n```\nhere game-changer now", DEFAULT)
         self.assertTrue(any(f.rule == "banned-phrase" and f.line == 4 and f.col == 6 for f in fs))

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.5.7 (2026-09-15)
+
+Item 5 of `docs/ROADMAP.md`, the shared Markdown extraction layer, which closes row 4 of `docs/priority-fixes.md`.
+
+- **`tools/mdmask.py`**, new. One reading of Markdown structure for both linters: `line_kinds(text)` classifies every line (code, blockquote, table, heading, field, list, blank, prose) and `mask(text, kinds)` blanks the named kinds, and inline code spans, to same-length whitespace so offsets never move. Fences are backtick or tilde, three or more, closed by a fence of the same character at least as long, or by the end of the file; a `>` inside a fence is code.
+- **voicelint imports it** and now masks blockquotes as well as code. A quoted passage is someone else's words, which voice-rules.md exempts, and structlint already skipped it; the two tools no longer disagree on what is prose. Inline quotation marks are still linted: in fiction the dialogue is the author's voice, and adjudicating a direct quote stays with the judgment layer. On the saga corpus no finding sat on a blockquoted line, so voicelint's count is unchanged at 6 errors and 293 warnings.
+- **structlint imports it** for code, blockquote, table, heading, field, and list detection, and drops its own copies of those regexes and its unused `QUOTED` constant. One consequence: an inline code span now keeps its width when a sentence is measured, where the old stripper collapsed it to one space, so a sentence that was only "short" because its code collapsed no longer counts. Two staccato findings on the saga corpus went away for that reason (118 to 116); both were sentences carrying a code span.
+- The saga's `sync-voicelint.sh` vendors `mdmask.py` beside `voicelint.py`; a vendored voicelint without it fails at import, loudly, rather than running with less.
+- `tools/test_mdmask.py`, 14 tests, in CI; voicelint gains cases for blockquote masking and for inline quotation staying prose.
+- `VERSION` 0.5.7.
+
 ## v0.5.6 (2026-09-15)
 
 Item 4 of `docs/ROADMAP.md`, the structlint fixes, which close rows 1, 2, 3, and 9 of `docs/priority-fixes.md`.

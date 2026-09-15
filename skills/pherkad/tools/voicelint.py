@@ -13,8 +13,9 @@ written; a hit means the configured pattern is present.
 What this layer cannot see (antithesis constructions, triplet noun piling,
 tone, direct-quote and technical-context judgment, whether prose sounds like
 *you*) is the job of the Pherkad skill's judgment pass. The linter masks code
-spans before matching, but it does not adjudicate quotations or domain context;
-that stays with the model. See references/ai_tells.md.
+spans and blockquotes before matching, but it does not adjudicate inline
+quotations or domain context; that stays with the model. See
+references/ai_tells.md.
 
 Usage:
     voicelint.py FILE [FILE ...]
@@ -50,6 +51,8 @@ from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import mdmask  # noqa: E402  (vendored beside this file wherever voicelint goes)
 
 # The shipped rule set lives beside this script as voice_config.json and is the
 # only base. There is no second copy of the defaults in Python: an earlier
@@ -409,23 +412,17 @@ def normalize_quotes(text: str) -> str:
 
 
 def mask_code(text: str) -> str:
-    """Blank Markdown code so a pattern quoted as code is not flagged.
+    """Blank what is not the author's prose, keeping every offset.
 
-    Fenced blocks (three or more backticks or tildes, closed by a matching fence
-    or by the end of the file) and inline spans (`...`) become same-height
-    whitespace: newlines stay, every other character becomes a space, so line
-    and column offsets are unchanged. This is why a doc can name a banned phrase
-    inside backticks without tripping the linter. An unclosed fence masks to the
-    end of the file, which is how Markdown renders it. It does not touch prose
-    in ordinary quotation marks; adjudicating a direct quote stays with the
-    judgment layer (see references/ai_tells.md)."""
-    def blank(m):
-        return re.sub(r"[^\n]", " ", m.group(0))
-    text = re.sub(
-        r"(?ms)^[ \t]{0,3}(?P<c>[`~])(?P=c){2,}[^\n]*\n.*?(?:^[ \t]{0,3}(?P=c){3,}[ \t]*$|\Z)",
-        blank, text)
-    text = re.sub(r"`[^`\n]*`", blank, text)
-    return text
+    Fenced code (backtick or tilde, closed or running to the end of the file),
+    inline code spans, and blockquotes become same-height whitespace, so a doc
+    can name a banned phrase in backticks, and a quoted passage (someone else's
+    words, which voice-rules.md exempts) is not held to the author's rules.
+    The reading of Markdown structure lives in mdmask.py, shared with
+    structlint, so the two tools cannot drift on what counts as prose. Inline
+    quotation marks are not masked: in fiction the dialogue is the author's
+    voice, and adjudicating a direct quote stays with the judgment layer."""
+    return mdmask.mask(text, ("code", "blockquote"))
 
 
 def _is_word_char(ch: str) -> bool:
