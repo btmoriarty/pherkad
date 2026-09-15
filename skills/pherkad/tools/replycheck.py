@@ -19,8 +19,8 @@ The recipe for the assistant (docs/reply-preflight.md): draft the reply to a
 file, run this, revise while it says FIX, bound the attempts, send the exact
 buffer that passed, and never treat a check that failed to run as a pass.
 
-Surfaces live in surfaces/<name>.json beside this script, or --surface may be a
-path. The overlay is merged onto the shipped voice_config.json by voicelint's
+Surfaces resolve through pherkad.py (a user surfaces.json first, then
+surfaces/<name>.json beside this script), or --surface may be a path. The overlay is merged onto the shipped voice_config.json by voicelint's
 own loader, so nothing here restates a rule. Structural findings (structlint)
 are advisory: they never change the verdict, because the structure checks
 over-fire by design on short replies, and a checker that fails every terse
@@ -45,25 +45,19 @@ DEFAULT_SURFACE = "assistant-chat"
 
 
 def surface_path(name: str) -> str:
-    """A surface name resolves to surfaces/<name>.json; a path is used as given.
-    An unknown surface is an error, not a guess."""
-    if os.path.sep in name or name.endswith(".json"):
-        if not os.path.exists(name):
-            sys.stderr.write(f"replycheck: no surface file at {name}\n")
-            sys.exit(2)
-        return name
-    p = os.path.join(SURFACES, name + ".json")
-    if not os.path.exists(p):
-        have = sorted(f[:-5] for f in os.listdir(SURFACES) if f.endswith(".json")) if os.path.isdir(SURFACES) else []
-        sys.stderr.write(f"replycheck: unknown surface '{name}'; have {', '.join(have) or 'none'}\n")
+    """The surface's overlay path, through pherkad's resolution (user map first,
+    then the shipped surfaces/<name>.json). An unknown surface is an error."""
+    info = pherkad.resolve_surface(name)
+    if not info["overlay"]:
+        sys.stderr.write(f"replycheck: surface '{name}' has no overlay\n")
         sys.exit(2)
-    return p
+    return info["overlay"]
 
 
 def check_reply(text: str, surface: str = DEFAULT_SURFACE, structure: bool = True) -> dict:
     """Run both scanners over ``text`` and return the result as a dict:
     surface, verdict, errors, warnings, findings (voicelint), structure (structlint)."""
-    cfg = voicelint.load_config(surface_path(surface))
+    cfg, _info = pherkad.load_layers(surface, None)
     # One run of both engines (pherkad.run_text), then split by engine: the
     # voice findings decide the verdict, the structural ones are advisory.
     # A reply is short, so the combined density never applies and is dropped.

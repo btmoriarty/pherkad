@@ -41,6 +41,12 @@ Look for `Voice_Profile.md` in the user's working folder.
 - **Present:** load it. Its markers drive Dimensions 1 through 4, 6, and 7 below. `references/example_profile.md` shows the expected shape (the persona in it is fictional).
 - **Companion files:** if `voice-rules.md` or `voice-authoring.md` sit in the same folder, load them too. A profile may be split across the three: `Voice_Profile.md` holds the personal markers, `voice-rules.md` the bans, `voice-authoring.md` the drafting guidance. Together they are the profile.
 
+## Step 0a: Name the surface
+
+Every check and every draft names its surface before anything is judged: what the text is, who is speaking (the assistant to the writer, or the writer as himself), and whether the positive register is expected. The shipped surfaces are `assistant-chat`, `technical`, `email`, `post`, `paper`, `slides`, and `fiction`; a user's `surfaces.json` can add more or point a name at its own overlay and a few approved excerpts from the same series. `python3 tools/pherkad.py surfaces` lists them with their guidance. Say the surface in the first line of any report. Do not infer one from the text when the user has not said and it is not obvious from the request; ask, since a wrong surface changes what is a fault. An unknown surface is an error, not a guess.
+
+For authoring, a surface's approved excerpts are the examples to write beside: the same register, the same series, the writer's own. Use them for rhythm and register, never as a template to fill.
+
 ## Step 0b: Choose the depth, quick or full
 
 Most checks are on a short piece the writer is about to send, and for those the seven-dimension audit is more report than the draft is worth: six fingerprint sentences and a rewrite for every flag, on a four-paragraph email, buries the two things that matter. **Quick** is the default. **Full** (Steps 1 through 6) is for a deliberate audit.
@@ -85,7 +91,7 @@ VERDICT: REVISE (3 fix). Everything else stands as written.
 
 A proposed edit changes no fact, name, number, date, source, or emphasis. When the user confirms an `intentional` or `literal` row in a project that keeps a decision file, record it once with `python3 tools/pherkad.py decide --decisions <file> --reason "<the rationale>" <path>:<line>:<rule_id>` so it stays quiet until the line or the rule changes.
 
-**Positive markers apply by surface.** A draft is not flat for lacking a scene the surface never wanted.
+**Positive markers apply by surface.** A draft is not flat for lacking a scene the surface never wanted. This table mirrors the `positive_register` field each shipped surface carries; `pherkad.py surfaces --json` is the authority when a runtime is available.
 
 | Surface | Positive register expected | Notes |
 |---|---|---|

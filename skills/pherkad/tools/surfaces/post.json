@@ -1,0 +1,8 @@
+{
+  "_surface": {
+    "speaker": "author",
+    "positive_register": "yes",
+    "guidance": "A post, an essay, a talk, an application letter: prose the author publishes as himself. The frame and the close carry the writer; the core may be plain. The positive register is expected, and a draft clean of every tell with none of the markers has flattened."
+  },
+  "_comment": "Surface overlay for published prose as the author (0.5.13)."
+}

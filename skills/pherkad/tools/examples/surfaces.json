@@ -1,0 +1,20 @@
+{
+  "_comment": "A user's surface map (surfaces.json). Names resolve here first, then to the shipped tools/surfaces/<name>.json. Each entry may point at its own overlay, add guidance, and list approved excerpts from the same series for authoring. Paths are relative to this file. Pass it with --surfaces, or PHERKAD_SURFACES, or keep it as ./surfaces.json.",
+  "email": {
+    "overlay": "surfaces/email.json",
+    "excerpts": [
+      "approved/2026-08-14-steve-update.md",
+      "approved/2026-09-01-ben-reply.md"
+    ],
+    "guidance": "Hi all, never Hi team; sign with the first name."
+  },
+  "newsletter": {
+    "overlay": "overlays/newsletter.json",
+    "excerpts": [
+      "approved/newsletter-03.md"
+    ],
+    "speaker": "author",
+    "positive_register": "yes",
+    "guidance": "The monthly note; the close carries the voice."
+  }
+}

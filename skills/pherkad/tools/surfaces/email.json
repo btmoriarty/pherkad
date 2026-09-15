@@ -1,0 +1,8 @@
+{
+  "_surface": {
+    "speaker": "author",
+    "positive_register": "profile",
+    "guidance": "A message to a person. One of the profile's markers is enough where the profile shows it in this register; a status email needs none. The greeting and the close carry the voice; the body may be plain."
+  },
+  "_comment": "Surface overlay for email and messages as the author (0.5.13). No rule changes; the surface carries the register expectation."
+}

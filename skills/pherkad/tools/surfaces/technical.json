@@ -1,0 +1,12 @@
+{
+  "_surface": {
+    "speaker": "author",
+    "positive_register": "no",
+    "guidance": "A technical answer, a bug report, a commit message, a README section. Precision is the register: hold it to the tell catalog and to accuracy, never to the archetype. 'significant' and 'robust' are terms of art here and do not count as filler."
+  },
+  "_comment": "Surface overlay for technical writing as the author (0.5.13).",
+  "remove_filler_words": [
+    "significant",
+    "robust"
+  ]
+}

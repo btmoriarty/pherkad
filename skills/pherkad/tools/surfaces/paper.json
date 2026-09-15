@@ -1,0 +1,12 @@
+{
+  "_surface": {
+    "speaker": "author",
+    "positive_register": "frame",
+    "guidance": "A paper or a submission. The positive register is read in the frame and the transitions only; the technical core is held to accuracy and the catalog, per Genre calibration. 'significant' and 'robust' are statistical terms here."
+  },
+  "_comment": "Surface overlay for papers as the author (0.5.13).",
+  "remove_filler_words": [
+    "significant",
+    "robust"
+  ]
+}

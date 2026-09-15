@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.5.13 (2026-09-15)
+
+Item 11 of `docs/ROADMAP.md`, surfaces, which closes phase 3.
+
+- **A surface names what the text is**: who is speaking (`assistant` to the author, or the `author` as himself) and whether the positive register is expected (`no`, `profile`, `frame`, `yes`, or `own-voice-document`). Seven ship in `tools/surfaces/`, each an overlay with a `_surface` block carrying speaker, register, and guidance: `assistant-chat` (the chat rules; no marker expected), `technical` (`significant` and `robust` are terms of art, not filler), `email`, `post`, `paper` (register in the frame only; the statistical terms are not filler), `slides` (the interrogative-heading threshold drops to 18 percent, where decks were measured to separate), and `fiction` (the project's own voice document governs; the personal profile does not apply).
+- **Layering.** `--surface X --config OVERLAY` applies the shipped base, then the surface's overlay, then the project's, in that order; the two flags are no longer exclusive. The saga gate now runs `--surface fiction --config <its overlay>`, so every gate names its surface.
+- **A user map**, `surfaces.json` (or `--surfaces`, or `PHERKAD_SURFACES`), is consulted before the shipped set. It can add a surface with its own overlay, or point a shipped name at approved excerpts from the same series and extra guidance; `tools/examples/surfaces.json` shows the shape. `pherkad.py surfaces` lists every surface with speaker, register, guidance, overlay, and which excerpts exist. An unknown surface is an error listing the known ones; a bad speaker or register, or a missing overlay or excerpt path, is reported by name.
+- **`SKILL.md` gains Step 0a, name the surface**: say it in the first line of any report, ask rather than infer when it is not obvious, and for authoring write beside the surface's approved excerpts for rhythm and register, never as a template. The positive-register table in quick mode now mirrors the surfaces' field, with `pherkad.py surfaces --json` as the authority.
+- `replycheck` resolves its surface through the same path. `--format json` carries the surface, speaker, and register.
+- `test_pherkad.py` grows by 8 surface cases.
+- `VERSION` 0.5.13.
+
 ## v0.5.12 (2026-09-15)
 
 Item 10 of `docs/ROADMAP.md`, the correction ledger.
