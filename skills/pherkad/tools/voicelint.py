@@ -635,15 +635,25 @@ def check_counting(text: str, cfg: dict):
             add(m, "error", "honest-framing",
                 "'the honest X' performs candour instead of exercising it; cut it and say the thing")
 
+    # A banned or bait entry is a literal phrase, or a raw regex under "re:" (no
+    # word-edge guard then; the regex says where it ends). The message shows the
+    # rationale when the entry has one, since a regex is not a readable label.
+    def literal_or_regex(phrase):
+        if phrase.startswith("re:"):
+            return phrase[3:], ""
+        return re.escape(phrase), phrase
+
     for e in rule_entries(cfg, "banned_phrases"):
-        phrase = e["pattern"]
-        for m in _iter_phrase(re.escape(phrase), phrase, text):
-            add(m, "error", "banned-phrase", f"canned phrase: '{phrase}'", e["id"])
+        pat, guard = literal_or_regex(e["pattern"])
+        label = e.get("rationale") or e["pattern"]
+        for m in _iter_phrase(pat, guard, text):
+            add(m, "error", "banned-phrase", f"canned phrase: '{label}'", e["id"])
 
     for e in rule_entries(cfg, "engagement_bait"):
-        phrase = e["pattern"]
-        for m in _iter_phrase(re.escape(phrase), phrase, text):
-            add(m, "error", "engagement-bait", f"manufactured-stance opener: '{phrase}'", e["id"])
+        pat, guard = literal_or_regex(e["pattern"])
+        label = e.get("rationale") or e["pattern"]
+        for m in _iter_phrase(pat, guard, text):
+            add(m, "error", "engagement-bait", f"manufactured-stance opener: '{label}'", e["id"])
 
     for e in rule_entries(cfg, "soft_phrases"):
         phrase = e["pattern"]
