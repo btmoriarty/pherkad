@@ -9,18 +9,19 @@ Run a structured review of whether written output matches one specific person's 
 
 Pherkad runs a structured diagnostic against text to surface generic phrasing, voice drift, and tone misalignment. It produces an actionable report with cited evidence, never a bare score.
 
-Three parts do the work:
+Five parts do the work:
 
 - **The tell catalog** (this skill plus `references/ai_tells.md`): documented AI-writing tells and the scoring protocol. Generic, shared by every user.
 - **The voice profile** (`Voice_Profile.md` in the user's working folder): what this one writer actually sounds like. Personal, built once, refined over time. Never part of this repository.
 - **The mechanical linter** (`tools/voicelint.py`): the configurable, regex-based subset of the catalog. It finds literal patterns and a small number of heuristic context checks. The model must review technical uses, quotations, and other cases that need judgment.
 - **The structural checker** (`tools/structlint.py`): the half of the catalog that has no string to match. It reads sentence and header shape, so it catches the clipped balanced parallel, a run of three or more short sentences, and a header that strikes a pose rather than naming its subject. Everything it reports is a warning, because these are judgment calls that over-fire by design. Run it alongside the linter, never instead of it.
+- **The combined runner** (`tools/pherkad.py check`): both mechanical engines in one command, one finding list with a stable `rule_id` on every row, one density over both. This is the command to run; the two engines still run alone when only one is wanted.
 
 ## Modes
 
 Pherkad runs in two directions against the same profile and the same tell catalog.
 
-- **Validation** (Steps 0 through 6 below): check an existing draft and report, with cited evidence and a verdict.
+- **Validation**: check an existing draft and report, with cited evidence and a verdict. Validation has two depths, **quick** and **full**, chosen in Step 0b.
 - **Authoring** (`references/authoring.md`): draft or rewrite prose in the writer's voice in the first place, then self-validate before returning it. Use this whenever the user asks for a draft or rewrite in their voice, or wants text they will send as themselves.
 
 Both begin by loading `Voice_Profile.md`. Without it, build the profile first.
@@ -39,6 +40,65 @@ Look for `Voice_Profile.md` in the user's working folder.
 - **Missing:** run the profile-builder interview in `references/profile_builder.md` before validating anything. Validating without a profile produces a generic AI-tell scan at best; say so plainly if the user wants a scan anyway, and label the output as profile-less.
 - **Present:** load it. Its markers drive Dimensions 1 through 4, 6, and 7 below. `references/example_profile.md` shows the expected shape (the persona in it is fictional).
 - **Companion files:** if `voice-rules.md` or `voice-authoring.md` sit in the same folder, load them too. A profile may be split across the three: `Voice_Profile.md` holds the personal markers, `voice-rules.md` the bans, `voice-authoring.md` the drafting guidance. Together they are the profile.
+
+## Step 0b: Choose the depth, quick or full
+
+Most checks are on a short piece the writer is about to send, and for those the seven-dimension audit is more report than the draft is worth: six fingerprint sentences and a rewrite for every flag, on a four-paragraph email, buries the two things that matter. **Quick** is the default. **Full** (Steps 1 through 6) is for a deliberate audit.
+
+| Choose | When |
+|---|---|
+| **Quick** | The draft is under about 600 words; or it is a chat reply, an email, a message, a slide, a README section; or the user asked for a check, a look, a pass, "does this read as me" |
+| **Full** | The user asked for an audit, a validation report, or scores; or the draft is a paper, an essay, a chapter, a submission; or a quick pass found the voice missing across the piece rather than in spots |
+
+Say which depth is running in the first line of the report. A user can ask for the other at any time.
+
+## Quick mode
+
+One command, one table, one line of verdict. Nothing is scored and nothing is rewritten that was not flagged.
+
+1. **Run the mechanical layer once**, if a Python runtime is available: `python3 tools/pherkad.py check --format json <draft>`, with `--surface assistant-chat` when the draft is a reply to the user rather than prose written as them, or the project's overlay with `--config` when there is one. Every finding arrives with a `rule_id`.
+2. **Read the draft once for the judgment-only rules that apply to its surface** (the table below), not the whole catalog: the antithesis and triplet families in `references/ai_tells.md` 5c and 5f, the counter-X and authenticity constructions in 5g and 5h, the structural artifacts in 5i, and whatever the profile's companion files ban that no regex expresses. Add a row for each supported hit, with `judgment` as its rule reference.
+3. **Decide each row.** A finding is not a fault until it has been read. The decision is one of:
+   - `fix`: the tell is real here; the row carries a proposed edit.
+   - `intentional`: the writer's own move (a deliberate contrast, a fragment for emphasis, a term of art). No edit.
+   - `literal`: the flagged phrase is used in its plain sense (a load-bearing wall, an API key). No edit.
+   - `not applicable`: the rule does not apply to this surface (a scene-setting opener in a bug report; a missing positive marker in a technical answer). No edit.
+   - `quoted`: someone else's words. No edit.
+4. **Read the positive register only where the surface expects it** (table below). Where it does, and the draft shows none of the profile's markers, add one row `positive-register` with decision `fix` and a proposed place to put one marker; that is the flattening signal from Step 3 of full mode, reported once, not as a verdict on every paragraph.
+5. **Verdict**: `PASS` when no row is `fix`; `REVISE` when any is; `REWRITE` only when the `positive-register` row is `fix` and three or more other rows are `fix`, in which case say so and offer full mode.
+
+**Output.** One table, then the verdict line:
+
+```
+QUICK VOICE CHECK  (surface: email; profile loaded; 412 words)
+
+| rule_ref | quote | decision | rationale | proposed_edit |
+|---|---|---|---|---|
+| honest-framing | "The honest answer is that we slipped." | fix | announces candour instead of exercising it | "We slipped." |
+| soft.is-the-point | "That is the point of the audit." | intentional | the sentence is the point, and the writer's own construction | |
+| structure.two-beat | "None of them wrong. None of them ours." | fix | the clipped symmetry is the tell, and the profile's rhythm runs longer | "None of them were wrong, and none of them were ours." |
+| judgment (5c) | "Not a failure, but a lesson." | fix | the antithesis frame | "A lesson." |
+| positive-register | | not applicable | a status email; no invented scene expected | |
+
+VERDICT: REVISE (3 fix). Everything else stands as written.
+```
+
+A proposed edit changes no fact, name, number, date, source, or emphasis. When the user confirms an `intentional` or `literal` row in a project that keeps a decision file, record it once with `python3 tools/pherkad.py decide --decisions <file> --reason "<the rationale>" <path>:<line>:<rule_id>` so it stays quiet until the line or the rule changes.
+
+**Positive markers apply by surface.** A draft is not flat for lacking a scene the surface never wanted.
+
+| Surface | Positive register expected | Notes |
+|---|---|---|
+| assistant-chat (a reply to the user) | no | Bans, dashes, honest-X, and the chat-only rules apply; no missing-marker row; short-reply cadence is advisory |
+| technical answer, bug report, commit message, README section | no | Precision is the register; hold to the tell catalog and accuracy |
+| email, message to a person | where the profile shows it in that register | One marker is enough; a status email needs none |
+| post, essay, talk, application letter | yes | The frame and the close carry the writer; the core may be plain |
+| paper, submission | in the frame and transitions only | The technical core is held to accuracy, per Genre calibration |
+| fiction | by the work's own voice document, not this profile | See the project's voice law; the personal profile does not apply |
+
+## Full mode: Steps 1 through 6
+
+The audit. Every step below runs; the output is the VOICE VALIDATION REPORT.
 
 ## Step 1: Extract a voice fingerprint
 
@@ -77,14 +137,13 @@ For Dimension 5 the scale inverts to the tell catalog: 5 means clean of tells, 1
 
 ## Step 3: Flag generic or flattened sentences (individual hits)
 
-If a Python runtime is available, first run the mechanical layer for exact line-numbered hits:
+If a Python runtime is available, first run the mechanical layer for exact line-numbered hits, both engines in one call:
 
 ```
-python3 tools/voicelint.py --json --strict <draft>
-python3 tools/structlint.py --json <draft>
+python3 tools/pherkad.py check --format json <draft>
 ```
 
-Then walk the full catalog in `references/ai_tells.md` (categories 5a through 5i) and flag each sentence with a supported tell, including the structural families the linter cannot see. List each flagged sentence with the specific tell identified. Deduplicate against the linter's findings; count each construction once.
+(`tools/voicelint.py` and `tools/structlint.py` still run alone when only one is wanted; the combined runner already removes their overlap and computes one density.) Then walk the full catalog in `references/ai_tells.md` (categories 5a through 5i) and flag each sentence with a supported tell, including the structural families the linter cannot see. List each flagged sentence with the specific tell identified. Deduplicate against the mechanical findings; count each construction once.
 
 Apply the catalog's caveats: technical-literal uses, direct quotes, single isolated constructions, informal-register exceptions, and the validator-internals exception (never flag a pattern inside a line that quotes, names, or defines it). Where the profile overrides a default (for example, a writer who uses em dashes on purpose), the profile wins.
 
@@ -118,6 +177,8 @@ For every flagged sentence, provide a rewrite that preserves the meaning, matche
 A voice rewrite must not change content: never add or drop facts, names, numbers, dates, or sources, and preserve the original's emphasis (urgency, authority, caveats). Keep terms of art; do not paraphrase them away.
 
 ## Output format
+
+Quick mode's output is the table and verdict line shown under Quick mode. Full mode's is this report:
 
 ```
 VOICE VALIDATION REPORT
