@@ -1,0 +1,8 @@
+{
+  "_surface": {
+    "speaker": "author",
+    "positive_register": "own-voice-document",
+    "guidance": "Fiction written under a constructed voice. The project's own voice document governs, not the personal profile; the shared bans still apply through the project's overlay, passed with --config on top of this surface."
+  },
+  "_comment": "Surface for fiction (0.5.13). No rule changes of its own; a project supplies its overlay."
+}

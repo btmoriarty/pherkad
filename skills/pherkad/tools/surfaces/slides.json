@@ -1,0 +1,12 @@
+{
+  "_surface": {
+    "speaker": "author",
+    "positive_register": "frame",
+    "guidance": "A slide deck. A deck is its titles, so the interrogative-heading rate separates cleanly here (decks that read well sat at 4 to 16 percent, flagged decks at 20 to 25, measured 2026-08-23) and the threshold is lower than for prose. Time boxes, presenter cues, and structural narration are not slide content."
+  },
+  "_comment": "Surface overlay for slide decks as the author (0.5.13).",
+  "structure": {
+    "interrogative_pct": 18.0,
+    "interrogative_min": 8
+  }
+}

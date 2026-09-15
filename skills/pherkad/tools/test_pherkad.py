@@ -389,5 +389,91 @@ class CheckOverlay(unittest.TestCase):
         self.assertIn("0 error(s), 0 warning(s)", out)
 
 
+class Surfaces(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.d = self.tmp.name
+        self.clean = os.path.join(self.d, "t.md")
+        with open(self.clean, "w") as fh:
+            fh.write("A statistically significant, robust result.\n")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_every_shipped_surface_resolves_and_validates(self):
+        for name in pherkad.shipped_surfaces():
+            with self.subTest(name):
+                info = pherkad.resolve_surface(name)
+                self.assertIn(info["speaker"], pherkad.SPEAKERS)
+                self.assertIn(info["positive_register"], pherkad.REGISTERS)
+                self.assertTrue(info["guidance"])
+                cfg, _ = pherkad.load_layers(name, None)
+                self.assertIn("banned_phrases", cfg)
+        self.assertEqual(pherkad.resolve_surface("assistant-chat")["speaker"], "assistant")
+        self.assertEqual(pherkad.resolve_surface("fiction")["positive_register"], "own-voice-document")
+
+    def test_unknown_surface_is_rejected_with_the_list(self):
+        code, _, err = run(["check", "--surface", "memo", self.clean])
+        self.assertEqual(code, 2)
+        self.assertIn("unknown surface 'memo'", err)
+        self.assertIn("assistant-chat", err)
+
+    def test_surface_changes_the_rules(self):
+        code, out, _ = run(["check", "--surface", "technical", self.clean])
+        self.assertIn("0 warning(s)", out)
+        code, out, _ = run(["check", "--surface", "post", self.clean])
+        self.assertIn("2 warning(s)", out)
+        self.assertIn("surface post (author, register yes)", out)
+
+    def test_surface_then_project_overlay_layer(self):
+        ov = os.path.join(self.d, "ov.json")
+        json.dump({"add_banned_phrases": ["robust result"]}, open(ov, "w"))
+        code, out, _ = run(["check", "--surface", "technical", "--config", ov, self.clean])
+        self.assertEqual(code, 1, "the project ban applies on top of the surface")
+        self.assertIn("0 warning(s)", out, "and the surface's filler removals still hold")
+
+    def test_slides_threshold_comes_from_the_surface(self):
+        heads = "\n\n".join(["# D"] + [f"## What thing {i} does" for i in range(2)] + [f"## Section {i}" for i in range(7)])
+        p = os.path.join(self.d, "deck.md")
+        open(p, "w").write(heads + "\n")
+        self.assertNotIn("interrogative", run(["check", "--surface", "post", p])[1])
+        self.assertIn("interrogative-headers", run(["check", "--surface", "slides", p])[1])
+
+    def test_user_map_adds_and_overrides(self):
+        os.makedirs(os.path.join(self.d, "approved"))
+        open(os.path.join(self.d, "approved", "a.md"), "w").write("x")
+        json.dump({"add_banned_phrases": ["memo speak"]}, open(os.path.join(self.d, "memo.json"), "w"))
+        m = os.path.join(self.d, "surfaces.json")
+        json.dump({"_comment": "x",
+                   "memo": {"overlay": "memo.json", "speaker": "author", "positive_register": "no", "guidance": "short"},
+                   "email": {"excerpts": ["approved/a.md", "approved/missing.md"], "guidance": "Hi all"}},
+                  open(m, "w"))
+        info = pherkad.resolve_surface("memo", m)
+        self.assertEqual((info["speaker"], info["positive_register"], info["from_map"]), ("author", "no", True))
+        info = pherkad.resolve_surface("email", m)
+        self.assertTrue(info["overlay"].endswith("surfaces/email.json"), "a shipped name keeps its overlay")
+        self.assertEqual([e["exists"] for e in info["excerpts"]], [True, False])
+        self.assertIn("Hi all", info["guidance"])
+        self.assertIn("A message to a person", info["guidance"], "shipped guidance is kept")
+        code, out, _ = run(["check", "--surfaces", m, "--surface", "memo", "-"], "memo speak here")
+        self.assertEqual(code, 1)
+        code, out, _ = run(["surfaces", "--surfaces", m])
+        self.assertIn("memo", out)
+        self.assertIn("(missing)", out)
+        self.assertIn("1/2", out)
+
+    def test_bad_map_values_are_rejected(self):
+        m = os.path.join(self.d, "surfaces.json")
+        json.dump({"memo": {"speaker": "robot"}}, open(m, "w"))
+        self.assertEqual(run(["check", "--surfaces", m, "--surface", "memo", self.clean])[0], 2)
+        json.dump({"memo": {"overlay": "nope.json"}}, open(m, "w"))
+        self.assertEqual(run(["check", "--surfaces", m, "--surface", "memo", self.clean])[0], 2)
+
+    def test_json_carries_the_surface(self):
+        code, out, _ = run(["check", "--surface", "paper", "--format", "json", self.clean])
+        d = json.loads(out)
+        self.assertEqual((d["surface"], d["speaker"], d["positive_register"]), ("paper", "author", "frame"))
+
+
 if __name__ == "__main__":
     unittest.main()

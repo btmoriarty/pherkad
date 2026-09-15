@@ -10,6 +10,8 @@ and prints one format.
     pherkad.py check FILE [FILE ...]                 # or - for stdin
     pherkad.py check --config OVERLAY FILE           # a project overlay
     pherkad.py check --surface assistant-chat FILE   # a shipped surface
+    pherkad.py check --surface fiction --config OV   # a surface, then a project overlay on top
+    pherkad.py surfaces [--surfaces MAP] [--json]    # every surface, with speaker and register
     pherkad.py check --format json FILE              # voicelint's envelope, plus provenance
     pherkad.py check --format sarif FILE             # SARIF 2.1.0 for editors and CI
     pherkad.py check --advisory structure. FILE      # report, never count, rule ids under a prefix
@@ -101,21 +103,125 @@ def _version() -> str:
         return "unknown"
 
 
-def resolve_config(surface: str | None, config: str | None) -> str | None:
-    """The overlay path: a shipped surface by name, or a file. Both is an error."""
-    if surface and config:
-        sys.stderr.write("pherkad: give --surface or --config, not both\n")
+# ---------------------------------------------------------------------------
+# Surfaces (roadmap item 11)
+# ---------------------------------------------------------------------------
+# A surface names what the text is: who is speaking (the assistant to the
+# author, or the author as himself) and whether the positive register is
+# expected. It resolves to an overlay, guidance, and optionally a few approved
+# excerpts. Shipped surfaces live in surfaces/<name>.json with a "_surface"
+# block; a user map (surfaces.json, --surfaces, or PHERKAD_SURFACES) is
+# consulted first and may add surfaces or point a shipped name at its own
+# overlay and excerpts. An unknown surface is an error, never a guess.
+SPEAKERS = ("assistant", "author")
+REGISTERS = ("no", "profile", "frame", "yes", "own-voice-document")
+
+
+def _user_map_path(explicit: str | None) -> str | None:
+    for cand in (explicit, os.environ.get("PHERKAD_SURFACES"), os.path.join(os.getcwd(), "surfaces.json")):
+        if cand and os.path.exists(cand):
+            return cand
+    return None
+
+
+def load_surface_map(explicit: str | None = None) -> tuple[dict, str | None]:
+    """The user's surface map (name -> entry) and where it came from."""
+    path = _user_map_path(explicit)
+    if not path:
+        return {}, None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            m = json.load(fh)
+    except (OSError, json.JSONDecodeError) as exc:
+        sys.stderr.write(f"pherkad: cannot read surface map {path}: {exc}\n")
         sys.exit(2)
-    if surface:
-        if os.path.sep in surface or surface.endswith(".json"):
-            p = surface
-        else:
-            p = os.path.join(SURFACES, surface + ".json")
-        if not os.path.exists(p):
-            have = sorted(f[:-5] for f in os.listdir(SURFACES) if f.endswith(".json")) if os.path.isdir(SURFACES) else []
-            sys.stderr.write(f"pherkad: unknown surface '{surface}'; have {', '.join(have) or 'none'}\n")
+    if not isinstance(m, dict):
+        sys.stderr.write(f"pherkad: surface map {path} must be a JSON object of name -> entry\n")
+        sys.exit(2)
+    return {k: v for k, v in m.items() if not k.startswith("_")}, path
+
+
+def shipped_surfaces() -> list[str]:
+    if not os.path.isdir(SURFACES):
+        return []
+    return sorted(f[:-5] for f in os.listdir(SURFACES) if f.endswith(".json"))
+
+
+def resolve_surface(name: str, map_path: str | None = None) -> dict:
+    """A surface's overlay path, speaker, register, guidance, and excerpts.
+    A path (or something ending in .json) is taken as an overlay file with
+    its own optional _surface block."""
+    user_map, map_file = load_surface_map(map_path)
+    base_dir = os.path.dirname(os.path.abspath(map_file)) if map_file else os.getcwd()
+    entry = {}
+    if os.path.sep in name or name.endswith(".json"):
+        overlay = name
+        if not os.path.exists(overlay):
+            sys.stderr.write(f"pherkad: no surface file at {overlay}\n")
             sys.exit(2)
-        return p
+    elif name in user_map:
+        entry = user_map[name] if isinstance(user_map[name], dict) else {}
+        overlay = entry.get("overlay")
+        overlay = os.path.join(base_dir, overlay) if overlay and not os.path.isabs(overlay) else overlay
+        if not overlay:
+            overlay = os.path.join(SURFACES, name + ".json") if name in shipped_surfaces() else None
+        if overlay and not os.path.exists(overlay):
+            sys.stderr.write(f"pherkad: surface '{name}' in {map_file} points at a missing overlay {overlay}\n")
+            sys.exit(2)
+    elif name in shipped_surfaces():
+        overlay = os.path.join(SURFACES, name + ".json")
+    else:
+        have = sorted(set(shipped_surfaces()) | set(user_map))
+        sys.stderr.write(f"pherkad: unknown surface '{name}'; have {', '.join(have) or 'none'}"
+                         + (f" (map: {map_file})" if map_file else "") + "\n")
+        sys.exit(2)
+    meta = {}
+    if overlay:
+        try:
+            with open(overlay, encoding="utf-8") as fh:
+                meta = (json.load(fh).get("_surface") or {})
+        except (OSError, json.JSONDecodeError) as exc:
+            sys.stderr.write(f"pherkad: cannot read overlay {overlay}: {exc}\n")
+            sys.exit(2)
+    speaker = entry.get("speaker") or meta.get("speaker") or "author"
+    register = entry.get("positive_register") or meta.get("positive_register") or "profile"
+    if speaker not in SPEAKERS:
+        sys.stderr.write(f"pherkad: surface '{name}': speaker must be one of {', '.join(SPEAKERS)}\n")
+        sys.exit(2)
+    if register not in REGISTERS:
+        sys.stderr.write(f"pherkad: surface '{name}': positive_register must be one of {', '.join(REGISTERS)}\n")
+        sys.exit(2)
+    excerpts = []
+    for e in entry.get("excerpts", []) or []:
+        pth = e if os.path.isabs(e) else os.path.join(base_dir, e)
+        excerpts.append({"path": pth, "exists": os.path.exists(pth)})
+    guidance = " ".join(x for x in (meta.get("guidance", ""), entry.get("guidance", "")) if x).strip()
+    return {"name": name, "overlay": overlay, "speaker": speaker, "positive_register": register,
+            "guidance": guidance, "excerpts": excerpts, "from_map": bool(entry)}
+
+
+def load_layers(surface: str | None, config: str | None, map_path: str | None = None) -> tuple[dict, dict | None]:
+    """The effective config: shipped base, then the surface's overlay, then the
+    project overlay, in that order. Returns (cfg, surface info or None)."""
+    info = resolve_surface(surface, map_path) if surface else None
+    cfg = voicelint.load_config(info["overlay"] if info and info["overlay"] else None)
+    if config:
+        if info and info["overlay"] and os.path.exists(config) and os.path.samefile(config, info["overlay"]):
+            return cfg, info
+        ov = voicelint._read_json(config, "config")
+        cfg = voicelint._apply_list_ops(voicelint._deep_merge(cfg, ov))
+    elif not info:
+        cfg = voicelint.load_config(None)
+    return cfg, info
+
+
+def resolve_config(surface: str | None, config: str | None) -> str | None:
+    """Kept for callers that want one overlay path: the surface's overlay when
+    a surface is named alone, the config file otherwise."""
+    if surface and config:
+        return None
+    if surface:
+        return resolve_surface(surface)["overlay"]
     return config
 
 
@@ -302,8 +408,8 @@ def to_sarif(results: list[tuple[str, list[dict]]], cfg: dict, advisory: list[st
 
 
 def cmd_check(args) -> int:
-    overlay = resolve_config(args.surface, args.config)
-    cfg = voicelint.load_config(overlay)
+    cfg, surface = load_layers(args.surface, args.config, args.surfaces)
+    overlay = args.config or (surface["overlay"] if surface else None)
     advisory = args.advisory or []
     seen = set()
     files = [f for f in args.files if not (f in seen or seen.add(f))]
@@ -344,6 +450,7 @@ def cmd_check(args) -> int:
 
     if args.format == "json":
         print(json.dumps({"tool": "pherkad", "version": _version(), "surface": args.surface or "",
+                          "speaker": surface["speaker"] if surface else "", "positive_register": surface["positive_register"] if surface else "",
                           "overlay": overlay or "", "config_sha256": config_sha256(cfg),
                           "advisory_prefixes": advisory, "suppressed": suppressed,
                           "decisions": args.decisions or "", "decided": decided,
@@ -370,7 +477,8 @@ def cmd_check(args) -> int:
         if suppressed:
             tail.append(f"{suppressed} suppressed")
         tail_s = (", " + ", ".join(tail)) if tail else ""
-        print(f"pherkad: {errors} error(s), {warnings} warning(s){tail_s} across {len(results)} file(s).")
+        where = f"; surface {surface['name']} ({surface['speaker']}, register {surface['positive_register']})" if surface else ""
+        print(f"pherkad: {errors} error(s), {warnings} warning(s){tail_s} across {len(results)} file(s){where}.")
 
     if io_failed:
         return 2
@@ -553,8 +661,7 @@ def cmd_decide(args) -> int:
     if not args.reason.strip():
         sys.stderr.write("pherkad: --reason is required; a decision without one is not a decision\n")
         return 2
-    overlay = resolve_config(args.surface, args.config)
-    cfg = voicelint.load_config(overlay)
+    cfg, _surface = load_layers(args.surface, args.config, getattr(args, "surfaces", None))
     hashes = rule_hashes(cfg)
     decisions = load_decisions(args.decisions)
     root = args.root or os.path.dirname(os.path.abspath(args.decisions))
@@ -599,8 +706,7 @@ def cmd_decisions(args) -> int:
     """Which decisions still match a finding, and which are stale (the line
     changed, the rule changed, the file is gone, or the finding no longer
     fires). --prune drops the stale ones; nothing is pruned otherwise."""
-    overlay = resolve_config(args.surface, args.config)
-    cfg = voicelint.load_config(overlay)
+    cfg, _surface = load_layers(args.surface, args.config, getattr(args, "surfaces", None))
     hashes = rule_hashes(cfg)
     decisions = load_decisions(args.decisions)
     root = args.root or os.path.dirname(os.path.abspath(args.decisions))
@@ -636,8 +742,32 @@ def cmd_decisions(args) -> int:
     return 0
 
 
+def cmd_surfaces(args) -> int:
+    """Every surface a name could resolve to, with speaker, register, overlay, and excerpts."""
+    user_map, map_file = load_surface_map(args.surfaces)
+    names = sorted(set(shipped_surfaces()) | set(user_map))
+    rows = [resolve_surface(n, args.surfaces) for n in names]
+    if args.json:
+        print(json.dumps({"map": map_file or "", "surfaces": rows}, indent=2, ensure_ascii=False))
+        return 0
+    w = max(len(r["name"]) for r in rows) if rows else 8
+    print(f"{'surface':<{w}}  {'speaker':<9} {'register':<18} {'from':<8} excerpts  overlay")
+    for r in rows:
+        ex = f"{sum(e['exists'] for e in r['excerpts'])}/{len(r['excerpts'])}" if r["excerpts"] else "-"
+        print(f"{r['name']:<{w}}  {r['speaker']:<9} {r['positive_register']:<18} {'map' if r['from_map'] else 'shipped':<8} {ex:<8}  {r['overlay'] or '-'}")
+        if r["guidance"]:
+            print(f"{'':<{w}}    {r['guidance']}")
+        for e in r["excerpts"]:
+            print(f"{'':<{w}}    excerpt: {e['path']}" + ("" if e["exists"] else "  (missing)"))
+    if map_file:
+        print(f"pherkad: {len(rows)} surface(s); user map {map_file}")
+    else:
+        print(f"pherkad: {len(rows)} surface(s); no user map (surfaces.json, --surfaces, or PHERKAD_SURFACES)")
+    return 0
+
+
 def cmd_rules(args) -> int:
-    cfg = voicelint.load_config(resolve_config(args.surface, args.config))
+    cfg, _surface = load_layers(args.surface, args.config, getattr(args, "surfaces", None))
     rows = all_rules(cfg)
     if args.json:
         print(json.dumps(rows, indent=2, ensure_ascii=False))
@@ -653,8 +783,9 @@ def main(argv=None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     pc = sub.add_parser("check", help="check files with both engines")
     pc.add_argument("files", nargs="+", help="files to check, or - for stdin")
-    pc.add_argument("--surface", help="a shipped surface under surfaces/ (or a path)")
-    pc.add_argument("--config", help="an overlay config")
+    pc.add_argument("--surface", help="what the text is: a shipped surface, one from the user map, or a path")
+    pc.add_argument("--surfaces", help="the user surface map (default: ./surfaces.json or PHERKAD_SURFACES)")
+    pc.add_argument("--config", help="a project overlay, applied after the surface's")
     pc.add_argument("--format", choices=["text", "json", "sarif"], default="text")
     pc.add_argument("--strict", action="store_true", help="warnings fail too")
     pc.add_argument("--advisory", action="append", metavar="PREFIX",
@@ -671,6 +802,7 @@ def main(argv=None) -> int:
     pd.add_argument("--reason", required=True, help="why; required")
     pd.add_argument("--disposition", choices=list(DISPOSITIONS), default="accepted")
     pd.add_argument("--surface")
+    pd.add_argument("--surfaces")
     pd.add_argument("--config")
     pd.add_argument("--root")
     pd.add_argument("--no-structure", action="store_true")
@@ -680,6 +812,7 @@ def main(argv=None) -> int:
     pdd.add_argument("--decisions", required=True)
     pdd.add_argument("--prune", action="store_true")
     pdd.add_argument("--surface")
+    pdd.add_argument("--surfaces")
     pdd.add_argument("--config")
     pdd.add_argument("--root")
     pdd.add_argument("--no-structure", action="store_true")
@@ -691,8 +824,13 @@ def main(argv=None) -> int:
     po = sub.add_parser("check-overlay", help="does a downstream overlay still fit this base?")
     po.add_argument("overlay")
     po.set_defaults(fn=cmd_check_overlay)
+    psf = sub.add_parser("surfaces", help="every surface a name could resolve to")
+    psf.add_argument("--surfaces")
+    psf.add_argument("--json", action="store_true")
+    psf.set_defaults(fn=cmd_surfaces)
     pr = sub.add_parser("rules", help="list every rule both engines would run")
     pr.add_argument("--surface")
+    pr.add_argument("--surfaces")
     pr.add_argument("--config")
     pr.add_argument("--json", action="store_true")
     pr.set_defaults(fn=cmd_rules)

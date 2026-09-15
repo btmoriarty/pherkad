@@ -1,6 +1,6 @@
 {
   "tool": "pherkad",
-  "version": "0.5.12",
+  "version": "0.5.13",
   "schema": 1,
   "generated": "2026-09-15",
   "required": [
@@ -11,16 +11,22 @@
     "voice_config.json"
   ],
   "files": {
-    "pherkad.py": "e3d31d0f7bfadae75349e74008cb2e2801ecd8932aec47ddb1eface5ad3550bf",
+    "pherkad.py": "47fc4eb3dd5c18cc7b0b79d557be2bf1f8a0b154b86ba36f6c1f054281da47b5",
     "voicelint.py": "ab3447b5faee3999be803e19b71c1172b0282676f6d2292c7a621c278708d2ee",
     "structlint.py": "f9d1e3a21aed7a0a3864640082335d0f5892a17810b58fc53f588210c98d38e3",
     "mdmask.py": "a6bc483a2bccc0559d8bbfd408c471b14d45b345fc47aad91ca9cdec250bfe41",
     "voice_config.json": "f6bccf5eef038b44d671c2ff74b14fedc7adba9c8f9559214a653ac5472f7120",
-    "replycheck.py": "11264a4163b2efff9ef82ef4cfb9201e97067f87ebf13da5db77513c75761901",
+    "replycheck.py": "d60dd1fc2fb43a4588fdf84bccf9bcca645e32ef21b3d1dd4204ef1d80463bb6",
     "replycheck-hook.py": "74af116bb1a487db85633ba78b7067ec9f79446afcaf074d1f89cb65a4b99c45",
     "corpusscan.py": "67b22e05a8fbe4fd3a65c238b4e178bb365ec6415174c340a151f41d7633f74d",
     "corrections.py": "a3ed804826a3f9a0901e65182ecff958fe4c31f982066f40d7841d5810aee6a0",
-    "surfaces/assistant-chat.json": "dce206008075451c335c5ab696cc7195035221cd4492af6056fa397de149778b"
+    "surfaces/assistant-chat.json": "ca9d9721df2513a8d40a2f4351f1f7c7713fdff8da6c8c1ecca1813858a72224",
+    "surfaces/email.json": "25d23c7f262a00f698377edde3da75008cc9016797227baab431e886d8cd6cac",
+    "surfaces/fiction.json": "840bbb461154163b7c11be5762d430050a218dff2b206c51e571b42da372d36a",
+    "surfaces/paper.json": "1e776a53964718572e49e1487dfa823f44a994374d6c90e4ed6a2d6952a5d2e1",
+    "surfaces/post.json": "13521fa35e4b71393ca8ac1b54c5f7ae5e44dfff5b4b25794dc306e9510d272e",
+    "surfaces/slides.json": "00a94dad198839d2530814c8b17f038e517a5fb75162348931b91a7b43594c9d",
+    "surfaces/technical.json": "87dbf44bcb6cb2bb6c6b9fcde73c2f391548ed4a6a41d339e198b6ae22a14dad"
   },
   "rule_ids": [
     "bait.and-here-s-why-that-matters",
