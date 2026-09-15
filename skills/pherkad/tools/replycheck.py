@@ -38,7 +38,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 import voicelint  # noqa: E402
-import structlint  # noqa: E402
+import pherkad  # noqa: E402
 
 SURFACES = os.path.join(HERE, "surfaces")
 DEFAULT_SURFACE = "assistant-chat"
@@ -64,17 +64,21 @@ def check_reply(text: str, surface: str = DEFAULT_SURFACE, structure: bool = Tru
     """Run both scanners over ``text`` and return the result as a dict:
     surface, verdict, errors, warnings, findings (voicelint), structure (structlint)."""
     cfg = voicelint.load_config(surface_path(surface))
-    findings, suppressed = voicelint.check_counting(text, cfg)
-    errors = sum(f.severity == "error" for f in findings)
-    warnings = sum(f.severity == "warning" for f in findings)
-    structural = structlint.check_text(text, cfg.get("structure")) if structure else []
+    # One run of both engines (pherkad.run_text), then split by engine: the
+    # voice findings decide the verdict, the structural ones are advisory.
+    # A reply is short, so the combined density never applies and is dropped.
+    all_findings, suppressed = pherkad.run_text(text, cfg, structure=structure)
+    findings = [f for f in all_findings if f["engine"] == "voice"]
+    structural = [f for f in all_findings if f["engine"] == "structure"]
+    errors = sum(f["severity"] == "error" for f in findings)
+    warnings = sum(f["severity"] == "warning" for f in findings)
     return {
         "surface": surface,
         "errors": errors,
         "warnings": warnings,
         "suppressed": suppressed,
-        "findings": [vars(f) for f in findings],
-        "structure": [vars(f) for f in structural],
+        "findings": findings,
+        "structure": structural,
     }
 
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.5.8 (2026-09-15)
+
+Item 6 of `docs/ROADMAP.md`, the combined runner.
+
+- **`tools/pherkad.py check`**, new. Runs voicelint and structlint over each file, folds the findings into one list in one schema (line, col, severity, rule, match, message, rule_id, engine), removes the overlap between the engines, computes one density over both, and prints one format: text, `--format json` (voicelint's envelope plus tool version, config sha256, and the advisory prefixes), or `--format sarif` (SARIF 2.1.0, advisory findings as `note`). `--advisory PREFIX` reports rule ids under a prefix without counting them, which is how a gate keeps the structural checks visible but non-blocking; `--strict`, `--no-structure`, `--quiet`, `--surface`, `--config`, and `-` for stdin as elsewhere. Exit codes are voicelint's. `pherkad.py rules` lists every rule both engines run.
+- **Density is computed once**, over both engines' findings, against `structure.density_per_100`; structlint's own per-document density is dropped from the combined list. **Overlap**: a structlint `header` finding whose heading contains the text of a voicelint finding on the same line is the same tell twice, and the voicelint one, which names the rule, is kept.
+- **`replycheck` runs on the shared core** (`pherkad.run_text`) and splits by engine; its verdict and output are unchanged.
+- **The saga gate calls one command.** `lint-voice.sh` runs `pherkad.py check --config <overlay> --advisory structure.` in place of the separate voicelint and structlint steps, and no longer resolves a world-specific structlint path. `sync-voicelint.sh` vendors five files: `pherkad.py`, `voicelint.py`, `structlint.py`, `mdmask.py`, `voice_config.json`. The whole-tree run reports 6 errors, 293 warnings, 116 advisory, the same numbers the two steps gave.
+- `tools/test_pherkad.py`, 16 tests, in CI.
+- `VERSION` 0.5.8.
+
 ## v0.5.7 (2026-09-15)
 
 Item 5 of `docs/ROADMAP.md`, the shared Markdown extraction layer, which closes row 4 of `docs/priority-fixes.md`.
