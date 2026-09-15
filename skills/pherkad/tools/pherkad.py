@@ -16,6 +16,29 @@ and prints one format.
     pherkad.py check --strict FILE                   # warnings fail too
     pherkad.py check --no-structure FILE             # voicelint only
     pherkad.py rules [--config OVERLAY] [--json]     # every rule both engines would run
+    pherkad.py check --decisions FILE ...            # hide findings the author has decided on
+    pherkad.py decide --decisions FILE --reason "..." path:line[:rule_id] ...
+    pherkad.py decisions --decisions FILE [--prune] FILE...   # which decisions still match
+
+Decisions (roadmap item 7). A warning the author has read and accepted should
+stay quiet until something about it changes, and nothing else should. A
+decision file is a project-owned JSON list of records:
+
+    {"rule_id": "soft.is-the-whole", "path": "canon/x.md", "context_hash": "…",
+     "rule_hash": "…", "count": 1, "disposition": "accepted", "reason": "…",
+     "decided": "2026-09-15"}
+
+The context is the whole line the finding sits on, whitespace collapsed; the
+rule hash is the rule's pattern. A finding matches a decision when rule id,
+path, context, and rule all match, up to ``count`` occurrences on that line;
+a changed line, a changed rule, or an extra occurrence surfaces the finding
+again as new. Decided findings are hidden from the list (``--show-decided``
+prints them) and never counted toward the exit; the summary says how many.
+Nothing here writes a decision except ``decide``, which requires a reason.
+Dispositions: accepted (the author's usage), intentional (a deliberate
+choice), deferred (known, fix later; still hidden, counted separately so the
+debt stays visible). Paths are relative to ``--root`` (default: the decision
+file's directory).
 
 Finding schema (every engine, every format): line, col, severity, rule,
 match, message, rule_id, engine. ``engine`` is voice, structure, or combined
@@ -78,6 +101,105 @@ def resolve_config(surface: str | None, config: str | None) -> str | None:
 
 def config_sha256(cfg: dict) -> str:
     return hashlib.sha256(json.dumps(cfg, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# Decisions
+# ---------------------------------------------------------------------------
+DISPOSITIONS = ("accepted", "intentional", "deferred")
+_DECISION_KEYS = frozenset({"rule_id", "path", "context_hash", "rule_hash", "count",
+                            "disposition", "reason", "decided", "line", "match", "note"})
+
+
+def _hash(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
+def context_hash(text: str, line: int) -> str:
+    """The hash of the whole line a finding sits on, whitespace collapsed.
+    A finding at line 0 (the density) has no context and cannot be decided."""
+    lines = text.split("\n")
+    if not 1 <= line <= len(lines):
+        return ""
+    return _hash(" ".join(lines[line - 1].split()))
+
+
+def rule_hashes(cfg: dict) -> dict:
+    return {r["id"]: _hash(r.get("pattern", "")) for r in all_rules(cfg)}
+
+
+def load_decisions(path: str | None) -> list[dict]:
+    if not path:
+        return []
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, json.JSONDecodeError) as exc:
+        sys.stderr.write(f"pherkad: cannot read decisions {path}: {exc}\n")
+        sys.exit(2)
+    if not isinstance(data, list):
+        sys.stderr.write(f"pherkad: decisions file {path} must be a JSON list\n")
+        sys.exit(2)
+    for i, d in enumerate(data):
+        if not isinstance(d, dict) or not {"rule_id", "path", "context_hash", "rule_hash", "disposition", "reason"} <= set(d):
+            sys.stderr.write(f"pherkad: decision {i} in {path} is missing a required field\n")
+            sys.exit(2)
+        if set(d) - _DECISION_KEYS:
+            sys.stderr.write(f"pherkad: decision {i} in {path} has unknown field(s) {sorted(set(d) - _DECISION_KEYS)}\n")
+            sys.exit(2)
+        if d["disposition"] not in DISPOSITIONS:
+            sys.stderr.write(f"pherkad: decision {i} in {path}: disposition must be one of {', '.join(DISPOSITIONS)}\n")
+            sys.exit(2)
+        if not str(d["reason"]).strip():
+            sys.stderr.write(f"pherkad: decision {i} in {path} has no reason; a decision without one is not a decision\n")
+            sys.exit(2)
+        d.setdefault("count", 1)
+    return data
+
+
+def save_decisions(path: str, decisions: list[dict]) -> None:
+    decisions = sorted(decisions, key=lambda d: (d["path"], d["rule_id"], d["context_hash"]))
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(decisions, fh, indent=2, ensure_ascii=False)
+        fh.write("\n")
+
+
+def rel_path(path: str, root: str) -> str:
+    if path == "-":
+        return "-"
+    try:
+        return os.path.relpath(os.path.abspath(path), os.path.abspath(root))
+    except ValueError:
+        return os.path.abspath(path)
+
+
+def apply_decisions(findings: list[dict], text: str, path_rel: str, decisions: list[dict],
+                    hashes: dict) -> list[dict]:
+    """Attach ``decision`` to each finding that a decision covers (None otherwise)
+    and return the decisions that matched at least one finding. A decision
+    covers up to ``count`` findings sharing its rule id and context on this
+    path; a stale rule hash matches nothing."""
+    budget = {}
+    for d in decisions:
+        if d["path"] != path_rel or d["rule_hash"] != hashes.get(d["rule_id"], ""):
+            continue
+        key = (d["rule_id"], d["context_hash"])
+        budget[key] = [d, int(d.get("count", 1))]
+    used = []
+    for f in findings:
+        f["decision"] = None
+        if not f["line"]:
+            continue
+        key = (f["rule_id"], context_hash(text, f["line"]))
+        slot = budget.get(key)
+        if slot and slot[1] > 0:
+            slot[1] -= 1
+            f["decision"] = slot[0]
+            if slot[0] not in used:
+                used.append(slot[0])
+    return used
 
 
 def run_text(text: str, cfg: dict, structure: bool = True) -> tuple[list[dict], int]:
@@ -165,9 +287,13 @@ def cmd_check(args) -> int:
     advisory = args.advisory or []
     seen = set()
     files = [f for f in args.files if not (f in seen or seen.add(f))]
+    decisions = load_decisions(args.decisions)
+    root = args.root or (os.path.dirname(os.path.abspath(args.decisions)) if args.decisions else os.getcwd())
+    hashes = rule_hashes(cfg) if decisions else {}
 
     results, io_failed = [], False
     errors = warnings = advis = suppressed = 0
+    decided = {"accepted": 0, "intentional": 0, "deferred": 0}
     for path in files:
         try:
             text = read_source(path)
@@ -176,9 +302,17 @@ def cmd_check(args) -> int:
             io_failed = True
             continue
         findings, dropped = run_text(text, cfg, structure=not args.no_structure)
+        if decisions:
+            apply_decisions(findings, text, rel_path(path, root), decisions, hashes)
+        else:
+            for f in findings:
+                f["decision"] = None
         results.append((path, findings))
         suppressed += dropped
         for f in findings:
+            if f["decision"]:
+                decided[f["decision"]["disposition"]] += 1
+                continue
             lvl = _level(f, advisory)
             if lvl == "error":
                 errors += 1
@@ -186,24 +320,33 @@ def cmd_check(args) -> int:
                 warnings += 1
             else:
                 advis += 1
+    n_decided = sum(decided.values())
 
     if args.format == "json":
         print(json.dumps({"tool": "pherkad", "version": _version(), "surface": args.surface or "",
                           "overlay": overlay or "", "config_sha256": config_sha256(cfg),
                           "advisory_prefixes": advisory, "suppressed": suppressed,
+                          "decisions": args.decisions or "", "decided": decided,
                           "files": {p: fs for p, fs in results}}, indent=2, ensure_ascii=False))
     elif args.format == "sarif":
-        print(json.dumps(to_sarif(results, cfg, advisory), indent=2, ensure_ascii=False))
+        undecided = [(p, [f for f in fs if not f["decision"]]) for p, fs in results]
+        print(json.dumps(to_sarif(undecided, cfg, advisory), indent=2, ensure_ascii=False))
     else:
         if not args.quiet:
             for path, findings in results:
                 for f in findings:
+                    if f["decision"] and not args.show_decided:
+                        continue
                     where = f"{path}:{f['line']}:{f['col']}" if f["line"] else path
-                    print(f"{where} [{_level(f, advisory)}] {f['rule']} ({f['rule_id']}): "
+                    lvl = f"decided:{f['decision']['disposition']}" if f["decision"] else _level(f, advisory)
+                    print(f"{where} [{lvl}] {f['rule']} ({f['rule_id']}): "
                           f"{f['message']}  ->  {f['match']!r}")
         tail = []
         if advis:
             tail.append(f"{advis} advisory")
+        if n_decided:
+            parts = ", ".join(f"{v} {k}" for k, v in decided.items() if v)
+            tail.append(f"{n_decided} decided ({parts})")
         if suppressed:
             tail.append(f"{suppressed} suppressed")
         tail_s = (", " + ", ".join(tail)) if tail else ""
@@ -212,6 +355,109 @@ def cmd_check(args) -> int:
     if io_failed:
         return 2
     return 1 if errors or (args.strict and warnings) else 0
+
+
+def _parse_location(loc: str):
+    """path:line or path:line:rule_id."""
+    parts = loc.rsplit(":", 2)
+    if len(parts) >= 2 and parts[1].isdigit():
+        return parts[0], int(parts[1]), (parts[2] if len(parts) == 3 else None)
+    if len(parts) == 3 and parts[-2].isdigit():
+        return parts[0], int(parts[1]), parts[2]
+    # path:line:rule where rsplit split at the wrong colon (a path with colons is rare)
+    m = re.match(r"^(.*?):(\d+)(?::([\w.-]+))?$", loc)
+    if not m:
+        sys.stderr.write(f"pherkad: location must be path:line or path:line:rule_id, got {loc!r}\n")
+        sys.exit(2)
+    return m.group(1), int(m.group(2)), m.group(3)
+
+
+def cmd_decide(args) -> int:
+    """Record a decision for the finding(s) at a location. Requires a reason."""
+    if not args.reason.strip():
+        sys.stderr.write("pherkad: --reason is required; a decision without one is not a decision\n")
+        return 2
+    overlay = resolve_config(args.surface, args.config)
+    cfg = voicelint.load_config(overlay)
+    hashes = rule_hashes(cfg)
+    decisions = load_decisions(args.decisions)
+    root = args.root or os.path.dirname(os.path.abspath(args.decisions))
+    import datetime
+    today = datetime.date.today().isoformat()
+    added = 0
+    for loc in args.locations:
+        path, line, rule_id = _parse_location(loc)
+        try:
+            text = read_source(path)
+        except OSError as exc:
+            sys.stderr.write(f"pherkad: {exc}\n")
+            return 2
+        findings, _ = run_text(text, cfg, structure=not args.no_structure)
+        at = [f for f in findings if f["line"] == line and (rule_id is None or f["rule_id"] == rule_id)]
+        if not at:
+            sys.stderr.write(f"pherkad: no finding at {loc}; nothing to decide\n")
+            return 2
+        rel = rel_path(path, root)
+        ctx = context_hash(text, line)
+        by_rule = {}
+        for f in at:
+            by_rule.setdefault(f["rule_id"], []).append(f)
+        for rid, fs in by_rule.items():
+            existing = next((d for d in decisions if d["path"] == rel and d["rule_id"] == rid
+                             and d["context_hash"] == ctx), None)
+            if existing:
+                existing.update(count=len(fs), rule_hash=hashes[rid], disposition=args.disposition,
+                                reason=args.reason, decided=today, line=line, match=fs[0]["match"])
+            else:
+                decisions.append({"rule_id": rid, "path": rel, "context_hash": ctx, "rule_hash": hashes[rid],
+                                  "count": len(fs), "disposition": args.disposition, "reason": args.reason,
+                                  "decided": today, "line": line, "match": fs[0]["match"]})
+            added += 1
+            print(f"decided {args.disposition}: {rel}:{line} {rid} ({len(fs)} occurrence(s))  ->  {fs[0]['match']!r}")
+    save_decisions(args.decisions, decisions)
+    print(f"pherkad: {added} decision(s) written to {args.decisions}")
+    return 0
+
+
+def cmd_decisions(args) -> int:
+    """Which decisions still match a finding, and which are stale (the line
+    changed, the rule changed, the file is gone, or the finding no longer
+    fires). --prune drops the stale ones; nothing is pruned otherwise."""
+    overlay = resolve_config(args.surface, args.config)
+    cfg = voicelint.load_config(overlay)
+    hashes = rule_hashes(cfg)
+    decisions = load_decisions(args.decisions)
+    root = args.root or os.path.dirname(os.path.abspath(args.decisions))
+    live = set()
+    for path in args.files:
+        try:
+            text = read_source(path)
+        except OSError as exc:
+            sys.stderr.write(f"pherkad: {exc}\n")
+            continue
+        findings, _ = run_text(text, cfg, structure=not args.no_structure)
+        for d in apply_decisions(findings, text, rel_path(path, root), decisions, hashes):
+            live.add(id(d))
+    checked = {rel_path(p, root) for p in args.files}
+    stale, kept, unchecked = [], [], []
+    for d in decisions:
+        if id(d) in live:
+            kept.append(d)
+        elif d["path"] not in checked:
+            unchecked.append(d)
+        else:
+            why = ("rule changed" if d["rule_hash"] != hashes.get(d["rule_id"], "")
+                   else "rule gone" if d["rule_id"] not in hashes else "line changed or finding gone")
+            stale.append((d, why))
+    for d, why in stale:
+        print(f"stale ({why}): {d['path']}:{d.get('line', '?')} {d['rule_id']}  ->  {d.get('match', '')!r}  [{d['disposition']}: {d['reason']}]")
+    print(f"pherkad: {len(kept)} decision(s) live, {len(stale)} stale, {len(unchecked)} on files not checked, "
+          f"of {len(decisions)} in {args.decisions}")
+    if args.prune and stale:
+        drop = {id(d) for d, _ in stale}
+        save_decisions(args.decisions, [d for d in decisions if id(d) not in drop])
+        print(f"pherkad: pruned {len(stale)} stale decision(s)")
+    return 0
 
 
 def cmd_rules(args) -> int:
@@ -239,7 +485,29 @@ def main(argv=None) -> int:
                     help="rule ids under this prefix are reported but never counted (repeatable), e.g. structure.")
     pc.add_argument("--no-structure", action="store_true", help="voicelint only")
     pc.add_argument("--quiet", action="store_true", help="only print the summary (text format)")
+    pc.add_argument("--decisions", help="a project decision file; decided findings are hidden and not counted")
+    pc.add_argument("--root", help="paths in the decision file are relative to this (default: its directory)")
+    pc.add_argument("--show-decided", action="store_true", help="print decided findings too (text format)")
     pc.set_defaults(fn=cmd_check)
+    pd = sub.add_parser("decide", help="record a decision for the finding(s) at path:line[:rule_id]")
+    pd.add_argument("locations", nargs="+", metavar="path:line[:rule_id]")
+    pd.add_argument("--decisions", required=True, help="the project decision file (created if missing)")
+    pd.add_argument("--reason", required=True, help="why; required")
+    pd.add_argument("--disposition", choices=list(DISPOSITIONS), default="accepted")
+    pd.add_argument("--surface")
+    pd.add_argument("--config")
+    pd.add_argument("--root")
+    pd.add_argument("--no-structure", action="store_true")
+    pd.set_defaults(fn=cmd_decide)
+    pdd = sub.add_parser("decisions", help="which decisions still match; --prune drops the stale ones")
+    pdd.add_argument("files", nargs="+")
+    pdd.add_argument("--decisions", required=True)
+    pdd.add_argument("--prune", action="store_true")
+    pdd.add_argument("--surface")
+    pdd.add_argument("--config")
+    pdd.add_argument("--root")
+    pdd.add_argument("--no-structure", action="store_true")
+    pdd.set_defaults(fn=cmd_decisions)
     pr = sub.add_parser("rules", help="list every rule both engines would run")
     pr.add_argument("--surface")
     pr.add_argument("--config")
