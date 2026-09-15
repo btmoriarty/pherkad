@@ -1,5 +1,7 @@
 # Roadmap (2026-09-15)
 
+Status, end of 2026-09-15: all thirteen items shipped, 0.5.3 through 0.5.15. What remains is not code: the saga's six prose errors, the README's two warnings, and running the two experiments on real data.
+
 One ordered list, drawn from `docs/priority-fixes.md` (what is still wrong) and `docs/feature-review-comparison-2026-09-15.md` (what to build, and which of two reviews' designs to take). Ordered by dependency first, then by value per day. Each item names what it unblocks and how it is judged done. Effort is developer days, author review time excluded.
 
 ## Standing rules for everything below
@@ -40,7 +42,7 @@ One ordered list, drawn from `docs/priority-fixes.md` (what is still wrong) and 
 | # | Item | Depends on | Done when | Effort |
 |---|---|---|---|---|
 | 12 | Done, 0.5.14. **Revision experiment** in `eval/study.py`: same drafts, arms for untouched, generic self-review (the control), mechanical feedback, judgment feedback, both; same editing model and budget; blind rating with factual preservation required; manifest carries model, prompt, config hash, repeat. | 6, 9 | A number for whether the tools beat another editing pass, with the failures quoted. | 5 |
-| 13 | **Detection experiment**: per-rule precision and false flags per 1,000 words for the linters; supported diagnoses, unnecessary edits, and repeat stability for the judgment layer. Protocol already in `docs/blind-eval.md`. | 12 | `docs/review-followups.md` item 2 closes. | 5 |
+| 13 | Done, 0.5.15. **Detection experiment**: per-rule precision and false flags per 1,000 words for the linters; supported diagnoses, unnecessary edits, and repeat stability for the judgment layer. Protocol already in `docs/blind-eval.md`. | 12 | `docs/review-followups.md` item 2 closes. | 5 |
 
 ## Deferred, with the reason
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.5.15 (2026-09-15)
+
+Item 13 of `docs/ROADMAP.md`, the detection experiment, which completes the roadmap and gives `docs/review-followups.md` item 2 its harness.
+
+- **`eval/detect.py`**, new, dispatched from `study.py plan --task detect`. Cases per writer from the writer's directory: authentic held-out (one may be atypical), flattenings paired to their source, matched impostors, override pieces. Five conditions: `correct`, `wrong`, `shuffled` (the profile's own lines scrambled, a control the protocol asked for), `none`, and `linter` (the mechanical verdict alone, the floor, written by the harness). `--repeats` runs every item N times under blind ids. `plan` writes `prereg.md` and `score` warns while it holds a TODO.
+- **Judging prompts** ask the model for a JSON verdict (rating, PASS / light REVISE / REVISE / REWRITE, positive register, markers cited, evidence) and record model and hashes per item. **Two reader sheets**: the pairwise authentic-versus-flattened sheet in blind order, and every mechanical finding on authentic text for TP/FP labelling.
+- **Score** reports, per writer and pooled: paired discrimination margins under each condition; correct-profile lift over the controls beside the linter floor; acceptance and rejection rates against the pass bar; verdict stability across repeats as exact, adjacent, and severe movement; explanation overlap as the Jaccard of markers cited; reader accuracy on the decided pairs, with pairs the reader marked `same` excluded from the model's scoring; and per-rule linter precision with false flags per 1,000 authentic words.
+- `eval/test_study.py` runs the whole task with a synthetic judge: two writers, six cases, five conditions, two repeats, a severe wobble, a `same` pair, and a false-positive label, and checks every number in the report.
+- What the harness does not do is stated in `eval/README.md`: it does not separate the roles and it prints no interval. Both wait on the confirmatory run.
+- `VERSION` 0.5.15.
+
 ## v0.5.14 (2026-09-15)
 
 Item 12 of `docs/ROADMAP.md`, the revision experiment.
