@@ -1,37 +1,33 @@
 #!/usr/bin/env python3
 """Regression tests for voicelint. Dependency-free.
 
-Run from this directory:  python3 test_voicelint.py
-Exit 0 if all pass, 1 otherwise. Safe to wire into CI.
+Run from anywhere:  python3 /path/to/test_voicelint.py
+Also collected by ``python3 -m unittest`` and by pytest. Exit 0 if all pass.
 
 Covers the core rules, CLI behavior, and documented examples: word-boundary
 and Unicode-edge false positives, load-bearing literal-versus-figurative
-context, code-span masking, dash and density modes with the 150-word / 3-hit
-floor, the config deep-merge and add_/remove_ list ops, host-versus-path domain
-matching, HTML stripping, JSON output, --strict, exit codes, invalid config,
-and line/column accuracy. It is not exhaustive; the judgment layer is not
-tested here.
+context, code masking (inline spans, backtick and tilde fences, unclosed
+fences), dash and density modes with the 150-word / 3-hit floor, config
+layering (shipped base plus one overlay, add_/remove_ list ops), host-versus-
+path domain matching, HTML stripping, inline suppression, the rules-file
+marker, JSON output, --strict, exit codes, invalid config, and line/column
+accuracy. It is not exhaustive; the judgment layer is not tested here.
 """
-import io
 import json
 import os
 import subprocess
 import sys
 import tempfile
+import unicodedata
+import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 import voicelint  # noqa: E402
 
-DEFAULT = voicelint.load_config(os.path.join(HERE, "voice_config.json"))
-
-_failures = []
-
-
-def check(name, cond):
-    if not cond:
-        _failures.append(name)
+SCRIPT = os.path.join(HERE, "voicelint.py")
+DEFAULT = voicelint.load_config(None)
 
 
 def rules(text, cfg=DEFAULT):
@@ -39,8 +35,17 @@ def rules(text, cfg=DEFAULT):
     return {f.rule for f in voicelint.check(text, cfg)}
 
 
-def findings(text, cfg=DEFAULT):
-    return voicelint.check(text, cfg)
+def run(args, text=None):
+    proc = subprocess.run([sys.executable, SCRIPT, *args],
+                          input=text, capture_output=True, text=True)
+    return proc.returncode, proc.stdout, proc.stderr
+
+
+def write(d, name, content):
+    p = os.path.join(d, name)
+    with open(p, "w", encoding="utf-8") as fh:
+        fh.write(content)
+    return p
 
 
 # ---------------------------------------------------------------------------
@@ -65,6 +70,8 @@ FIRING = [
      "The load-bearing assumption fails.", "load-bearing", False),
     ("load-bearing + ambiguous noun emits a context warning",
      "This is the load-bearing structure of the argument.", "load-bearing-context", True),
+    ("load-bearing frame is a context warning (the one physical noun used figuratively)",
+     "The load-bearing frame of the argument failed.", "load-bearing-context", True),
     ("predicate load-bearing is a context warning",
      "That claim is load-bearing.", "load-bearing-context", True),
     ("engineering member is fully exempt (no finding)",
@@ -82,245 +89,305 @@ FIRING = [
     ("no aggregator domains in the generic defaults",
      "See https://www.msn.com/story for more.", "source", False),
 ]
-for desc, text, rule, should in FIRING:
-    check(desc, (rule in rules(text)) == should)
+
+
+class RuleFiring(unittest.TestCase):
+    def test_firing_table(self):
+        for desc, text, rule, should in FIRING:
+            with self.subTest(desc):
+                self.assertEqual(rule in rules(text), should)
+
+    def test_unicode_phrase_edges(self):
+        nfc = unicodedata.normalize("NFC", "égame-changeré here")
+        nfd = unicodedata.normalize("NFD", "égame-changer here")
+        self.assertNotIn("banned-phrase", rules(nfc),
+                         "phrase between precomposed accented letters must not fire")
+        self.assertNotIn("banned-phrase", rules(nfd),
+                         "phrase after a decomposed accent must not fire")
+        self.assertIn("banned-phrase", rules("that game-changer café"))
+
+    def test_quietly_rule_is_opt_in(self):
+        on = dict(voicelint.load_config(None))
+        on["flag_loaded_quietly"] = True
+        self.assertIn("loaded-adverb", rules("The project was shut down quietly.", on))
+        self.assertNotIn("loaded-adverb", rules("A quietly skeptical engineer watched.", on))
+
+    def test_dash_density_floor(self):
+        relaxed = dict(DEFAULT)
+        relaxed["no_dashes"] = False
+        relaxed["dash_density_cap"] = 1.0
+
+        def dense(words, dashes):
+            text = ("word " * words) + " ".join(["—"] * dashes)
+            return "dash-density" in rules(text, relaxed)
+
+        self.assertFalse(dense(149, 3), "below the word floor, silent")
+        self.assertTrue(dense(150, 3), "at the floor, warns")
+        self.assertFalse(dense(150, 2), "below the hit floor, silent")
+        self.assertFalse(dense(5, 2), "short text raises nothing")
+
+    def test_line_and_column(self):
+        fs = voicelint.check("ok ok\nhere game-changer now", DEFAULT)
+        self.assertTrue(any(f.rule == "banned-phrase" and f.line == 2 and f.col == 6 for f in fs))
 
 
 # ---------------------------------------------------------------------------
-# 2. Code-span masking: a pattern quoted as code is not flagged
+# 2. Code masking
 # ---------------------------------------------------------------------------
-check("inline code span is masked",
-      "banned-phrase" not in rules("The `game-changer` phrase is an example."))
-check("fenced code block is masked",
-      "banned-phrase" not in rules("```\ngame-changer\n```\n"))
-check("the same phrase in prose still fires",
-      "banned-phrase" in rules("that game-changer here"))
+class CodeMasking(unittest.TestCase):
+    def test_inline_span(self):
+        self.assertNotIn("banned-phrase", rules("The `game-changer` phrase is an example."))
 
+    def test_backtick_fence(self):
+        self.assertNotIn("banned-phrase", rules("```\ngame-changer\n```\n"))
 
-# ---------------------------------------------------------------------------
-# 3. quietly rule is opt-in, and still works when enabled
-# ---------------------------------------------------------------------------
-ON = voicelint.load_config(None)  # defaults, then flip the rule on
-ON = dict(ON)
-ON["flag_loaded_quietly"] = True
-check("quietly fires clause-final when enabled",
-      "loaded-adverb" in rules("The project was shut down quietly.", ON))
-check("quietly pre-modifier stays silent even when enabled",
-      "loaded-adverb" not in rules("A quietly skeptical engineer watched.", ON))
+    def test_tilde_fence(self):
+        self.assertNotIn("banned-phrase", rules("~~~\ngame-changer\n~~~\n"))
 
+    def test_unclosed_fence_masks_to_end(self):
+        self.assertNotIn("banned-phrase", rules("```\ngame-changer\n"))
 
-# ---------------------------------------------------------------------------
-# 4. Dash density (relaxed mode): floor of 150 words and 3 dash hits
-# ---------------------------------------------------------------------------
-relaxed = dict(DEFAULT)
-relaxed["no_dashes"] = False
-relaxed["dash_density_cap"] = 1.0
+    def test_prose_after_a_closed_fence_still_fires(self):
+        self.assertIn("banned-phrase", rules("```\ncode\n```\n\nThis is a game-changer.\n"))
 
+    def test_same_phrase_in_prose_fires(self):
+        self.assertIn("banned-phrase", rules("that game-changer here"))
 
-def dash_density(words, dashes):
-    text = ("word " * words) + " ".join(["—"] * dashes)
-    return "dash-density" in rules(text, relaxed)
-
-
-check("149 words with 3 dashes: below the word floor, silent", not dash_density(149, 3))
-check("150 words with 3 dashes: at the floor, warns", dash_density(150, 3))
-check("150 words with 2 dashes: below the hit floor, silent", not dash_density(150, 2))
-check("short text raises no dash-density warning", not dash_density(5, 2))
+    def test_masking_preserves_offsets(self):
+        fs = voicelint.check("```\nx\n```\nhere game-changer now", DEFAULT)
+        self.assertTrue(any(f.rule == "banned-phrase" and f.line == 4 and f.col == 6 for f in fs))
 
 
 # ---------------------------------------------------------------------------
-# 4b. Unicode-safe phrase edges
+# 3. Config layering: shipped base, one overlay, list ops
 # ---------------------------------------------------------------------------
-import unicodedata as _ud
-_nfc = _ud.normalize("NFC", "\u00e9game-changer\u00e9 here")   # precomposed accents
-_nfd = _ud.normalize("NFD", "\u00e9game-changer here")          # base + combining mark
-check("phrase between precomposed accented letters does not fire",
-      "banned-phrase" not in rules(_nfc))
-check("phrase after a decomposed accent (base + combining mark) does not fire",
-      "banned-phrase" not in rules(_nfd))
-check("phrase with an accented word after it still fires",
-      "banned-phrase" in rules("that game-changer caf\u00e9"))
+class ConfigLayering(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.d = self.tmp.name
+        with open(os.path.join(HERE, "voice_config.json"), encoding="utf-8") as fh:
+            self.shipped = json.load(fh)
 
+    def tearDown(self):
+        self.tmp.cleanup()
 
-# ---------------------------------------------------------------------------
-# 4c. Domain matching reads the host, not the whole URL
-# ---------------------------------------------------------------------------
-NEWS = voicelint.load_config(os.path.join(HERE, "examples", "news-brief.json"))
-check("aggregator host fires under the news preset",
-      "source" in rules("See https://www.msn.com/story here.", NEWS))
-check("bare-label domain fires as a host label",
-      "source" in rules("See https://timesofindia.indiatimes.com/x here.", NEWS))
-check("aggregator name in the path does not fire",
-      "source" not in rules("See https://example.com/path/msn.com/story here.", NEWS))
-check("aggregator name in the query does not fire",
-      "source" not in rules("See https://example.com/?u=https://msn.com/x here.", NEWS))
-check("an unlisted host does not fire",
-      "source" not in rules("See https://www.congress.gov/bill here.", NEWS))
-check("a fully-qualified host with a trailing dot still fires",
-      "source" in rules("See https://www.msn.com./story here.", NEWS))
-check("userinfo that looks like the host does not fire",
-      "source" not in rules("See https://msn.com@evil.example/x here.", NEWS))
+    def test_overlay_keeps_every_shipped_rule(self):
+        # The regression: a user config used to merge onto a stale Python copy
+        # of the defaults and silently drop most shipped rules.
+        p = write(self.d, "c.json", json.dumps({"add_banned_phrases": ["circle back"]}))
+        cfg = voicelint.load_config(p)
+        self.assertEqual(len(cfg["banned_phrases"]), len(self.shipped["banned_phrases"]) + 1)
+        self.assertEqual(len(cfg["soft_phrases"]), len(self.shipped["soft_phrases"]))
+        self.assertEqual(len(cfg["engagement_bait"]), len(self.shipped["engagement_bait"]))
+        self.assertIn("that's the news", cfg["banned_phrases"])
+        self.assertIn("banned-phrase", rules("That's the news.", cfg))
 
-
-# ---------------------------------------------------------------------------
-# 5. Config deep-merge and list ops
-# ---------------------------------------------------------------------------
-with tempfile.TemporaryDirectory() as d:
-    p = os.path.join(d, "c.json")
-    with open(p, "w") as fh:
-        json.dump({
+    def test_deep_merge_and_list_ops(self):
+        p = write(self.d, "c.json", json.dumps({
             "watch_words": {"live": 5},
             "add_banned_phrases": ["circle back"],
             "remove_banned_phrases": ["game-changer"],
-        }, fh)
-    cfg = voicelint.load_config(p)
-    check("deep-merge keeps the sibling default watch word", cfg["watch_words"].get("quietly") == 2)
-    check("deep-merge adds the named watch word", cfg["watch_words"].get("live") == 5)
-    check("add_ extends the default list", "circle back" in cfg["banned_phrases"])
-    check("remove_ drops from the default list", "game-changer" not in cfg["banned_phrases"])
-    check("add_/remove_ helper keys are consumed",
-          "add_banned_phrases" not in cfg and "remove_banned_phrases" not in cfg)
+        }))
+        cfg = voicelint.load_config(p)
+        self.assertEqual(cfg["watch_words"].get("quietly"), 2, "sibling default watch word kept")
+        self.assertEqual(cfg["watch_words"].get("live"), 5)
+        self.assertIn("circle back", cfg["banned_phrases"])
+        self.assertNotIn("game-changer", cfg["banned_phrases"])
+        self.assertNotIn("add_banned_phrases", cfg)
+        self.assertNotIn("remove_banned_phrases", cfg)
+
+    def test_explicit_shipped_path_equals_defaults(self):
+        self.assertEqual(voicelint.load_config(os.path.join(HERE, "voice_config.json")), DEFAULT)
+
+    def test_loaded_config_is_not_shared_state(self):
+        a = voicelint.load_config(None)
+        a["banned_phrases"].append("state leak probe")
+        a["watch_words"]["quietly"] = 99
+        b = voicelint.load_config(None)
+        self.assertNotIn("state leak probe", b["banned_phrases"])
+        self.assertEqual(b["watch_words"]["quietly"], 2)
+
+    def test_cwd_config_is_the_overlay_when_no_flag(self):
+        write(self.d, "voice_config.json", json.dumps({"add_banned_phrases": ["circle back"]}))
+        write(self.d, "t.md", "We should circle back. That's the news.\n")
+        proc = subprocess.run([sys.executable, SCRIPT, "--json", "t.md"],
+                              cwd=self.d, capture_output=True, text=True)
+        found = {f["rule"] + ":" + f["match"].lower() for f in json.loads(proc.stdout)["files"]["t.md"]}
+        self.assertIn("banned-phrase:circle back", found, "cwd overlay applied")
+        self.assertIn("banned-phrase:that's the news", found, "shipped rules kept")
+
+    def test_print_config_shows_the_effective_set(self):
+        p = write(self.d, "c.json", json.dumps({"no_dashes": False}))
+        code, out, _ = run(["--config", p, "--print-config"])
+        self.assertEqual(code, 0)
+        cfg = json.loads(out)
+        self.assertFalse(cfg["no_dashes"])
+        self.assertEqual(len(cfg["soft_phrases"]), len(self.shipped["soft_phrases"]))
 
 
 # ---------------------------------------------------------------------------
-# 6. HTML stripping keeps line numbers; entities decode
+# 4. Domain matching reads the host, not the whole URL
 # ---------------------------------------------------------------------------
-html_findings = voicelint.check(
-    voicelint.strip_html("<p>ok</p>\n<p>This is a game-changer.</p>"), DEFAULT)
-check("html strip preserves the line of a finding",
-      any(f.rule == "banned-phrase" and f.line == 2 for f in html_findings))
+class DomainMatching(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.news = voicelint.load_config(os.path.join(HERE, "examples", "news-brief.json"))
 
+    def fires(self, text):
+        return "source" in rules(text, self.news)
 
-# ---------------------------------------------------------------------------
-# 7. Line and column accuracy
-# ---------------------------------------------------------------------------
-fs = findings("ok ok\nhere game-changer now")
-check("line/col points at the real position",
-      any(f.rule == "banned-phrase" and f.line == 2 and f.col == 6 for f in fs))
-
-
-# ---------------------------------------------------------------------------
-# 8. CLI contract: exit codes, --strict, --json, invalid config
-# ---------------------------------------------------------------------------
-SCRIPT = os.path.join(HERE, "voicelint.py")
-
-
-def run(args, text=None):
-    proc = subprocess.run([sys.executable, SCRIPT, *args],
-                          input=text, capture_output=True, text=True)
-    return proc.returncode, proc.stdout, proc.stderr
-
-
-with tempfile.TemporaryDirectory() as d:
-    clean = os.path.join(d, "clean.md")
-    dirty = os.path.join(d, "dirty.md")
-    warnonly = os.path.join(d, "warn.md")
-    badcfg = os.path.join(d, "bad.json")
-    open(clean, "w").write("A short, clean sentence about the weather.\n")
-    open(dirty, "w").write("This is a game-changer.\n")
-    open(warnonly, "w").write("A significant result.\n")  # filler = warning only
-    open(badcfg, "w").write('{"banned_phrases": "not a list"}')
-
-    code, _, _ = run([clean]); check("clean file exits 0", code == 0)
-    code, _, _ = run([dirty]); check("error finding exits 1", code == 1)
-    code, _, _ = run(["/no/such/file.md"]); check("missing file exits 2", code == 2)
-    code, _, _ = run(["--config", badcfg, clean]); check("invalid config exits 2", code == 2)
-    code, _, _ = run([warnonly]); check("warning-only exits 0 without --strict", code == 0)
-    code, _, _ = run(["--strict", warnonly]); check("warning-only exits 1 with --strict", code == 1)
-
-    code, out, _ = run(["--json", dirty])
-    parsed = json.loads(out)
-    check("json has a files map and a suppressed count",
-          isinstance(parsed, dict) and "files" in parsed and "suppressed" in parsed)
-    check("json finding carries line/rule",
-          any(x["rule"] == "banned-phrase" for x in parsed["files"][dirty]))
-
-    # bad boolean type and unknown key both exit 2
-    boolcfg = os.path.join(d, "boolcfg.json")
-    open(boolcfg, "w").write('{"no_dashes": "false"}')
-    code, _, _ = run(["--config", boolcfg, clean])
-    check("string in a boolean field exits 2", code == 2)
-    typocfg = os.path.join(d, "typocfg.json")
-    open(typocfg, "w").write('{"no_dash": false}')
-    code, _, _ = run(["--config", typocfg, clean])
-    check("unknown config key exits 2", code == 2)
-    okcfg = os.path.join(d, "okcfg.json")
-    open(okcfg, "w").write('{"no_dashes": false, "_note": "fine"}')
-    code, _, _ = run(["--config", okcfg, clean])
-    check("valid config with a comment key exits 0", code == 0)
-
-    # semantic validation: negative caps and empty patterns are rejected (exit 2),
-    # not accepted into a runtime crash or a match-everywhere rule
-    negcap = os.path.join(d, "negcap.json")
-    open(negcap, "w").write('{"watch_words": {"quietly": -1}}')
-    code, _, _ = run(["--config", negcap, clean])
-    check("negative watch-word cap exits 2", code == 2)
-    emptyphrase = os.path.join(d, "empty.json")
-    open(emptyphrase, "w").write('{"add_banned_phrases": [""]}')
-    code, _, _ = run(["--config", emptyphrase, clean])
-    check("empty configured phrase exits 2", code == 2)
-    emptywatch = os.path.join(d, "emptywatch.json")
-    open(emptywatch, "w").write('{"watch_words": {"": 1}}')
-    code, _, _ = run(["--config", emptywatch, clean])
-    check("empty watch-word key exits 2", code == 2)
+    def test_hosts(self):
+        self.assertTrue(self.fires("See https://www.msn.com/story here."))
+        self.assertTrue(self.fires("See https://timesofindia.indiatimes.com/x here."))
+        self.assertTrue(self.fires("See https://www.msn.com./story here."), "trailing dot")
+        self.assertFalse(self.fires("See https://example.com/path/msn.com/story here."), "path")
+        self.assertFalse(self.fires("See https://example.com/?u=https://msn.com/x here."), "query")
+        self.assertFalse(self.fires("See https://www.congress.gov/bill here."))
+        self.assertFalse(self.fires("See https://msn.com@evil.example/x here."), "userinfo")
 
 
 # ---------------------------------------------------------------------------
-# 9. Inline suppression
+# 5. HTML
 # ---------------------------------------------------------------------------
-kept, dropped = voicelint.check_counting(
-    "This is a game-changer. <!-- voicelint: ignore-line banned-phrase -->", DEFAULT)
-check("ignore-line drops the matching rule", not kept and dropped == 1)
-kept, dropped = voicelint.check_counting(
-    "<!-- voicelint: ignore-next-line -->\nThis is a game-changer.", DEFAULT)
-check("ignore-next-line drops the next line", not kept and dropped == 1)
-kept, dropped = voicelint.check_counting(
-    "This is a game-changer. <!-- voicelint: ignore-line filler -->", DEFAULT)
-check("a rule-specific ignore leaves other rules firing", len(kept) == 1 and dropped == 0)
-# a directive must be an HTML comment; backticked or prose text cannot suppress
-kept, dropped = voicelint.check_counting(
-    "This is a game-changer. `voicelint: ignore-line`", DEFAULT)
-check("a backticked directive does not suppress", len(kept) == 1 and dropped == 0)
-kept, dropped = voicelint.check_counting(
-    "This is a game-changer and the words voicelint: ignore-line appear.", DEFAULT)
-check("a directive token in prose does not suppress", len(kept) == 1 and dropped == 0)
+class Html(unittest.TestCase):
+    def test_strip_preserves_line_numbers(self):
+        fs = voicelint.check(voicelint.strip_html("<p>ok</p>\n<p>This is a game-changer.</p>"), DEFAULT)
+        self.assertTrue(any(f.rule == "banned-phrase" and f.line == 2 for f in fs))
+
+    def test_directive_survives_stripping(self):
+        # The regression: strip_html removed every comment, so ignore-line was dead in HTML.
+        text = voicelint.strip_html(
+            "<p>This is a game-changer. <!-- voicelint: ignore-line --></p>\n"
+            "<p>This is a game-changer.</p>")
+        kept, dropped = voicelint.check_counting(text, DEFAULT)
+        self.assertEqual(dropped, 1)
+        self.assertEqual([f.line for f in kept], [2])
 
 
 # ---------------------------------------------------------------------------
-# 10. Fallback config is not shared mutable state
+# 6. Inline suppression, whole-file allowances, the rules-file marker
 # ---------------------------------------------------------------------------
-a = voicelint.load_config(None)
-a["banned_phrases"].append("state leak probe")
-a["watch_words"]["quietly"] = 99
-b = voicelint.load_config(None)
-check("a mutated config does not leak into the next load",
-      "state leak probe" not in b["banned_phrases"] and b["watch_words"]["quietly"] == 2)
+class Suppression(unittest.TestCase):
+    def counting(self, text):
+        return voicelint.check_counting(text, DEFAULT)
+
+    def test_ignore_line(self):
+        kept, dropped = self.counting("This is a game-changer. <!-- voicelint: ignore-line banned-phrase -->")
+        self.assertEqual((kept, dropped), ([], 1))
+
+    def test_ignore_next_line(self):
+        kept, dropped = self.counting("<!-- voicelint: ignore-next-line -->\nThis is a game-changer.")
+        self.assertEqual((kept, dropped), ([], 1))
+
+    def test_rule_specific_ignore_leaves_others(self):
+        kept, dropped = self.counting("This is a game-changer. <!-- voicelint: ignore-line filler -->")
+        self.assertEqual((len(kept), dropped), (1, 0))
+
+    def test_backticked_directive_does_not_suppress(self):
+        kept, dropped = self.counting("This is a game-changer. `voicelint: ignore-line`")
+        self.assertEqual((len(kept), dropped), (1, 0))
+
+    def test_directive_in_prose_does_not_suppress(self):
+        kept, dropped = self.counting("This is a game-changer and the words voicelint: ignore-line appear.")
+        self.assertEqual((len(kept), dropped), (1, 0))
+
+    def test_rules_file_marker_silences_the_file(self):
+        kept, dropped = self.counting("<!-- voicelint: rules-file -->\n\nThis is a game-changer.\n")
+        self.assertEqual((kept, dropped), ([], 0))
+
+    def test_rules_file_marker_in_code_is_text(self):
+        # The regression: the marker was matched on raw text before code masking.
+        kept, _ = self.counting("`<!-- voicelint: rules-file -->`\n\nThis is a game-changer.\n")
+        self.assertEqual(len(kept), 1)
+        kept, _ = self.counting("```\n<!-- voicelint: rules-file -->\n```\n\nThis is a game-changer.\n")
+        self.assertEqual(len(kept), 1)
+
+    def test_rules_file_marker_in_prose_is_text(self):
+        kept, _ = self.counting("Add <!-- voicelint: rules-file --> to opt in. This is a game-changer.\n")
+        self.assertEqual(len(kept), 1)
+
+    def test_allow_marker_exempts_the_phrase(self):
+        kept, dropped = self.counting(
+            "<!-- voicelint-allow: rhymes with (literal: two names that rhyme) -->\n\nCat rhymes with hat.\n")
+        self.assertEqual(kept, [])
+        self.assertGreaterEqual(dropped, 1)
 
 
 # ---------------------------------------------------------------------------
-# 9. Example fixtures behave as shipped
+# 7. CLI contract: exit codes, --strict, --json, invalid config
 # ---------------------------------------------------------------------------
-ex = os.path.join(HERE, "examples")
-if os.path.isdir(ex):
-    good = os.path.join(ex, "good.md")
-    bad = os.path.join(ex, "bad.md")
-    if os.path.exists(good):
-        code, _, _ = run([good]); check("examples/good.md is clean (exit 0)", code == 0)
-    if os.path.exists(bad):
-        code, _, _ = run([bad]); check("examples/bad.md has findings (exit 1)", code == 1)
+class Cli(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        d = self.tmp.name
+        self.clean = write(d, "clean.md", "A short, clean sentence about the weather.\n")
+        self.dirty = write(d, "dirty.md", "This is a game-changer.\n")
+        self.warnonly = write(d, "warn.md", "A significant result.\n")  # filler = warning only
+        self.d = d
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def cfg(self, name, body):
+        return write(self.d, name, body)
+
+    def test_exit_codes(self):
+        self.assertEqual(run([self.clean])[0], 0, "clean file exits 0")
+        self.assertEqual(run([self.dirty])[0], 1, "error finding exits 1")
+        self.assertEqual(run(["/no/such/file.md"])[0], 2, "missing file exits 2")
+        self.assertEqual(run([self.warnonly])[0], 0, "warning-only exits 0 without --strict")
+        self.assertEqual(run(["--strict", self.warnonly])[0], 1, "warning-only exits 1 with --strict")
+        self.assertEqual(run([])[0], 2, "no files is a usage error")
+
+    def test_json_output(self):
+        code, out, _ = run(["--json", self.dirty])
+        parsed = json.loads(out)
+        self.assertIn("files", parsed)
+        self.assertIn("suppressed", parsed)
+        self.assertTrue(any(x["rule"] == "banned-phrase" for x in parsed["files"][self.dirty]))
+
+    def test_invalid_configs_exit_2(self):
+        cases = {
+            "not a list": '{"banned_phrases": "not a list"}',
+            "string in a boolean field": '{"no_dashes": "false"}',
+            "unknown key": '{"no_dash": false}',
+            "negative watch-word cap": '{"watch_words": {"quietly": -1}}',
+            "empty configured phrase": '{"add_banned_phrases": [""]}',
+            "empty watch-word key": '{"watch_words": {"": 1}}',
+        }
+        for desc, body in cases.items():
+            with self.subTest(desc):
+                self.assertEqual(run(["--config", self.cfg("bad.json", body), self.clean])[0], 2)
+
+    def test_comment_key_is_allowed(self):
+        p = self.cfg("ok.json", '{"no_dashes": false, "_note": "fine"}')
+        self.assertEqual(run(["--config", p, self.clean])[0], 0)
+
+    def test_html_by_extension(self):
+        p = write(self.d, "page.html", "<p>ok</p>\n<p>This is a game-changer.</p>\n")
+        code, out, _ = run(["--json", p])
+        self.assertEqual(code, 1)
+        self.assertTrue(any(f["line"] == 2 for f in json.loads(out)["files"][p]))
 
 
 # ---------------------------------------------------------------------------
-def main():
-    total = "many"
-    if _failures:
-        print("FAIL ({} case(s)):".format(len(_failures)))
-        for f in _failures:
-            print("  - " + f)
-        return 1
-    print("ok: all voicelint cases passed")
-    return 0
+# 8. Example fixtures behave as shipped
+# ---------------------------------------------------------------------------
+class Examples(unittest.TestCase):
+    EX = os.path.join(HERE, "examples")
+
+    def test_good_is_clean(self):
+        p = os.path.join(self.EX, "good.md")
+        if not os.path.exists(p):
+            self.skipTest("no examples/good.md")
+        self.assertEqual(run([p])[0], 0)
+
+    def test_bad_has_findings(self):
+        p = os.path.join(self.EX, "bad.md")
+        if not os.path.exists(p):
+            self.skipTest("no examples/bad.md")
+        self.assertEqual(run([p])[0], 1)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    unittest.main()
