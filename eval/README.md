@@ -41,9 +41,20 @@ The authoring study asks whether the profile captures voice. The revision task a
 
 **Reading it.** Per writer and arm: mean rating (with the range across repeats), how many drafts were flagged, the edit counts, the minutes, and the arm's rating minus the generic arm's. A flagged draft counts as a failure of its arm whatever its rating. The pooled line gives each arm against generic across writers. An arm at or below generic has not earned its cost. Rewriting existing prose and drafting from notes are different claims, which is why this is a separate task from the authoring study.
 
+## The detection task
+
+The study `../docs/blind-eval.md` describes: does the judgment layer tell the writer's prose from flattened prose and from an impostor's, and does it do so because of the profile? `eval/detect.py` runs it as far as one operator can.
+
+1. Cases live in the writer's directory: `holdout/` (authentic held-out pieces; name one `atypical-*.md`), `flattened/<holdout>.<k>.md` (independent flattenings of a held-out piece, facts kept), `impostors/` (other writers, matched on register and topic), `override/` (authentic pieces that use an allowed habit). `python3 study.py plan <run> --task detect --writers a,b [--repeats 3]` plans every case under five conditions: `correct`, `wrong`, `shuffled` (the writer's own profile with its lines scrambled, written by plan), `none`, and `linter` (the mechanical verdict alone, the floor). It writes `prereg.md`; fill every TODO before collecting a verdict.
+2. `python3 study.py prompts <run> --model <judge>` writes one judging prompt per item (the floor's verdicts are written directly) and records the model and the hashes. Run every prompt with the same judging model and settings; save each JSON reply to `verdicts/<blind_id>.json`.
+3. `python3 study.py sheet <run>` writes two reader sheets, blind: the pairwise sheet (each held-out piece against each of its flattenings) with `pairs.csv` to mark A, B, or same, and `findings-labels.csv`, every mechanical finding on authentic text, to mark TP or FP.
+4. `python3 study.py score <run>` reports, per writer and pooled: the paired margins (authentic minus flattened, authentic minus impostor) under each condition; correct-profile lift over the controls with the linter floor beside it; acceptance and rejection rates against the pass bar; verdict stability across repeats (exact, adjacent, severe) and explanation overlap; reader accuracy on the decided pairs, with `same` pairs excluded from the model's scoring; and per-rule linter precision with false flags per 1,000 authentic words.
+
+**What it does not do.** It does not blind the roles (builder, flattener, judge, operator); the preregistration names them and the protocol says to separate them. It does not compute a cluster-bootstrap interval; with one operator and a few writers there is no interval worth printing. Both wait on the confirmatory run.
+
 ## What this implements, and what stays manual
 
-`study.py` runs the pilot: the authoring task (correct, wrong, and none conditions, with an optional real anchor) and the revision task (five arms, repeats, provenance on every item), one rater. The confirmatory design in `../docs/blind-eval.md` needs pieces this harness does not automate yet: a shuffled-profile control, the validation case types (atypical authentic, matched impostors, an override sample), and multiple independent readers with an agreement measure. Read "the harness scales to it" as "the file layout and scoring extend to it," not "it is implemented." Those elements are manual, or a job for a separate validation-study harness, until one is built.
+`study.py` runs the pilot: the authoring task (correct, wrong, and none conditions, with an optional real anchor), the revision task (five arms, repeats, provenance on every item), and the detection task (the case types, the shuffled and linter-only controls, repeats, the reader reference, per-rule precision), one rater. The confirmatory design in `../docs/blind-eval.md` still needs multiple independent readers with an agreement measure, separated roles, and a writer-level interval. Read "the harness scales to it" as "the file layout and scoring extend to it," not "it is implemented." Those elements are manual, or a job for a separate validation-study harness, until one is built.
 
 ## Files
 

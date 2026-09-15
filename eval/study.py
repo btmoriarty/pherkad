@@ -23,6 +23,14 @@ Pipeline (authoring task, the default):
   # ... fill in ratings.csv, blind ...
   study.py score <run>
 
+Detection task (roadmap item 13; eval/detect.py):
+  study.py plan <run> --task detect --writers a,b [--conditions correct,wrong,shuffled,none,linter] [--repeats 3]
+  # ... cases live under writers/<w>/holdout, flattened, impostors, override; fill prereg.md ...
+  study.py prompts <run> --model <judge>   # judging prompts; the linter floor's verdicts are written directly
+  # ... save each judge reply as verdicts/<blind_id>.json ...
+  study.py sheet <run>                     # pairwise reader sheet + mechanical findings to label
+  study.py score <run>                     # paired margins, correct-profile lift, rates, stability, precision
+
 Revision task (roadmap item 12): does feedback from the tools improve a draft
 more than another editing pass would?
   study.py plan <run> --task revise --brief <b> --writers a,b [--arms ...] [--repeats N] [--surface post]
@@ -109,16 +117,23 @@ def plan(args):
     _ensure(os.path.join(run_dir, "drafts"), os.path.join(run_dir, "prompts"))
 
     writers = [w.strip() for w in args.writers.split(",") if w.strip()]
+    if args.conditions is None:
+        args.conditions = "correct,wrong,shuffled,none,linter" if args.task == "detect" else "correct,wrong,none"
+    if args.task != "detect" and not args.brief:
+        sys.exit("--brief is required for the author and revise tasks")
     conditions = [c.strip() for c in args.conditions.split(",") if c.strip()]
     for w in writers:
         if not os.path.isdir(os.path.join(WRITERS, w)):
             sys.exit(f"unknown writer '{w}' (run add-writer first)")
-    if not os.path.exists(os.path.join(BRIEFS, args.brief + ".md")):
+    if args.task != "detect" and not os.path.exists(os.path.join(BRIEFS, args.brief + ".md")):
         sys.exit(f"unknown brief '{args.brief}'")
 
     rng = random.Random(args.seed)
     if args.task == "revise":
         return plan_revise(args, run_dir, writers, rng)
+    if args.task == "detect":
+        import detect
+        return detect.plan(args, run_dir, writers, rng)
     items = []
     for target in writers:
         for cond in conditions:
@@ -326,6 +341,9 @@ def prompts(args):
     manifest = _load_manifest(args.run)
     if manifest.get("task") == "revise":
         return prompts_revise(args, run_dir, manifest)
+    if manifest.get("task") == "detect":
+        import detect
+        return detect.prompts(args, run_dir, manifest)
     brief_txt = _read(os.path.join(BRIEFS, manifest["brief"] + ".md"))
     n = 0
     for it in manifest["items"]:
@@ -366,6 +384,9 @@ def prompts(args):
 def sheet(args):
     run_dir = os.path.join(RUNS, args.run)
     manifest = _load_manifest(args.run)
+    if manifest.get("task") == "detect":
+        import detect
+        return detect.sheet(args, run_dir, manifest)
     rng = random.Random(str(manifest["seed"]) + "-sheet")
 
     # group items by target writer; shuffle within each so condition order leaks nothing
@@ -505,6 +526,9 @@ def score(args):
     run_dir = os.path.join(RUNS, args.run)
     manifest = _load_manifest(args.run)
     key = {it["blind_id"]: it for it in manifest["items"]}
+    if manifest.get("task") == "detect":
+        import detect
+        return detect.score(run_dir, manifest)
     csv_path = os.path.join(run_dir, "ratings.csv")
     if not os.path.exists(csv_path):
         sys.exit("no ratings.csv; run sheet and fill it in first")
@@ -675,10 +699,11 @@ def main(argv):
     s = sub.add_parser("add-writer"); s.add_argument("id"); s.set_defaults(fn=add_writer)
     s = sub.add_parser("add-brief"); s.add_argument("id"); s.set_defaults(fn=add_brief)
     s = sub.add_parser("plan")
-    s.add_argument("run"); s.add_argument("--brief", required=True)
+    s.add_argument("run"); s.add_argument("--brief", default="", help="required for author and revise")
     s.add_argument("--writers", required=True)
-    s.add_argument("--task", choices=["author", "revise"], default="author")
-    s.add_argument("--conditions", default="correct,wrong,none")
+    s.add_argument("--task", choices=["author", "revise", "detect"], default="author")
+    s.add_argument("--conditions", default=None,
+                   help="author: correct,wrong,none (default); detect: correct,wrong,shuffled,none,linter (default)")
     s.add_argument("--anchor", action="store_true")
     s.add_argument("--arms", default=",".join(ARMS), help="revision task: the arms to run (generic is required)")
     s.add_argument("--repeats", type=int, default=1, help="revision task: runs per arm per writer")

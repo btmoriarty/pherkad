@@ -201,5 +201,113 @@ class ReviseTask(unittest.TestCase):
             self.assertIn("tool_version", it)
 
 
+class DetectTask(ReviseTask):
+    """The detection experiment end to end with synthetic verdicts."""
+
+    def _setup_detect(self):
+        self._run(["add-writer", "brian"])
+        self._run(["add-writer", "rosa"])
+        w = os.path.join(study.WRITERS, "brian")
+        with open(os.path.join(w, "profile.md"), "w") as fh:
+            fh.write("# profile\n\n- marker one: short sentences\n- marker two: the shed\n- marker three: numbers\n")
+        with open(os.path.join(study.WRITERS, "rosa", "profile.md"), "w") as fh:
+            fh.write("# rosa\n\n- lush clauses\n")
+        for d in ("holdout", "flattened", "impostors", "override"):
+            os.makedirs(os.path.join(w, d), exist_ok=True)
+        open(os.path.join(w, "holdout", "shed.md"), "w").write("The shed leaked. Forty bags, all wet.\n")
+        open(os.path.join(w, "holdout", "atypical-poem.md"), "w").write("A poem, unusual for him.\n")
+        open(os.path.join(w, "flattened", "shed.1.md"), "w").write("The storage shed had a leak, and the bags got wet.\n")
+        open(os.path.join(w, "flattened", "shed.2.md"), "w").write("There was water damage to the stored bags. This is a game-changer.\n")
+        open(os.path.join(w, "impostors", "rosa-shed.md"), "w").write("In the long light the shed gave up its water.\n")
+        open(os.path.join(w, "override", "rhymes.md"), "w").write("Cat rhymes with hat, he said.\n")
+
+    def test_plan_prompts_sheet_score(self):
+        self._setup_detect()
+        code, out = self._run(["plan", "d1", "--task", "detect", "--writers", "brian,rosa", "--repeats", "2"])
+        self.assertEqual(code, 0, out)
+        self.assertIn("missing: rosa: no authentic case", out)
+        run_dir = os.path.join(study.RUNS, "d1")
+        m = json.load(open(os.path.join(run_dir, "manifest.json")))
+        self.assertEqual(m["task"], "detect")
+        brian = [it for it in m["items"] if it["target"] == "brian"]
+        # 6 cases x 5 conditions x 2 repeats
+        self.assertEqual(len(brian), 6 * 5 * 2)
+        self.assertEqual({it["case_type"] for it in brian}, {"authentic", "atypical", "flattened", "impostor", "override"})
+        self.assertTrue(os.path.exists(os.path.join(run_dir, "profiles", "brian-shuffled.md")))
+        self.assertIn("TODO", open(os.path.join(run_dir, "prereg.md")).read())
+        wrong = [it for it in brian if it["condition"] == "wrong"][0]
+        self.assertEqual(wrong["profile"], "rosa")
+
+        code, out = self._run(["prompts", "d1", "--model", "judge-1"])
+        self.assertEqual(code, 0, out)
+        m = json.load(open(os.path.join(run_dir, "manifest.json")))
+        brian = [it for it in m["items"] if it["target"] == "brian"]
+        floor = [it for it in brian if it["condition"] == "linter"]
+        self.assertTrue(all(os.path.exists(os.path.join(run_dir, it["verdict"])) for it in floor), "linter floor written")
+        fl2 = [it for it in floor if it["case"] == "shed.2"][0]
+        v = json.load(open(os.path.join(run_dir, fl2["verdict"])))
+        self.assertEqual(v["verdict"], "REVISE", "a banned phrase makes the floor say REVISE")
+        judged = [it for it in brian if it["condition"] != "linter"]
+        self.assertTrue(all(it["model"] == "judge-1" and it.get("prompt_sha256") for it in judged))
+        prompt = open(os.path.join(run_dir, "prompts", judged[0]["blind_id"] + ".txt")).read()
+        self.assertIn("=== PASSAGE ===", prompt)
+        self.assertIn('"rating"', prompt)
+
+        # synthetic judge: the correct profile separates; the controls do not; one repeat wobbles
+        def judge(it):
+            ct, cond, rep = it["case_type"], it["condition"], it["repeat"]
+            if cond == "correct":
+                rating = {"authentic": 5, "atypical": 4, "override": 5, "flattened": 2, "impostor": 2}[ct]
+                verdict = {5: "PASS", 4: "light REVISE", 2: "REVISE"}[rating]
+                if ct == "impostor" and rep == 2:
+                    rating, verdict = 4, "PASS"  # a severe wobble
+                markers = ["marker one", "marker two"] if ct in ("authentic", "override") else ["marker one"]
+            else:
+                rating, verdict, markers = 3, "light REVISE", []
+            return {"rating": rating, "verdict": verdict, "positive_register": ct != "flattened",
+                    "markers": markers, "evidence": ["x"]}
+        for it in judged:
+            json.dump(judge(it), open(os.path.join(run_dir, it["verdict"]), "w"))
+
+        code, out = self._run(["sheet", "d1"])
+        self.assertEqual(code, 0, out)
+        import csv
+        pairs = list(csv.DictReader(open(os.path.join(run_dir, "pairs.csv"))))
+        self.assertEqual(len(pairs), 2, "two flattenings of shed pair with the shed holdout")
+        keyd = json.load(open(os.path.join(run_dir, "pairs-key.json")))
+        labels = list(csv.DictReader(open(os.path.join(run_dir, "findings-labels.csv"))))
+        self.assertTrue(any(r["rule_id"] == "soft.rhymes-with" for r in labels), "the override's finding is there to label")
+        # the reader: right on pair 1, 'same' on pair 2; labels: rhymes-with is FP
+        for r in pairs:
+            r["pick"] = keyd[r["pair_id"]] if r["pair_id"] == pairs[0]["pair_id"] else "same"
+        with open(os.path.join(run_dir, "pairs.csv"), "w", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=["pair_id", "writer", "pick"]); w.writeheader(); w.writerows(pairs)
+        for r in labels:
+            r["label"] = "FP" if r["rule_id"] == "soft.rhymes-with" else "TP"
+        with open(os.path.join(run_dir, "findings-labels.csv"), "w", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(labels[0].keys())); w.writeheader(); w.writerows(labels)
+
+        code, out = self._run(["score", "d1"])
+        self.assertEqual(code, 0, out)
+        res = open(os.path.join(run_dir, "results.md")).read()
+        self.assertIn("prereg.md still has TODO", res)
+        self.assertIn("| correct | +3.00 |", res, "authentic 5 minus flattened 2 on the one usable pair")
+        self.assertIn("| none | +0.00 |", res)
+        self.assertIn("flattened +3.00", res, "lift over the flat controls")
+        self.assertIn("authentic accepted", res)
+        self.assertIn("exact 5/6, adjacent 0/6, severe 1/6", res, "the impostor wobble is severe movement")
+        self.assertIn("told authentic from flattened on 1/1 decided pair(s); 1 pair(s) marked same", res)
+        self.assertIn("| soft.rhymes-with | 0 | 1 | 0.00 |", res)
+        self.assertIn("linter-only floor", res)
+
+    def test_generic_arm_is_required(self):
+        self._setup_writer()
+        with self.assertRaises(SystemExit):
+            self._run(["plan", "d2", "--task", "detect", "--writers", "brian", "--conditions", "wrong,none"])
+
+    def test_authoring_items_carry_provenance(self):
+        pass  # covered by ReviseTask
+
+
 if __name__ == "__main__":
     unittest.main()
