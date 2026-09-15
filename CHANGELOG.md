@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.5.10 (2026-09-15)
+
+Item 8 of `docs/ROADMAP.md`, the release manifest and the overlay check, which closes row 12 of `docs/priority-fixes.md` and phase 2 of the roadmap.
+
+- **`tools/bundle-manifest.json`**, new, written by `pherkad.py manifest --write` at release: the version, a schema number, the sha256 of every vendored file (the five a gate needs, plus replycheck, its hook, corpusscan, and the surfaces), and every rule id the shipped base runs. `pherkad.py manifest --verify` fails when a file beside the script no longer matches, when a file is missing or unlisted, when the version differs from `VERSION`, or when the rule ids differ from the shipped config. CI runs it, so a release that edits a tool and forgets the manifest fails its own tests; the first run of the test did exactly that.
+- **`pherkad.py check-overlay OVERLAY`** loads a downstream overlay on the shipped base and reports what would silently do nothing: a `remove_<field>` naming a rule that is not here (error), an `add_<field>` duplicating a shipped rule (warning), a whole-list replacement where `add_`/`remove_` would inherit (warning), a structure key the base does not know (config error). The saga overlay checks clean; the shipped `assistant-chat` surface checks clean.
+- **The saga's `sync-voicelint.sh --check`** now verifies three things: the six vendored files against its own sha record, pherkad's manifest against the copies, and the saga overlay against the vendored base. Any one failing exits non-zero, and `lint-voice.sh` reports it at the top of every run.
+- `test_pherkad.py` grows by 10 cases.
+- `VERSION` 0.5.10.
+
 ## v0.5.9 (2026-09-15)
 
 Item 7 of `docs/ROADMAP.md`, the decision file, which closes row 7 of `docs/priority-fixes.md` by giving a downstream corpus a way to triage its advisory warnings once.

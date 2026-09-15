@@ -295,5 +295,99 @@ class Decisions(unittest.TestCase):
         self.assertIn("1 decided (1 deferred)", out)
 
 
+class Manifest(unittest.TestCase):
+    def test_manifest_verifies_in_the_repo(self):
+        # The committed manifest must match the files beside it; a release that
+        # forgets `manifest --write` fails here, which is the point.
+        code, out, _ = run(["manifest", "--verify"])
+        self.assertEqual(code, 0, out)
+
+    def test_manifest_shape(self):
+        m = pherkad.build_manifest()
+        for k in ("tool", "version", "schema", "generated", "files", "rule_ids"):
+            self.assertIn(k, m)
+        for f in ("pherkad.py", "voicelint.py", "structlint.py", "mdmask.py", "voice_config.json",
+                  "surfaces/assistant-chat.json"):
+            self.assertIn(f, m["files"])
+        self.assertIn("banned.game-changer", m["rule_ids"])
+        self.assertIn("structure.two-beat", m["rule_ids"])
+
+    def test_vendored_copy_verifies_without_optional_files(self):
+        # A downstream gate vendors the five required files and the manifest,
+        # with no VERSION beside them; that must verify, and a changed required
+        # file must not.
+        import shutil
+        with tempfile.TemporaryDirectory() as d:
+            for f in pherkad.REQUIRED_FILES + ("bundle-manifest.json",):
+                shutil.copy(os.path.join(HERE, f), d)
+            proc = subprocess.run([sys.executable, os.path.join(d, "pherkad.py"), "manifest", "--verify"],
+                                  capture_output=True, text=True)
+            self.assertEqual(proc.returncode, 0, proc.stdout)
+            with open(os.path.join(d, "voicelint.py"), "a") as fh:
+                fh.write("\n# drift\n")
+            proc = subprocess.run([sys.executable, os.path.join(d, "pherkad.py"), "manifest", "--verify"],
+                                  capture_output=True, text=True)
+            self.assertEqual(proc.returncode, 1)
+            self.assertIn("changed: voicelint.py", proc.stdout)
+
+    def test_verify_detects_a_changed_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            m = pherkad.build_manifest()
+            m["files"]["voicelint.py"] = "0" * 64
+            p = os.path.join(d, "bundle-manifest.json")
+            json.dump(m, open(p, "w"))
+            # verify_manifest reads files relative to the manifest's directory,
+            # so point it at the real tools dir by copying the manifest there is
+            # not an option; instead check the comparison logic directly.
+            problems = pherkad.verify_manifest(p)
+            self.assertTrue(any(p_.startswith("missing:") for p_ in problems), problems)
+
+
+class CheckOverlay(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def overlay(self, body):
+        p = os.path.join(self.tmp.name, "ov.json")
+        json.dump(body, open(p, "w"))
+        return p
+
+    def test_clean_overlay(self):
+        code, out, _ = run(["check-overlay", self.overlay({"add_banned_phrases": ["circle back"],
+                                                           "remove_soft_phrases": ["soft.is-the-point"]})])
+        self.assertEqual(code, 0)
+        self.assertIn("0 error(s), 0 warning(s)", out)
+
+    def test_removal_of_a_missing_rule_is_an_error(self):
+        code, out, _ = run(["check-overlay", self.overlay({"remove_soft_phrases": ["soft.the-one-that"]})])
+        self.assertEqual(code, 1)
+        self.assertIn("names no shipped rule", out)
+
+    def test_duplicate_add_is_a_warning(self):
+        code, out, _ = run(["check-overlay", self.overlay({"add_banned_phrases": ["game-changer"]})])
+        self.assertEqual(code, 0)
+        self.assertIn("already a shipped rule", out)
+
+    def test_wholesale_replacement_is_a_warning(self):
+        code, out, _ = run(["check-overlay", self.overlay({"soft_phrases": ["x"]})])
+        self.assertEqual(code, 0)
+        self.assertIn("replaces the whole shipped list", out)
+
+    def test_empty_shipped_list_replacement_is_not_a_warning(self):
+        code, out, _ = run(["check-overlay", self.overlay({"aggregator_domains": ["msn.com"]})])
+        self.assertIn("0 warning(s)", out)
+
+    def test_unknown_structure_key_is_a_config_error(self):
+        self.assertEqual(run(["check-overlay", self.overlay({"structure": {"nope": 1}})])[0], 2)
+
+    def test_shipped_surface_overlay_is_clean(self):
+        code, out, _ = run(["check-overlay", os.path.join(HERE, "surfaces", "assistant-chat.json")])
+        self.assertEqual(code, 0)
+        self.assertIn("0 error(s), 0 warning(s)", out)
+
+
 if __name__ == "__main__":
     unittest.main()

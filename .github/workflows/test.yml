@@ -34,6 +34,9 @@ jobs:
       - name: Run the structlint regression suite
         run: python3 skills/pherkad/tools/test_structlint.py
 
+      - name: Verify the release manifest
+        run: python3 skills/pherkad/tools/pherkad.py manifest --verify
+
       - name: Run the combined-runner tests
         run: python3 skills/pherkad/tools/test_pherkad.py
 
