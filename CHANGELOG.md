@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.5.9 (2026-09-15)
+
+Item 7 of `docs/ROADMAP.md`, the decision file, which closes row 7 of `docs/priority-fixes.md` by giving a downstream corpus a way to triage its advisory warnings once.
+
+- **`pherkad.py check --decisions FILE`** hides, and stops counting, every finding the author has ruled on. A decision is a record `{rule_id, path, context_hash, rule_hash, count, disposition, reason, decided}`: the context is the whole line the finding sits on with whitespace collapsed, the rule hash is the rule's pattern, and the record covers up to `count` occurrences on that line. A changed line, a changed rule, or an extra occurrence makes the finding new again. `--show-decided` prints the hidden ones; the summary reports `N decided (a accepted, b intentional, c deferred)` so the debt stays visible; `--format json` carries each finding's decision and `--format sarif` omits decided findings. Paths are relative to `--root`, default the decision file's directory.
+- **`pherkad.py decide --decisions FILE --reason "..." path:line[:rule_id]`** is the only thing that writes a decision, and it refuses an empty reason and a location with no finding. Dispositions: `accepted` (the author's usage), `intentional` (a deliberate choice), `deferred` (known, fix later). Deciding a line covers every occurrence of that rule on it; naming a rule id covers that rule only.
+- **`pherkad.py decisions --decisions FILE FILES...`** reports which records still match and why the others do not (line changed or finding gone, rule changed, rule gone); `--prune` drops the stale ones and nothing is pruned without it.
+- **The saga gate passes `--decisions voice-decisions.json --root <repo>`** when that file exists at the repo root. It does not exist yet; the 293 advisory warnings and 6 errors there are the author's to rule on, one `decide` at a time, and nothing in the tool rules on them for him.
+- `test_pherkad.py` grows by 11 decision cases.
+- `VERSION` 0.5.9.
+
 ## v0.5.8 (2026-09-15)
 
 Item 6 of `docs/ROADMAP.md`, the combined runner.

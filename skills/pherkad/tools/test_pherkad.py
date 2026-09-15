@@ -168,5 +168,132 @@ class Cli(unittest.TestCase):
         self.assertIn("density", rows)
 
 
+class Decisions(unittest.TestCase):
+    TEXT = ("The count was wrong. The ledger was right. That is the whole error.\n\n"
+            "The honest answer is no.\n\n"
+            "Plain prose that is the whole of it, and is the whole of that too.\n")
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = self.tmp.name
+        os.makedirs(os.path.join(self.root, "canon"))
+        self.f = os.path.join(self.root, "canon", "a.md")
+        with open(self.f, "w") as fh:
+            fh.write(self.TEXT)
+        self.dec = os.path.join(self.root, "voice-decisions.json")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def check(self, *extra):
+        code, out, _ = run(["check", "--decisions", self.dec, *extra, self.f])
+        return code, out
+
+    def decide(self, loc, reason="read it", disposition="accepted", *extra):
+        return run(["decide", "--decisions", self.dec, "--reason", reason, "--disposition", disposition, *extra,
+                    os.path.join(self.root, loc)])
+
+    def test_undecided_baseline(self):
+        code, out = self.check()
+        self.assertEqual(code, 1)
+        self.assertIn("1 error(s), 4 warning(s)", out)
+
+    def test_decide_hides_and_stops_counting(self):
+        self.assertEqual(self.decide("canon/a.md:3", "literal", "intentional")[0], 0)
+        code, out = self.check()
+        self.assertEqual(code, 0, "a decided error no longer counts")
+        self.assertNotIn("honest-framing", out)
+        self.assertIn("1 decided (1 intentional)", out)
+        code, out = self.check("--show-decided")
+        self.assertIn("[decided:intentional] honest-framing", out)
+
+    def test_decision_file_shape(self):
+        self.decide("canon/a.md:3", "literal", "intentional")
+        d = json.load(open(self.dec))
+        self.assertEqual(len(d), 1)
+        self.assertEqual(d[0]["path"], "canon/a.md", "relative to the decision file's directory")
+        for k in ("rule_id", "context_hash", "rule_hash", "count", "disposition", "reason", "decided"):
+            self.assertIn(k, d[0])
+        self.assertEqual(d[0]["reason"], "literal")
+
+    def test_count_covers_occurrences_on_the_line(self):
+        # Line 5 has two "is the whole"; deciding the line records count 2.
+        self.decide("canon/a.md:5:soft.is-the-whole")
+        self.assertEqual(json.load(open(self.dec))[0]["count"], 2)
+        code, out = self.check()
+        self.assertIn("2 decided", out)
+        # A third occurrence changes the line, so the whole line is new again.
+        text = self.TEXT.replace("and is the whole of that too.", "and is the whole of that too, which is the whole.")
+        with open(self.f, "w") as fh:
+            fh.write(text)
+        code, out = self.check()
+        self.assertNotIn("decided", out)
+        self.assertEqual(out.count("soft.is-the-whole"), 4, "three on line 5 plus one on line 1, all reported")
+
+    def test_changed_line_surfaces_the_finding_again(self):
+        self.decide("canon/a.md:3", "literal", "intentional")
+        with open(self.f, "w") as fh:
+            fh.write(self.TEXT.replace("is no.", "is yes."))
+        code, out = self.check()
+        self.assertEqual(code, 1)
+        self.assertIn("honest-framing", out)
+        code, out, _ = run(["decisions", "--decisions", self.dec, self.f])
+        self.assertIn("1 stale", out)
+        self.assertIn("line changed or finding gone", out)
+
+    def test_changed_rule_invalidates(self):
+        self.decide("canon/a.md:3", "literal", "intentional")
+        d = json.load(open(self.dec))
+        d[0]["rule_hash"] = "0000000000000000"
+        json.dump(d, open(self.dec, "w"))
+        code, out = self.check()
+        self.assertEqual(code, 1)
+        code, out, _ = run(["decisions", "--decisions", self.dec, self.f])
+        self.assertIn("rule changed", out)
+
+    def test_prune_is_explicit(self):
+        self.decide("canon/a.md:3", "literal", "intentional")
+        with open(self.f, "w") as fh:
+            fh.write("clean now\n")
+        run(["decisions", "--decisions", self.dec, self.f])
+        self.assertEqual(len(json.load(open(self.dec))), 1, "not pruned without --prune")
+        code, out, _ = run(["decisions", "--decisions", self.dec, "--prune", self.f])
+        self.assertEqual(json.load(open(self.dec)), [])
+
+    def test_rule_specific_decision_leaves_other_rules(self):
+        self.decide("canon/a.md:1:structure.two-beat")
+        code, out = self.check()
+        self.assertNotIn("structure.two-beat", out)
+        self.assertIn("soft.is-the-whole", out)
+
+    def test_refusals(self):
+        self.assertEqual(self.decide("canon/a.md:3", "   ")[0], 2, "a reason is required")
+        self.assertEqual(self.decide("canon/a.md:2")[0], 2, "no finding there")
+        self.assertEqual(self.decide("canon/a.md:3:banned.game-changer")[0], 2, "no such finding there")
+        bad = os.path.join(self.root, "bad.json")
+        json.dump([{"rule_id": "x", "path": "p", "context_hash": "c", "rule_hash": "r",
+                    "disposition": "whatever", "reason": "r"}], open(bad, "w"))
+        self.assertEqual(run(["check", "--decisions", bad, self.f])[0], 2)
+        json.dump([{"rule_id": "x", "path": "p", "context_hash": "c", "rule_hash": "r",
+                    "disposition": "accepted", "reason": ""}], open(bad, "w"))
+        self.assertEqual(run(["check", "--decisions", bad, self.f])[0], 2)
+
+    def test_json_and_sarif_reflect_decisions(self):
+        self.decide("canon/a.md:3", "literal", "intentional")
+        code, out, _ = run(["check", "--decisions", self.dec, "--format", "json", self.f])
+        d = json.loads(out)
+        self.assertEqual(d["decided"]["intentional"], 1)
+        fs = d["files"][self.f]
+        self.assertTrue(any(f["decision"] and f["rule_id"] == "honest-framing" for f in fs))
+        code, out, _ = run(["check", "--decisions", self.dec, "--format", "sarif", self.f])
+        self.assertNotIn("honest-framing", {r["ruleId"] for r in json.loads(out)["runs"][0]["results"]})
+
+    def test_deferred_counts_separately(self):
+        self.decide("canon/a.md:3", "fix next pass", "deferred")
+        code, out = self.check()
+        self.assertEqual(code, 0)
+        self.assertIn("1 decided (1 deferred)", out)
+
+
 if __name__ == "__main__":
     unittest.main()
