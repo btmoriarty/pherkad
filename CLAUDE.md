@@ -1,6 +1,6 @@
 # Pherkad
 
-The voice tools live in `skills/pherkad/tools/`. Run the suites with `python3 <abs path>/test_voicelint.py`, `test_structlint.py`, `test_replycheck.py`, and `eval/test_study.py`; all four are unittest modules and pytest collects them too.
+The voice tools live in `skills/pherkad/tools/`. Run the suites with `python3 <abs path>/test_voicelint.py`, `test_structlint.py`, `test_replycheck.py`, `test_corpusscan.py`, and `eval/test_study.py`; all five are unittest modules and pytest collects them too.
 
 ## Reply preflight
 
@@ -16,4 +16,10 @@ Quote any banned phrase you need to mention in backticks; plain quotation marks 
 
 ## Rule changes
 
-Every change to `voice_config.json` is counted against the saga corpus before it ships (`/Users/moriarty/el_loco_lobo`, the shareable tree, via the saga overlay), and the count goes in the CHANGELOG. The ban list does not grow for migrating habits; those go to the judgment layer or corpus monitoring. Chat-only rules go in `tools/surfaces/assistant-chat.json`, never the shipped defaults.
+Every change to `voice_config.json` is counted against the saga corpus before it ships, and the count goes in the CHANGELOG. The count is one command:
+
+```
+python3 /Users/moriarty/Documents/kochab/pherkad/skills/pherkad/tools/corpusscan.py diff /Users/moriarty/el_loco_lobo/canon /Users/moriarty/el_loco_lobo/deliverables --config /Users/moriarty/el_loco_lobo/tools/voice_config.json --exclude '[0-9][0-9]-*.md' --ext .md --old <previous voice_config.json> --new skills/pherkad/tools/voice_config.json
+```
+
+with `<previous voice_config.json>` from `git show <last release>:skills/pherkad/tools/voice_config.json`. A candidate rule is tried before it is added with `corpusscan.py scan ... --candidate "field:pattern" --contexts 8`. The numbers are raw hits; read the contexts before calling one a violation. The ban list does not grow for migrating habits; those go to the judgment layer or corpus monitoring. Chat-only rules go in `tools/surfaces/assistant-chat.json`, never the shipped defaults.

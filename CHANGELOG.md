@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.5.5 (2026-09-15)
+
+Item 3 of `docs/ROADMAP.md`: the corpus scan and release diff, so the count that every rule change is supposed to carry is one command rather than an afternoon.
+
+- **`tools/corpusscan.py`**, new. `scan DIR...` counts every rule over a corpus (hits, files, hits per 1,000 words, sorted); `--rule ID` narrows to one rule with sampled contexts; `--candidate "field:pattern"` (or a JSON rule object) tries a rule that is not in the config yet, and refuses one that already is. `diff DIR --old A.json --new B.json` runs two base rule sets under the same overlay and reports rules added, removed, and renamed (same pattern, new id), per-rule deltas, and the findings that appear and vanish, with contexts for the new ones. `--json` adds the tool version, the sha256 of every config involved, and the corpus size, which is what a dated snapshot should keep. Every number is labelled a raw hit; nothing promotes a rule.
+- **`voicelint.load_config(path, base=...)`** takes another base file, for the corpus tools only. The linter's own CLI still always runs the shipped base, so a vendored copy cannot be pointed at a stale one.
+- Today's calibration reproduced by the tool, the 0.5.1 rule set against 0.5.5 on the saga's shareable tree (202 Markdown files, 273,455 words, saga overlay, both run under the current linter so only the rule changes show): errors 6 to 6, warnings 300 to 293, 62 findings appear and 69 vanish; 15 rules added, 21 removed, 5 renamed. The hand count earlier today read 313 to 294 because it also carried the 0.5.2 and 0.5.3 code changes (overlap collapse, directive blanking). The three `named` soft phrases from `docs/priority-fixes.md` row 7 score 0 hits on the corpus and stay.
+- The count command is in the repository `CLAUDE.md`, so a rule change without a count is a visible omission.
+- `tools/test_corpusscan.py`, 11 tests, in CI.
+- `VERSION` 0.5.5.
+
 ## v0.5.4 (2026-09-15)
 
 Item 2 of `docs/ROADMAP.md`: the reply preflight, for the gap where nothing checked an assistant's chat replies.
