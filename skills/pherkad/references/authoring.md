@@ -22,13 +22,13 @@ Authoring reads `Voice_Profile.md` from the working folder, the same file valida
 
 4. **Restore what a generic draft strips.** Carry the profile's hedging and tentativeness. Add the downtoners and structural hedges the profile records; a clean confident default is usually more certain than the writer actually is.
 
-5. **Anchor in the concrete.** Where the genre allows, include at least one specific, witnessed detail: a role, a time, an artifact, a number. Concept with no scene is the most common form of flatness.
+5. **Anchor in the concrete, where the surface wants it.** For a post, an essay, a letter, or the frame of a paper, include at least one specific, witnessed detail: a role, a time, an artifact, a number; concept with no scene is the most common form of flatness there. A technical answer, a bug report, a commit message, or a status email needs no invented scene, and one added to fit the profile is worse than none. The surface table under Quick mode in `SKILL.md` says which is which.
 
 6. **Respect the bans while drafting.** Do not emit what validation would flag. The tell catalog and the profile's bans apply to your own output as you write it.
 
 ## Then grade yourself
 
-Before returning a draft, run it through validation: the Step 2 diagnostic and, where a runtime is available, `voicelint.py`. Fix your own flags. Author, then check your own work. Do not hand back a draft you have not validated.
+Before returning a draft, run it through validation in quick mode: `tools/pherkad.py check` where a runtime is available, then the judgment-only rules for the draft's surface, one table, one verdict. Fix your own `fix` rows. Use full mode (the Step 2 diagnostic) for a paper, an essay, or when quick mode finds the voice missing across the piece. Author, then check your own work. Do not hand back a draft you have not validated.
 
 ## Guardrails
 

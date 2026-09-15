@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.5.11 (2026-09-15)
+
+Item 9 of `docs/ROADMAP.md`, the compact judgment mode. A change to the skill's instructions, not to code.
+
+- **Quick mode is the default depth of validation.** `SKILL.md` gains Step 0b (choose quick or full) and a Quick mode section: one run of `pherkad.py check --format json`, one read of the draft for the judgment-only rules that apply to its surface, and one table with a row per finding: `rule_ref`, `quote`, `decision`, `rationale`, `proposed_edit`. Decisions are `fix`, `intentional`, `literal`, `not applicable`, or `quoted`; only a `fix` row carries an edit. The verdict is one line. Nothing is scored, no fingerprint is produced, and nothing is rewritten that was not flagged. A confirmed `intentional` or `literal` row in a project with a decision file is recorded with `pherkad.py decide`.
+- **Full mode is the audit**, Steps 1 through 6 unchanged, for a paper, an essay, a chapter, an explicit request for scores, or a quick pass that found the voice missing across the piece.
+- **Positive markers apply by surface.** A table in Quick mode says where the positive register is expected: not in an assistant's reply, a technical answer, a bug report, a commit message, or a status email; in the frame and close of a post or letter; in the frame and transitions of a paper; never from the personal profile in fiction, which has its own voice document. `references/authoring.md` rule 5 says the same from the drafting side: a scene added to a technical answer to fit the profile is worse than none.
+- **The blanket chat exemption is gone.** `references/ai_tells.md` now exempts informal messages between people, and names an assistant's reply as the `assistant-chat` surface, checked by `replycheck.py` and judged in quick mode.
+- Step 3 of full mode runs `pherkad.py check --format json` once instead of two commands. The cheat sheet gains rows for the quick check, the combined CLI, and the reply preflight.
+- `VERSION` 0.5.11.
+
 ## v0.5.10 (2026-09-15)
 
 Item 8 of `docs/ROADMAP.md`, the release manifest and the overlay check, which closes row 12 of `docs/priority-fixes.md` and phase 2 of the roadmap.
