@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.5.1 (2026-09-15)
+
+A Codex review of the tools, recorded in `docs/codex-review-2026-09-15.md`, found four correctness bugs. This release fixes those four and nothing in the rule set; the calibration findings in that review wait on a separate decision.
+
+- **The Python copy of the defaults is gone.** `voicelint.py` carried a `FALLBACK_CONFIG` that had drifted from `voice_config.json` (13 soft phrases against 115, 26 banned phrases against 34), and every `--config` was merged onto that stale copy rather than the shipped file. Any user config, however small, silently ran with a fraction of the rules. The shipped JSON beside the script is now the only base; a missing base exits 2 instead of running with less. The overlay is `--config`, or `./voice_config.json` in the working directory when it is a different file. `--print-config` prints the effective set.
+- **The `rules-file` marker is read after code masking**, and only as an HTML comment on its own line. Before, the marker inside backticks, or mentioned in a sentence, silenced the whole file.
+- **Fence masking covers tilde fences and unclosed fences.** A tilde block was linted as prose, and an unclosed backtick fence, which Markdown renders as code to the end of the file, was too.
+- **Suppression directives survive HTML stripping.** `strip_html` removed every comment, so `ignore-line` and `voicelint-allow` did nothing in an `.html` input.
+- **`frame` leaves the load-bearing exempt set.** The comment above the set already named "load-bearing frame of the argument" as the figurative case; the set contradicted it. It now draws the context warning like any other non-structural object.
+- **`eval/study.py` scores the letter you typed.** Forced-choice picks resolved to the row the letter sat on, so entering `b` on row `a` counted as picking `a`. A pick now resolves to the named candidate; an unknown letter, two conflicting picks for one writer, or a rating outside 1 to 5 stops the run rather than scoring a guess. `eval/test_study.py` covers it.
+- **Both test files are real `unittest` suites**, collected by `python3 -m unittest` and by pytest, with the old direct invocation unchanged for CI. The prior scripts ran at import time and were invisible to both runners. Every bug above has a regression case.
+- `VERSION` 0.5.1.
+
 ## v0.5.0 (2026-08-20)
 
 A structural checker joins the linter. `voicelint` matches phrases; the families that actually sink a draft have no string to match, and `voice-authoring.md` has said so since 2026-08-15 under "The linter is the last check, not the check" without anything enforcing it. Guidance lost to the default register in practice, so it becomes a tool.

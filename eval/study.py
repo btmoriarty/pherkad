@@ -250,6 +250,52 @@ def _reference_block(writer):
 
 
 # ---------------------------------------------------------------------------
+def _read_ratings(rows):
+    """Parse ratings.csv rows into ``(ratings, picks)``.
+
+    ``ratings`` maps blind_id to ``(rating, fidelity_flag)``. ``picks`` maps
+    writer to the list of blind_ids chosen in forced-choice mode. A pick is the
+    candidate LETTER written in ``forced_choice_pick`` on any one of that
+    writer's rows, and it resolves to the row whose ``candidate`` is that
+    letter, not to the row it was typed on. (An earlier version scored the row
+    the letter sat on, so entering ``b`` on row ``a`` counted as picking ``a``.)
+    A letter that names no candidate, or two rows for one writer naming
+    different letters, stops the run: a silent guess would look like a result.
+    """
+    ratings, picks = {}, {}
+    by_writer = {}
+    for row in rows:
+        bid = row["blind_id"]
+        writer = row["writer"]
+        letter = (row.get("candidate") or "").strip().lower()
+        by_writer.setdefault(writer, {})[letter] = bid
+        val = (row.get("rating") or "").strip()
+        if val:
+            try:
+                num = float(val)
+            except ValueError:
+                sys.exit(f"ratings.csv: rating {val!r} on {bid} is not a number")
+            if not 1 <= num <= 5:
+                sys.exit(f"ratings.csv: rating {val!r} on {bid} is outside 1 to 5")
+            ratings[bid] = (num, (row.get("fidelity_flag") or "").strip().upper())
+    chosen = {}
+    for row in rows:
+        pick = (row.get("forced_choice_pick") or "").strip().lower()
+        if not pick:
+            continue
+        writer = row["writer"]
+        if pick not in by_writer[writer]:
+            sys.exit(f"ratings.csv: forced_choice_pick {pick!r} for {writer} names no candidate "
+                     f"(have {', '.join(sorted(by_writer[writer]))})")
+        if writer in chosen and chosen[writer] != pick:
+            sys.exit(f"ratings.csv: {writer} has two different forced-choice picks "
+                     f"({chosen[writer]!r} and {pick!r}); keep one")
+        chosen[writer] = pick
+    for writer, pick in chosen.items():
+        picks.setdefault(writer, []).append(by_writer[writer][pick])
+    return ratings, picks
+
+
 def score(args):
     run_dir = os.path.join(RUNS, args.run)
     manifest = _load_manifest(args.run)
@@ -258,14 +304,8 @@ def score(args):
     if not os.path.exists(csv_path):
         sys.exit("no ratings.csv; run sheet and fill it in first")
 
-    ratings, picks = {}, {}
     with open(csv_path, newline="") as fh:
-        for row in csv.DictReader(fh):
-            bid = row["blind_id"]
-            if row.get("rating", "").strip():
-                ratings[bid] = (float(row["rating"]), row.get("fidelity_flag", "").strip().upper())
-            if row.get("forced_choice_pick", "").strip():
-                picks.setdefault(row["writer"], []).append(bid)
+        ratings, picks = _read_ratings(list(csv.DictReader(fh)))
 
     # rating mode: per-writer mean by condition, correct-profile lift
     per_writer = {}

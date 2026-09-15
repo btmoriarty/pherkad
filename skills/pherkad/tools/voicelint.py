@@ -23,6 +23,10 @@ Usage:
     voicelint.py --config my.json FILE
     voicelint.py --json FILE       # machine-readable output
     voicelint.py --strict FILE     # warnings fail too (non-zero exit)
+    voicelint.py --print-config    # the effective rule set as JSON
+
+Rules: the shipped voice_config.json beside this script is the base; --config
+(or ./voice_config.json in the working directory) is one overlay merged onto it.
 
 Exit status: 0 if clean; 1 if any error-level finding (or any warning with
 --strict); 2 on a usage, IO, or config problem. That makes it safe in CI, where
@@ -45,69 +49,13 @@ from urllib.parse import urlsplit
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# Built-in rules, used only when no voice_config.json is found (kept in sync
-# with that file). voice_config.json is the source of truth for a project.
-#
-# These defaults are the maintainer's house rules. Each was added after
-# recurring across many AI-assisted documents, but the set still reflects one
-# writer's conclusions. If a rule contradicts your real style, relax it in
-# your own config (see examples/relaxed.json, or generate one from your voice
-# profile) and record the override in your voice profile.
-FALLBACK_CONFIG = {
-    "no_dashes": True,
-    "dash_density_cap": 1.0,
-    "load_bearing_literal_only": True,
-    "banned_phrases": [
-        "it's worth noting that", "it is worth noting that",
-        "make no mistake", "at the end of the day", "the bottom line is",
-        "a testament to", "game-changer", "paradigm shift",
-        "unlock the potential", "double-edged sword", "moved the needle",
-        "closed the loop", "the mirror image of", "rhymes with",
-        "the flip side of", "in the realm of", "navigating the complexities",
-        "in the rapidly evolving landscape", "in a world where",
-        "picture this:", "as we navigate", "today, more than ever",
-        "in conclusion,", "to summarize,",
-        "writes itself", "needs no embellishment",
-    ],
-    "engagement_bait": [
-        "nobody's talking about", "everybody's talking about",
-        "no one is talking about", "the conversation nobody's having",
-        "what I keep coming back to", "the thing I keep coming back to",
-        "where I keep landing", "here's the thing", "here's what's wild",
-        "here's the real question", "here's what they don't tell you",
-        "let that sink in", "what most people miss", "few people realise",
-        "few people realize", "the uncomfortable truth",
-        "the inconvenient truth", "let's be honest", "i'll be blunt",
-        "let me tell you why", "and here's why that matters", "plot twist:",
-    ],
-    # Warnings, not errors: phrasings that are hard to ban outright but recur
-    # far too often in AI-assisted text. [word] matches one token; [verb]
-    # matches a gerund. A soft hit that overlaps a stronger banned phrase is
-    # dropped as redundant (see check()).
-    "soft_phrases": [
-        "it's worth [verb]", "it is worth [verb]",
-        "i want to be plain", "i want to be clear", "i want to be honest",
-        "i want to be upfront", "i want to be direct", "i want to be transparent",
-        "gut-check", "gut check",
-        "where your [word] lives",
-        "names a way",
-        "the [word] that never bends",
-    ],
-    "filler_words": [
-        "significant", "crucial", "essential", "robust", "utilize",
-        "genuinely", "honestly", "straightforward", "seamless", "seamlessly",
-        "leverage", "delve", "delves", "delving", "tapestry", "showcases",
-    ],
-    "watch_words": {"quietly": 2},
-    # Off by default: clause-final position alone cannot tell an insinuating
-    # "quietly" from a plain manner adverb ("shut the door quietly"). Kept as an
-    # opt-in house rule; overuse is still caught by the "quietly" watch word,
-    # and the pre-modifier case lives in the judgment layer (references/ai_tells.md).
-    "flag_loaded_quietly": False,
-    # Source-quality policy, not a voice tell, so it is not a shipped default.
-    # A team that wants it keeps a config like examples/news-brief.json.
-    "aggregator_domains": [],
-}
+# The shipped rule set lives beside this script as voice_config.json and is the
+# only base. There is no second copy of the defaults in Python: an earlier
+# fallback dictionary drifted from the JSON (13 soft phrases against 115) and,
+# because user configs were merged onto it, any --config silently dropped most
+# of the shipped rules. Now a missing base is a config error (exit 2), never a
+# quietly smaller rule set.
+DEFAULTS_PATH = os.path.join(HERE, "voice_config.json")
 
 # "load-bearing" is handled in two tiers. A regex reading only the next word
 # cannot reliably tell the structural term from the metaphor: "load-bearing
@@ -115,12 +63,13 @@ FALLBACK_CONFIG = {
 # "load-bearing case" can be a literal enclosure. So the linter exempts a clear
 # physical member and, for anything else, emits a soft context warning that
 # asks for a look. Whether an ambiguous use is really figurative is left to the
-# judgment layer, which reads the sentence.
+# judgment layer, which reads the sentence. "frame" is deliberately not in the
+# exempt set: it is the one physical noun that shows up in the figurative use.
 _LOAD_BEARING_PHYSICAL = {
     "wall", "walls", "beam", "beams", "column", "columns", "joist", "joists",
     "truss", "trusses", "slab", "slabs", "stud", "studs", "lintel", "lintels",
-    "girder", "girders", "rafter", "rafters", "member", "members", "frame",
-    "frames", "assembly", "assemblies", "footing", "footings", "pier", "piers",
+    "girder", "girders", "rafter", "rafters", "member", "members",
+    "assembly", "assemblies", "footing", "footings", "pier", "piers",
 }
 
 # Config fields whose value is a list of strings, and which support
@@ -212,7 +161,7 @@ def _deep_merge(base: dict, override: dict) -> dict:
     ``add_<field>`` / ``remove_<field>`` keys (applied afterward) to amend a
     default list instead of replacing it.
     """
-    out = copy.deepcopy(base)  # never hand back a reference into FALLBACK_CONFIG
+    out = copy.deepcopy(base)  # the caller may mutate the result freely
     for key, val in override.items():
         if isinstance(out.get(key), dict) and isinstance(val, dict):
             out[key] = _deep_merge(out[key], val)
@@ -241,31 +190,41 @@ def _apply_list_ops(cfg: dict) -> dict:
     return cfg
 
 
-def load_config(path: str | None) -> dict:
-    """Load the JSON rule set. Look next to the script, then in the CWD.
-
-    Falls back to the built-in defaults (with a stderr note) if none is found,
-    so a copied-away script still runs, just predictably. A user config is
-    deep-merged onto the defaults: unlisted top-level fields and unlisted nested
-    keys inherit, listed objects merge key by key, and listed arrays replace
-    (amend with add_/remove_ keys).
-    """
-    if path:
-        chosen = path
-    else:
-        here = os.path.join(HERE, "voice_config.json")
-        cwd = os.path.join(os.getcwd(), "voice_config.json")
-        chosen = here if os.path.exists(here) else (cwd if os.path.exists(cwd) else None)
-    if not chosen:
-        sys.stderr.write("voicelint: no voice_config.json found; using built-in defaults\n")
-        return copy.deepcopy(FALLBACK_CONFIG)
+def _read_json(path: str, what: str) -> dict:
     try:
-        with open(chosen, encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             cfg = json.load(fh)
     except (OSError, json.JSONDecodeError) as exc:
-        _fail(f"cannot read config {chosen}: {exc}")
+        _fail(f"cannot read {what} {path}: {exc}")
     _validate(cfg)
-    merged = _deep_merge(FALLBACK_CONFIG, cfg)
+    return cfg
+
+
+def load_config(path: str | None) -> dict:
+    """Load the effective rule set: the shipped defaults, then one user overlay.
+
+    The base is always ``voice_config.json`` beside this script. If it is
+    missing the run stops with exit 2; a linter that quietly runs with fewer
+    rules is worse than one that refuses to run. The overlay is ``--config``
+    when given, otherwise ``./voice_config.json`` in the working directory when
+    that is a different file from the base. The overlay is deep-merged onto the
+    base: unlisted top-level fields and unlisted nested keys inherit, listed
+    objects merge key by key, listed arrays replace, and add_/remove_ keys amend
+    a shipped list without restating it. ``--print-config`` shows the result.
+    """
+    if not os.path.exists(DEFAULTS_PATH):
+        _fail(f"shipped rule set not found at {DEFAULTS_PATH}; "
+              "voice_config.json must sit beside voicelint.py")
+    base = _apply_list_ops(_read_json(DEFAULTS_PATH, "shipped rule set"))
+
+    overlay = path
+    if not overlay:
+        cwd_cfg = os.path.join(os.getcwd(), "voice_config.json")
+        if os.path.exists(cwd_cfg) and not os.path.samefile(cwd_cfg, DEFAULTS_PATH):
+            overlay = cwd_cfg
+    if not overlay or (os.path.exists(overlay) and os.path.samefile(overlay, DEFAULTS_PATH)):
+        return base
+    merged = _deep_merge(base, _read_json(overlay, "config"))
     return _apply_list_ops(merged)
 
 
@@ -276,7 +235,9 @@ def strip_html(text: str) -> str:
     def blank(m):  # keep newlines, blank everything else in the match
         return re.sub(r"[^\n]", " ", m.group(0))
     text = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", blank, text)
-    text = re.sub(r"(?s)<[^>]+>", blank, text)
+    # Every tag goes, except a voicelint directive: it is an HTML comment, and
+    # stripping it here would make ignore-line and voicelint-allow dead in HTML.
+    text = re.sub(r"(?s)<(?!!--\s*voicelint)[^>]+>", blank, text)
     return html.unescape(text)
 
 
@@ -289,15 +250,19 @@ def normalize_quotes(text: str) -> str:
 def mask_code(text: str) -> str:
     """Blank Markdown code so a pattern quoted as code is not flagged.
 
-    Fenced blocks (```...```) and inline spans (`...`) become same-height
+    Fenced blocks (three or more backticks or tildes, closed by a matching fence
+    or by the end of the file) and inline spans (`...`) become same-height
     whitespace: newlines stay, every other character becomes a space, so line
     and column offsets are unchanged. This is why a doc can name a banned phrase
-    inside backticks without tripping the linter. It does not touch prose in
-    ordinary quotation marks; adjudicating a direct quote stays with the
+    inside backticks without tripping the linter. An unclosed fence masks to the
+    end of the file, which is how Markdown renders it. It does not touch prose
+    in ordinary quotation marks; adjudicating a direct quote stays with the
     judgment layer (see references/ai_tells.md)."""
     def blank(m):
         return re.sub(r"[^\n]", " ", m.group(0))
-    text = re.sub(r"(?s)```.*?```", blank, text)
+    text = re.sub(
+        r"(?ms)^[ \t]{0,3}(?P<c>[`~])(?P=c){2,}[^\n]*\n.*?(?:^[ \t]{0,3}(?P=c){3,}[ \t]*$|\Z)",
+        blank, text)
     text = re.sub(r"`[^`\n]*`", blank, text)
     return text
 
@@ -427,6 +392,9 @@ def _suppression_map(text: str) -> dict:
     return supp
 
 
+_RULES_FILE_MARKER = re.compile(r"(?m)^[ \t]*<!--\s*voicelint:\s*rules-file\s*-->[ \t]*$")
+
+
 def check(text: str, cfg: dict) -> list[Finding]:
     """Run every enabled rule over ``text`` and return findings in order.
 
@@ -446,16 +414,17 @@ def check_counting(text: str, cfg: dict):
     # Opt in per file, visible in the source, rather than hardcoded to a path. It is the
     # bluntest instrument in this file and it is meant to be rare: it silences everything,
     # so it belongs on rule sets and nothing else.
-    if "<!-- voicelint: rules-file -->" in text:
-        return [], 0
-
     text = normalize_quotes(text)
     at = _linecol_fn(text)
     # Match against a copy with code spans blanked; offsets are preserved, so
     # findings still point at the real line and column. Suppression directives
     # are read from the masked text, so a backticked directive cannot silence a
-    # real finding.
+    # real finding. The rules-file marker is read the same way and must stand
+    # as an HTML comment on its own line: mentioned in prose or quoted as code,
+    # it is text, not a directive.
     text = mask_code(text)
+    if _RULES_FILE_MARKER.search(text):
+        return [], 0
     suppress = _suppression_map(text)
     allow = _allow_phrases(text)
     out: list[Finding] = []
@@ -606,15 +575,22 @@ def read_source(path: str, as_html: bool) -> str:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Flag configured mechanical writing patterns.")
-    ap.add_argument("files", nargs="+", help="files to lint, or - for stdin")
+    ap.add_argument("files", nargs="*", help="files to lint, or - for stdin")
     ap.add_argument("--config", help="path to a JSON rule set")
     ap.add_argument("--html", action="store_true", help="treat input as HTML (also auto-detected by extension)")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     ap.add_argument("--strict", action="store_true", help="warnings fail too")
     ap.add_argument("--quiet", action="store_true", help="only print the summary")
+    ap.add_argument("--print-config", action="store_true",
+                    help="print the effective rule set (defaults plus overlay) as JSON and exit")
     args = ap.parse_args(argv)
 
     cfg = load_config(args.config or None)
+    if args.print_config:
+        print(json.dumps(cfg, indent=2, ensure_ascii=False))
+        return 0
+    if not args.files:
+        ap.error("no files given (or - for stdin)")
 
     seen = set()
     files = [f for f in args.files if not (f in seen or seen.add(f))]  # dedupe, keep order
