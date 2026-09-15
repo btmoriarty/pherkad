@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.5.6 (2026-09-15)
+
+Item 4 of `docs/ROADMAP.md`, the structlint fixes, which close rows 1, 2, 3, and 9 of `docs/priority-fixes.md`.
+
+- **The two-beat check tests shape, not length.** Two short sentences count as a parallel only when they share an opener, both carry a negation, share a closing word, or have the same token count with a repeated content word. "The meeting starts at nine. Lunch follows at noon." no longer fires; "None of them wrong. None of them ours." still does. On the saga corpus two-beats went from 31 to 12, and every one of the 19 that vanished was an ordinary pair.
+- **Spans are masked, lines are kept.** A URL, a DOI, an arXiv id, a year in parentheses, a page run, or a long quoted span is blanked in place and the rest of the line is still checked, so a staccato run beside a link is visible. A whole bibliographic entry (author-and-initial opener, or two or more markers) is still dropped as before.
+- **Two header patterns tightened.** `The real X` and `The actual X` fire only on a stance noun (problem, question, issue, reason, point, story, answer, and so on), so `The actual results` is left alone; `Where X sits` needs an abstract or pointer subject (`Where this sits`, `Where Stage 3 Sits`, `Where the argument stands`), so `Where the chair sits` is a chair.
+- **Thresholds are configurable**, in the same file voicelint reads, under a `structure` object with the same overlay semantics: `short_chars`, `two_beat_diff`, `staccato_run`, `density_per_100`, `interrogative_pct`, `interrogative_min`. The shipped `voice_config.json` carries the defaults; `structlint --config OVERLAY` and `replycheck` pick up an overlay's values; voicelint validates the object and rejects an unknown threshold.
+- **Findings carry voicelint's shape**: line, col, severity, rule, match, message, rule_id, with ids `structure.<check>`. The text line reads `path:line:col [warning] two-beat (structure.two-beat): ...` and `--json` uses voicelint's `{"suppressed", "files"}` envelope, so one consumer reads both tools. `excerpt` remains as a read-only alias.
+- `test_structlint.py` grows from 23 to 42 tests: a case for each false positive above, for each threshold, and for the finding shape.
+- `VERSION` 0.5.6.
+
 ## v0.5.5 (2026-09-15)
 
 Item 3 of `docs/ROADMAP.md`: the corpus scan and release diff, so the count that every rule change is supposed to carry is one command rather than an afternoon.

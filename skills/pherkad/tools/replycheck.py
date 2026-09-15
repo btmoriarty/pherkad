@@ -67,7 +67,7 @@ def check_reply(text: str, surface: str = DEFAULT_SURFACE, structure: bool = Tru
     findings, suppressed = voicelint.check_counting(text, cfg)
     errors = sum(f.severity == "error" for f in findings)
     warnings = sum(f.severity == "warning" for f in findings)
-    structural = structlint.check_text(text) if structure else []
+    structural = structlint.check_text(text, cfg.get("structure")) if structure else []
     return {
         "surface": surface,
         "errors": errors,
@@ -89,7 +89,7 @@ def render(result: dict, strict: bool = False) -> str:
     for f in result["findings"]:
         lines.append(f"{f['line']}:{f['col']} [{f['severity']}] {f['rule_id']}: {f['message']}  ->  {f['match']!r}")
     for f in result["structure"]:
-        lines.append(f"{f['line']} [advisory] structure.{f['rule']}: {f['message']}  ->  {f['excerpt']!r}")
+        lines.append(f"{f['line']}:{f['col']} [advisory] {f['rule_id']}: {f['message']}  ->  {f['match']!r}")
     v = verdict(result, strict)
     n_struct = len(result["structure"])
     tail = f", {n_struct} structural advisory" if n_struct else ""

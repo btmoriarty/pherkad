@@ -113,6 +113,8 @@ class Verdict(unittest.TestCase):
         code, out, _ = run(["-"], text)
         self.assertEqual(code, 0)
         self.assertIn("[advisory] structure.staccato", out)
+        code, out, _ = run(["--json", "-"], text)
+        self.assertEqual(json.loads(out)["structure"][0]["rule_id"], "structure.staccato")
         code, out, _ = run(["--no-structure", "-"], text)
         self.assertNotIn("advisory", out)
 

@@ -10,13 +10,18 @@ list items and instruction steps, blockquoted prompts, bold run-in labels, and
 clauses ending in a colon. A checker that cries wolf gets ignored, so the
 negative cases matter more here than the positive ones.
 """
+import json
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
 TOOL = os.path.join(HERE, "structlint.py")
+
+import structlint  # noqa: E402
 
 
 def run(args, text=None):
@@ -24,12 +29,12 @@ def run(args, text=None):
                           capture_output=True, text=True)
 
 
-def rules(text):
+def rules(text, extra=()):
     """Return the set of rule names structlint reports for a passage."""
     out = set()
-    for line in run(["-"], text).stdout.splitlines():
+    for line in run([*extra, "-"], text).stdout.splitlines():
         if "[warning]" in line:
-            out.add(line.split("[warning]")[1].split(":")[0].strip())
+            out.add(line.split("[warning]")[1].split("(")[0].strip())
     return out
 
 
@@ -95,6 +100,120 @@ class FalsePositives(unittest.TestCase):
         self.assertNotIn("aphorism", rules("Position is more accurate than length.\n"))
         self.assertNotIn("aphorism", rules("The result is better than we expected.\n"))
         self.assertNotIn("aphorism", rules("Use the source that you did not expect.\n"))
+
+
+class TwoBeatIsSyntactic(unittest.TestCase):
+    # The regression: two short sentences of matched length were called a
+    # parallel on length and capitalisation alone.
+    def test_matched_length_alone_is_not_a_parallel(self):
+        self.assertNotIn("two-beat", rules("The meeting starts at nine. Lunch follows at noon.\n"))
+        self.assertNotIn("two-beat", rules("She opened the window. Rain came in.\n"))
+
+    def test_shared_opener(self):
+        self.assertIn("two-beat", rules("None of them wrong. None of them ours.\n"))
+        self.assertIn("two-beat", rules("Not a rumour. Not a mistake.\n"))
+
+    def test_matched_negation(self):
+        self.assertIn("two-beat", rules("Nobody asked for it. It never came.\n"))
+
+    def test_shared_closing_word(self):
+        self.assertIn("two-beat", rules("He had a name. She had a name.\n"))
+
+    def test_repeated_content_word_same_shape(self):
+        self.assertIn("two-beat", rules("The count was wrong. The ledger was right.\n"))
+
+
+class SpansAreMaskedNotLines(unittest.TestCase):
+    # The regression: a line with a URL, a citation marker, or a long quotation
+    # was dropped whole, so a staccato run beside a link was invisible.
+    def test_staccato_beside_a_url(self):
+        self.assertIn("staccato", rules("See https://example.com. It failed. It broke. It stopped.\n"))
+
+    def test_staccato_beside_a_year(self):
+        self.assertIn("staccato", rules("Smith showed it (2020). It failed. It broke. It stopped.\n"))
+
+    def test_prose_after_a_long_quotation(self):
+        text = ('He said "' + "x" * 70 + '" and left. It failed. It broke. It stopped.\n')
+        self.assertIn("staccato", rules(text))
+
+    def test_bibliographic_entry_is_still_dropped(self):
+        self.assertNotIn("staccato", rules(
+            "Smith, J. (2020). A short title. A journal. Vol. 3. pp. 1-10.\n"))
+        self.assertNotIn("staccato", rules(
+            "- Doe, A. B. Title here. Elsewhere. Again. https://doi.org/x DOI 10.1/x\n"))
+
+    def test_a_url_alone_is_not_a_sentence_run(self):
+        self.assertEqual(rules("See https://example.com/a and https://example.com/b for more.\n"), set())
+
+
+class HeaderTightening(unittest.TestCase):
+    # The regression: "The actual results" and "Where the chair sits" fired.
+    def test_naming_headers_are_fine(self):
+        self.assertNotIn("header", rules("## The actual results\n"))
+        self.assertNotIn("header", rules("## The real numbers\n"))
+        self.assertNotIn("header", rules("## Where the chair sits\n"))
+        self.assertNotIn("header", rules("## Where data lives\n"))
+
+    def test_posing_headers_still_fire(self):
+        self.assertIn("header", rules("## The real problem\n"))
+        self.assertIn("header", rules("## The actual question\n"))
+        self.assertIn("header", rules("## Where Stage 3 Sits\n"))
+        self.assertIn("header", rules("## Where this sits\n"))
+        self.assertIn("header", rules("## Where the argument stands\n"))
+
+
+class Thresholds(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def cfg(self, body):
+        p = os.path.join(self.tmp.name, "c.json")
+        with open(p, "w") as fh:
+            json.dump(body, fh)
+        return p
+
+    def test_defaults_when_no_config(self):
+        self.assertEqual(structlint.load_thresholds(None)["short_chars"], 46)
+
+    def test_overlay_sets_one_key_and_keeps_the_rest(self):
+        t = structlint.load_thresholds(self.cfg({"structure": {"staccato_run": 4}}))
+        self.assertEqual(t["staccato_run"], 4)
+        self.assertEqual(t["short_chars"], 46)
+
+    def test_threshold_changes_the_verdict(self):
+        text = "It finds the break. It reports the season. It flags the outages.\n"
+        self.assertIn("staccato", rules(text))
+        self.assertNotIn("staccato", rules(text, ["--config", self.cfg({"structure": {"staccato_run": 4}})]))
+
+    def test_bad_structure_value_is_a_config_error(self):
+        p = self.cfg({"structure": {"staccato_run": "three"}})
+        self.assertEqual(run(["--config", p, "-"], "x").returncode, 2)
+        p = self.cfg({"structure": {"no_such_key": 1}})
+        self.assertEqual(run(["--config", p, "-"], "x").returncode, 2)
+
+
+class FindingShape(unittest.TestCase):
+    def test_text_line_carries_rule_id(self):
+        out = run(["-"], "None of them wrong. None of them ours.\n").stdout
+        self.assertIn("-:1:1 [warning] two-beat (structure.two-beat):", out)
+
+    def test_json_matches_voicelint_envelope(self):
+        d = json.loads(run(["--json", "-"], "None of them wrong. None of them ours.\n").stdout)
+        self.assertIn("files", d)
+        f = d["files"]["-"][0]
+        for k in ("line", "col", "severity", "rule", "match", "message", "rule_id"):
+            self.assertIn(k, f)
+        self.assertEqual((f["rule"], f["rule_id"], f["severity"], f["col"]), ("two-beat", "structure.two-beat", "warning", 1))
+
+    def test_density_finding_has_line_zero(self):
+        text = "\n\n".join(["None of them wrong. None of them ours."] * 12) + "\n" + "word " * 60 + "\n"
+        d = json.loads(run(["--json", "-"], text).stdout)
+        dens = [f for f in d["files"]["-"] if f["rule"] == "density"]
+        self.assertEqual(len(dens), 1)
+        self.assertEqual((dens[0]["line"], dens[0]["col"], dens[0]["rule_id"]), (0, 0, "structure.density"))
 
 
 class InterrogativeHeadings(unittest.TestCase):

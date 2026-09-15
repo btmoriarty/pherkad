@@ -89,12 +89,17 @@ _BOOL_FIELDS = ("no_dashes", "load_bearing_literal_only", "flag_loaded_quietly",
 # Every recognized top-level key. An unknown non-comment key (a typo like
 # "no_dash") is rejected rather than silently ignored. Keys beginning with "_"
 # are treated as comments and always allowed.
+# structlint's thresholds ride in the same file under "structure", with the same
+# overlay semantics, so a downstream config tunes both tools in one place.
+_STRUCTURE_KEYS = frozenset({"short_chars", "two_beat_diff", "staccato_run",
+                             "density_per_100", "interrogative_pct", "interrogative_min"})
+
 _KNOWN_KEYS = frozenset(
     _LIST_FIELDS
     + tuple("add_" + f for f in _LIST_FIELDS)
     + tuple("remove_" + f for f in _LIST_FIELDS)
     + _BOOL_FIELDS
-    + ("watch_words", "dash_density_cap")
+    + ("watch_words", "dash_density_cap", "structure")
 )
 
 
@@ -261,6 +266,18 @@ def _validate(cfg: dict) -> None:
     for key in _BOOL_FIELDS:
         if key in cfg and not isinstance(cfg[key], bool):
             _fail(f"config field '{key}' must be true or false")
+    if "structure" in cfg:
+        st = cfg["structure"]
+        if not isinstance(st, dict):
+            _fail("config field 'structure' must be an object of threshold -> number")
+        for k, v in st.items():
+            if k.startswith("_"):
+                continue
+            if k not in _STRUCTURE_KEYS:
+                _fail(f"config field 'structure' has unknown threshold '{k}'; "
+                      f"known: {', '.join(sorted(_STRUCTURE_KEYS))}")
+            if not isinstance(v, (int, float)) or isinstance(v, bool) or v < 0:
+                _fail(f"config field 'structure.{k}' must be a non-negative number")
     for key in cfg:
         if key.startswith("_"):
             continue  # comment/metadata keys

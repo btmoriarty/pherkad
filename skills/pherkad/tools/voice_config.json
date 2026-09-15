@@ -269,5 +269,14 @@
   "_source_comment": "aggregator_domains is source-quality policy, not a voice tell, so it is empty in the generic defaults. A team that wants a low-trust-domain check keeps its list in a config like examples/news-brief.json.",
   "aggregator_domains": [],
   "_calibration_comment": "2026-09-15 calibration, from a Codex review checked against a 200-file downstream corpus: dropped 'the one that' (25 hits, all ordinary relative clauses), the broad 'honest \\\\w+' warning (39 hits, most literal adjectives; the honest-framing error in voicelint.py now covers the whole [det] honest [adj] NOUN family), the bare 'lands at/in/on' placement forms (literal placement fired), and the good/great/fair-question block (ordinary conversation). 'landscape' narrowed to the abstract forms. 'rhymes with' and 'the mirror image of' demoted to warnings (their literal senses were errors). Added the bans voice-rules.md states but nothing enforced: 'important' and the boosters as filler, 'in all honesty' as a ban, the other authenticity signals (frankly, candidly, truthfully, to be honest) as a warning in their comma-tagged form only (bare 'answers it truthfully' is literal), 'the truth is,' as bait in its comma form only ('the truth is stupider than the myth' is a sentence), and moreover/furthermore/in recent years as soft. 'is the whole', 'is the point', 'the part that', 'the thing that' were kept: 136 corpus hits read as the announcing-significance tell, not noise.",
-  "_ids_comment": "Stable rule ids (0.5.3). A list entry is a string, whose id is derived from the pattern (soft.is-the-point; a regex gets soft.re-<8 hex>), or an object {id, pattern, rationale, since, fires, clean}. Findings report the id, an overlay can name one in remove_<field> instead of pasting the pattern, and the test suite runs every 'fires' and 'clean' example. voicelint --list-rules prints them all."
+  "_ids_comment": "Stable rule ids (0.5.3). A list entry is a string, whose id is derived from the pattern (soft.is-the-point; a regex gets soft.re-<8 hex>), or an object {id, pattern, rationale, since, fires, clean}. Findings report the id, an overlay can name one in remove_<field> instead of pasting the pattern, and the test suite runs every 'fires' and 'clean' example. voicelint --list-rules prints them all.",
+  "structure": {
+    "_comment": "structlint's thresholds (0.5.6). Same overlay semantics as the rest of this file: a downstream config sets only the keys it changes. short_chars: a short sentence for the run and parallel checks; two_beat_diff: max length difference between the two beats; staccato_run: consecutive short sentences before it counts; density_per_100: flagged constructions per 100 words; interrogative_pct and interrogative_min: the heading-rate check.",
+    "short_chars": 46,
+    "two_beat_diff": 14,
+    "staccato_run": 3,
+    "density_per_100": 2.0,
+    "interrogative_pct": 30.0,
+    "interrogative_min": 10
+  }
 }
