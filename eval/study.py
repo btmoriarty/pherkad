@@ -27,7 +27,8 @@ Detection task (roadmap item 13; eval/detect.py):
   study.py plan <run> --task detect --writers a,b [--conditions correct,wrong,shuffled,none,linter] [--repeats 3]
   # ... cases live under writers/<w>/holdout, flattened, impostors, override; fill prereg.md ...
   study.py prompts <run> --model <judge>   # judging prompts; the linter floor's verdicts are written directly
-  # ... save each judge reply as verdicts/<blind_id>.json ...
+  study.py run <run> --runner "claude -p --model M" --jobs 4   # executes the prompts; resumable, validated, retried
+  # ... or save each judge reply as verdicts/<blind_id>.json by hand ...
   study.py sheet <run>                     # pairwise reader sheet + mechanical findings to label
   study.py score <run>                     # paired margins, correct-profile lift, rates, stability, precision
 
@@ -60,6 +61,7 @@ import hashlib
 import json
 import os
 import random
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -683,6 +685,137 @@ def score_revise(run_dir, manifest, key, ratings):
 
 
 # ---------------------------------------------------------------------------
+# run: execute the planned prompts (roadmap item 16)
+# ---------------------------------------------------------------------------
+# The harness stays stdlib-only and model-agnostic by handing each prompt to a
+# runner command you name: anything that reads a prompt on stdin and prints
+# the reply on stdout ("claude -p --model ...", "codex exec -", a script).
+# Each item's state lives in runs/<run>/status.json, so a run can be stopped
+# and resumed, an invalid reply is retried, and every reply is hashed.
+_VERDICT_RE = re.compile(r"\{.*\}", re.S)
+
+
+def _validate_reply(task, reply):
+    """(ok, error). A detect reply must carry a JSON verdict with a rating and a
+    verdict word; an author or revise reply must be non-empty prose."""
+    if task == "detect":
+        m = _VERDICT_RE.search(reply)
+        if not m:
+            return False, "no JSON object in the reply"
+        try:
+            v = json.loads(m.group(0))
+        except json.JSONDecodeError as exc:
+            return False, f"JSON did not parse: {exc}"
+        if not isinstance(v.get("rating"), (int, float)) or not 1 <= float(v["rating"]) <= 5:
+            return False, "rating missing or outside 1 to 5"
+        if v.get("verdict") not in ("PASS", "light REVISE", "REVISE", "REWRITE"):
+            return False, f"verdict {v.get('verdict')!r} is not one of PASS, light REVISE, REVISE, REWRITE"
+        return True, ""
+    if len(reply.strip()) < 40:
+        return False, "reply is empty or too short to be a draft"
+    return True, ""
+
+
+def _run_one(runner, prompt, timeout):
+    import shlex
+    import subprocess
+    try:
+        proc = subprocess.run(shlex.split(runner), input=prompt, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return None, f"runner timed out after {timeout}s"
+    except OSError as exc:
+        return None, f"runner could not start: {exc}"
+    if proc.returncode != 0:
+        return None, f"runner exit {proc.returncode}: {proc.stderr.strip()[:300]}"
+    return proc.stdout, ""
+
+
+def run_items(args):
+    """Run every pending prompt of a planned run through --runner."""
+    import concurrent.futures
+    import datetime
+    run_dir = os.path.join(RUNS, args.run)
+    manifest = _load_manifest(args.run)
+    task = manifest.get("task", "author")
+    status_path = os.path.join(run_dir, "status.json")
+    status = json.load(open(status_path)) if os.path.exists(status_path) else {}
+
+    def out_path(it):
+        return os.path.join(run_dir, it["verdict"] if task == "detect" else it["draft"])
+
+    todo = []
+    for it in manifest["items"]:
+        bid = it["blind_id"]
+        prompt_path = os.path.join(run_dir, "prompts", bid + ".txt")
+        if not os.path.exists(prompt_path):
+            continue  # untouched arms, linter floors, anchors: written by prompts, nothing to run
+        st = status.get(bid, {})
+        if st.get("state") == "done" and os.path.exists(out_path(it)) and not args.force:
+            continue
+        if st.get("state") == "failed" and st.get("attempts", 0) >= args.retries + 1 and not args.force:
+            continue
+        todo.append(it)
+    if args.limit:
+        todo = todo[:args.limit]
+    if args.dry_run:
+        print(f"{len(todo)} item(s) would run with runner {args.runner!r}; "
+              f"{sum(1 for v in status.values() if v.get('state') == 'done')} already done")
+        for it in todo[:20]:
+            print(f"  {it['blind_id']}  {it.get('condition', it.get('arm', ''))}  repeat {it.get('repeat', 1)}")
+        return 0
+    if not todo:
+        print("nothing to run: every item with a prompt is done (use --force to redo)")
+        return 0
+
+    def work(it):
+        bid = it["blind_id"]
+        prompt = _read(os.path.join(run_dir, "prompts", bid + ".txt"))
+        st = status.get(bid, {"attempts": 0})
+        last_err = ""
+        for attempt in range(st.get("attempts", 0), args.retries + 1):
+            reply, err = _run_one(args.runner, prompt, args.timeout)
+            st["attempts"] = attempt + 1
+            if reply is None:
+                last_err = err
+                continue
+            ok, why = _validate_reply(task, reply)
+            if ok:
+                if task == "detect":
+                    _write(out_path(it), _VERDICT_RE.search(reply).group(0) + "\n")
+                else:
+                    _write(out_path(it), reply.strip() + "\n")
+                st.update(state="done", error="", reply_sha256=_sha(reply), prompt_sha256=_sha(prompt),
+                          runner=args.runner, model=args.model or "", finished=datetime.datetime.now().isoformat(timespec="seconds"))
+                return bid, st
+            last_err = why
+        st.update(state="failed", error=last_err)
+        return bid, st
+
+    done = failed = 0
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.jobs)) as ex:
+        for bid, st in ex.map(work, todo):
+            status[bid] = st
+            if st["state"] == "done":
+                done += 1
+            else:
+                failed += 1
+                print(f"failed {bid}: {st['error']}")
+            with open(status_path, "w") as fh:
+                json.dump(status, fh, indent=2, sort_keys=True)
+    if args.model:
+        for it in manifest["items"]:
+            if status.get(it["blind_id"], {}).get("state") == "done":
+                it["model"] = args.model
+        with open(os.path.join(run_dir, "manifest.json"), "w") as fh:
+            json.dump(manifest, fh, indent=2, sort_keys=True)
+    total_done = sum(1 for v in status.values() if v.get("state") == "done")
+    print(f"run {args.run}: {done} done, {failed} failed this pass; {total_done} done in total. "
+          f"Status in {status_path}; rerun the same command to resume.")
+    print(f"next: study.py sheet {args.run}" if failed == 0 else "fix or --force the failures, then study.py sheet")
+    return 1 if failed else 0
+
+
+# ---------------------------------------------------------------------------
 def _load_manifest(run):
     p = os.path.join(RUNS, run, "manifest.json")
     if not os.path.exists(p):
@@ -724,6 +857,18 @@ def main(argv):
     s = sub.add_parser("sheet"); s.add_argument("run")
     s.add_argument("--format", choices=["rating", "forcedchoice"], default="rating")
     s.set_defaults(fn=sheet)
+    s = sub.add_parser("run", help="execute the planned prompts through a runner command; resumable")
+    s.add_argument("run")
+    s.add_argument("--runner", required=True,
+                   help="command that reads a prompt on stdin and prints the reply, e.g. 'claude -p --model claude-sonnet-5'")
+    s.add_argument("--model", help="record this model name on every item the run completes")
+    s.add_argument("--jobs", type=int, default=2)
+    s.add_argument("--retries", type=int, default=2, help="extra attempts on an invalid or failed reply")
+    s.add_argument("--timeout", type=int, default=600, help="seconds per prompt")
+    s.add_argument("--limit", type=int, help="run at most this many pending items (a smoke test)")
+    s.add_argument("--force", action="store_true", help="redo items already done or given up on")
+    s.add_argument("--dry-run", action="store_true")
+    s.set_defaults(fn=run_items)
     s = sub.add_parser("score"); s.add_argument("run"); s.set_defaults(fn=score)
     args = ap.parse_args(argv)
     _ensure(DATA, WRITERS, BRIEFS, RUNS)

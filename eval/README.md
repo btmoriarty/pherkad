@@ -52,6 +52,10 @@ The study `../docs/blind-eval.md` describes: does the judgment layer tell the wr
 
 **What it does not do.** It does not blind the roles (builder, flattener, judge, operator); the preregistration names them and the protocol says to separate them. It does not compute a cluster-bootstrap interval; with one operator and a few writers there is no interval worth printing. Both wait on the confirmatory run.
 
+## Running the prompts
+
+Every task's prompts can be executed by the harness rather than by hand: `python3 study.py run <run> --runner "<command>" --jobs 4 --model <name>`. The runner is any command that reads a prompt on stdin and prints the reply, for example `claude -p --model claude-sonnet-5` or `codex exec -`, so the harness stays stdlib-only and model-agnostic. Each item's state is kept in `runs/<run>/status.json` (attempts, prompt and reply hashes, runner, model, error), so a stopped run resumes with the same command, a reply that fails validation (a detect reply with no JSON verdict, or a rating outside 1 to 5) is retried up to `--retries` times, and `--limit N` runs a smoke test first. `--dry-run` lists what would run; `--force` redoes items already done or given up on.
+
 ## What this implements, and what stays manual
 
 `study.py` runs the pilot: the authoring task (correct, wrong, and none conditions, with an optional real anchor), the revision task (five arms, repeats, provenance on every item), and the detection task (the case types, the shuffled and linter-only controls, repeats, the reader reference, per-rule precision), one rater. The confirmatory design in `../docs/blind-eval.md` still needs multiple independent readers with an agreement measure, separated roles, and a writer-level interval. Read "the harness scales to it" as "the file layout and scoring extend to it," not "it is implemented." Those elements are manual, or a job for a separate validation-study harness, until one is built.

@@ -204,6 +204,78 @@ class ReviseTask(unittest.TestCase):
             self.assertIn("tool_version", it)
 
 
+class RunItems(ReviseTask):
+    """study.py run with a fake runner script: validation, retries, resume, status."""
+
+    def _runner(self, body):
+        p = os.path.join(self.tmp.name, "runner.py")
+        with open(p, "w") as fh:
+            fh.write(body)
+        return f"{sys.executable} {p}"
+
+    def _detect_run(self):
+        DetectTask._setup_detect(self)
+        self._run(["plan", "d1", "--task", "detect", "--writers", "brian,rosa", "--repeats", "1",
+                   "--conditions", "correct,none"])
+        self._run(["prompts", "d1"])
+        return os.path.join(study.RUNS, "d1")
+
+    def test_runs_validates_and_resumes(self):
+        run_dir = self._detect_run()
+        good = self._runner("import sys; p=sys.stdin.read(); print('Here you go: {\"rating\": 4, \"verdict\": \"PASS\", \"positive_register\": true, \"markers\": [\"m\"], \"evidence\": [\"e\"]}')")
+        code, out = self._run(["run", "d1", "--runner", good, "--jobs", "3", "--model", "fake-1", "--dry-run"])
+        self.assertIn("would run", out)
+        code, out = self._run(["run", "d1", "--runner", good, "--jobs", "3", "--model", "fake-1", "--limit", "2"])
+        self.assertEqual(code, 0, out)
+        status = json.load(open(os.path.join(run_dir, "status.json")))
+        self.assertEqual(sum(1 for v in status.values() if v["state"] == "done"), 2)
+        code, out = self._run(["run", "d1", "--runner", good, "--jobs", "3", "--model", "fake-1"])
+        self.assertEqual(code, 0, out)
+        m = json.load(open(os.path.join(run_dir, "manifest.json")))
+        judged = [it for it in m["items"] if it["condition"] != "linter"]
+        self.assertTrue(all(os.path.exists(os.path.join(run_dir, it["verdict"])) for it in judged))
+        self.assertTrue(all(it["model"] == "fake-1" for it in judged))
+        v = json.load(open(os.path.join(run_dir, judged[0]["verdict"])))
+        self.assertEqual(v["verdict"], "PASS", "only the JSON object is saved, not the chatter around it")
+        st = status[judged[0]["blind_id"]]
+        for k in ("reply_sha256", "prompt_sha256", "runner", "finished"):
+            self.assertIn(k, st)
+        code, out = self._run(["run", "d1", "--runner", good])
+        self.assertIn("nothing to run", out)
+
+    def test_invalid_replies_are_retried_then_failed(self):
+        run_dir = self._detect_run()
+        bad = self._runner("print('no json here at all')")
+        code, out = self._run(["run", "d1", "--runner", bad, "--retries", "1", "--limit", "1"])
+        self.assertEqual(code, 1)
+        status = json.load(open(os.path.join(run_dir, "status.json")))
+        st = list(status.values())[0]
+        self.assertEqual((st["state"], st["attempts"]), ("failed", 2))
+        self.assertIn("no JSON object", st["error"])
+        # a failed item is not retried again without --force
+        code, out = self._run(["run", "d1", "--runner", bad, "--retries", "1", "--limit", "1"])
+        self.assertNotIn("attempts", out)
+        good = self._runner("print('{\"rating\": 2, \"verdict\": \"REVISE\"}')")
+        code, out = self._run(["run", "d1", "--runner", good, "--force", "--limit", "1"])
+        self.assertEqual(code, 0, out)
+
+    def test_bad_rating_is_invalid(self):
+        self.assertFalse(study._validate_reply("detect", '{"rating": 9, "verdict": "PASS"}')[0])
+        self.assertFalse(study._validate_reply("detect", '{"rating": 3, "verdict": "MAYBE"}')[0])
+        self.assertTrue(study._validate_reply("detect", 'ok {"rating": 3, "verdict": "light REVISE"} done')[0])
+        self.assertFalse(study._validate_reply("revise", "short")[0])
+
+    def test_runner_failure_is_reported_not_hidden(self):
+        self._detect_run()
+        broken = self._runner("import sys; sys.exit(3)")
+        code, out = self._run(["run", "d1", "--runner", broken, "--retries", "0", "--limit", "1"])
+        self.assertEqual(code, 1)
+        self.assertIn("runner exit 3", out)
+
+    def test_plan_prompts_sheet_score(self):
+        pass  # covered by DetectTask
+
+
 class DetectTask(ReviseTask):
     """The detection experiment end to end with synthetic verdicts."""
 
