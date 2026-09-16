@@ -225,8 +225,12 @@ def _body_text(msg) -> str:
 def cmd_import_mbox(args) -> int:
     import mailbox
     from email.utils import parseaddr, parsedate_to_datetime
+    path = args.file
+    # Apple Mail's "Export Mailbox" writes a folder named X.mbox with the mbox file inside it
+    if os.path.isdir(path) and os.path.exists(os.path.join(path, "mbox")):
+        path = os.path.join(path, "mbox")
     try:
-        box = mailbox.mbox(args.file)
+        box = mailbox.mbox(path)
     except OSError as exc:
         sys.stderr.write(f"samples: {exc}\n")
         return 2
