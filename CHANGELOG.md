@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.5.19 (2026-09-16)
+
+The repeated-frame check, the first feature from the Astra review of 0.5.17 and the first check that reads a whole document rather than a sentence.
+
+- **`structure.frame.<name>.<kind>`**, new in structlint. A frame is a syntactic template no single instance of which is a fault: `X, not Y`, `X rather than Y`, `X is not Y` (the `contrast` frame), and `The one thing that`, `What X gets wrong`, `Why X matters`. The check counts each frame across three unit kinds and reports one advisory finding per frame per kind when the recurrence clears the thresholds: headings, where the units are the headings plus the short line under each (a slide's subtitle or a section's tagline) and the share is taken over the headings themselves; sentences; and the closing sentence of every paragraph of forty words or more. Titles use a loose pattern (a bare `not` in a title is the foil) and sentences a strict one. The finding's match quotes the units, a decision on it is keyed on that list (`scope: document`), and it stays out of the combined density. Thresholds are seven new `structure` keys, shipped with defaults and open to a surface or overlay.
+- **Calibrated on the three documents that motivated it and two that should stay quiet.** The Week 3 deck before its edits fires (6 of 40 slides); after them it does not. The NeurIPS paper fires at heading level (3 of 12) and sentence level (39 of 183). The Week 4 deck does not fire, since its frame lived in body lines the judgment pass counted and this check does not; that is the intended side of the line. None of the 202 saga files and none of this repository's docs fire.
+- `pherkad.py rules` lists the twelve frame ids; the manifest carries them.
+- Six tests in structlint, one in pherkad (document-scoped decision, outside density).
+- `VERSION` 0.5.19.
+
 ## v0.5.18 (2026-09-16)
 
 - **`load-bearing` needs a word boundary on the left.** The context check matched `load bearing` inside `workload bearing on exercise` in a real paper. One character, one test.

@@ -95,7 +95,10 @@ _BOOL_FIELDS = ("no_dashes", "load_bearing_literal_only", "flag_loaded_quietly",
 # structlint's thresholds ride in the same file under "structure", with the same
 # overlay semantics, so a downstream config tunes both tools in one place.
 _STRUCTURE_KEYS = frozenset({"short_chars", "two_beat_diff", "staccato_run",
-                             "density_per_100", "interrogative_pct", "interrogative_min"})
+                             "density_per_100", "interrogative_pct", "interrogative_min",
+                             "frame_heading_min", "frame_heading_share", "frame_heading_abs",
+                             "frame_sentence_min", "frame_sentence_share",
+                             "frame_closer_min", "frame_closer_share"})
 
 _KNOWN_KEYS = frozenset(
     _LIST_FIELDS

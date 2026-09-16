@@ -266,6 +266,14 @@ def _scope(f: dict) -> bool:
     return f.get("engine") == "structure"
 
 
+def _document_context(f: dict) -> str | None:
+    """A document-level finding (the repeated frame) is keyed on the units it
+    quotes, not on any one line: its match lists them all."""
+    if f.get("rule") == "frame":
+        return _hash(" ".join(f["match"].split()))
+    return None
+
+
 def rule_hashes(cfg: dict) -> dict:
     """Rule id -> hash of what would change the rule: the pattern, and for the
     structural rules and the density, the thresholds too, so a decision made
@@ -344,7 +352,7 @@ def apply_decisions(findings: list[dict], text: str, path_rel: str, decisions: l
         f["decision"] = None
         if not f["line"]:
             continue
-        key = (f["rule_id"], context_hash(text, f["line"], _scope(f)))
+        key = (f["rule_id"], _document_context(f) or context_hash(text, f["line"], _scope(f)))
         slot = budget.get(key)
         if slot and slot[1] > 0:
             slot[1] -= 1
@@ -407,6 +415,10 @@ def all_rules(cfg: dict) -> list[dict]:
                         ("interrogative-headers", "rate of question-word headings")):
         rows.append({"id": "structure." + check, "family": check, "severity": "warning",
                      "pattern": desc, "rationale": ""})
+    for name in structlint.FRAMES:
+        for kind in ("heading", "sentence", "closer"):
+            rows.append({"id": f"structure.frame.{name}.{kind}", "family": "frame", "severity": "warning",
+                         "pattern": f"the '{name}' frame recurring across {kind}s", "rationale": ""})
     rows.append({"id": "density", "family": "density", "severity": "warning",
                  "pattern": "flagged constructions per 100 words, both engines", "rationale": ""})
     return rows
@@ -476,7 +488,8 @@ def cmd_check(args) -> int:
                 f["decision"] = None
         # Density over what counts: advisory and decided findings are set aside
         # by this gate's own configuration and must not feed a warning that blocks.
-        counted = [f for f in findings if not f["decision"] and _level(f, advisory) != "advisory"]
+        counted = [f for f in findings if not f["decision"] and _level(f, advisory) != "advisory"
+                   and f["rule"] != "frame"]  # a document-level frame finding is not a per-100-words construction
         d = density_finding(counted, text, cfg)
         if d:
             d["decision"] = None
@@ -734,12 +747,12 @@ def cmd_decide(args) -> int:
             by_rule.setdefault(f["rule_id"], []).append(f)
         for rid, fs in by_rule.items():
             para = _scope(fs[0])
-            ctx = context_hash(text, line, para)
+            ctx = _document_context(fs[0]) or context_hash(text, line, para)
             # The record is keyed on the text (the line, or the paragraph for a
-            # structural finding), so it covers every place in the file with that
-            # text; count all of them, not only the line named.
+            # structural finding, or the quoted units for a document-level one),
+            # so it covers every place in the file with that text.
             n = sum(1 for f in findings if f["rule_id"] == rid and f["line"]
-                    and context_hash(text, f["line"], _scope(f)) == ctx)
+                    and (_document_context(f) or context_hash(text, f["line"], _scope(f))) == ctx)
             existing = next((d for d in decisions if d["path"] == rel and d["rule_id"] == rid
                              and d["context_hash"] == ctx), None)
             if existing:
@@ -749,7 +762,7 @@ def cmd_decide(args) -> int:
                 decisions.append({"rule_id": rid, "path": rel, "context_hash": ctx, "rule_hash": hashes[rid],
                                   "count": n, "disposition": args.disposition, "reason": args.reason,
                                   "decided": today, "line": line, "match": fs[0]["match"],
-                                  "scope": "paragraph" if para else "line"})
+                                  "scope": "document" if _document_context(fs[0]) else ("paragraph" if para else "line")})
             added += 1
             print(f"decided {args.disposition}: {rel}:{line} {rid} ({n} occurrence(s) of this line's text)  ->  {fs[0]['match']!r}")
     save_decisions(args.decisions, decisions)

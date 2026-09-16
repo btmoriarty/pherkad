@@ -216,6 +216,53 @@ class FindingShape(unittest.TestCase):
         self.assertEqual((dens[0]["line"], dens[0]["col"], dens[0]["rule_id"]), (0, 0, "structure.density"))
 
 
+class RepeatedFrame(unittest.TestCase):
+    """The document-level check for a syntactic frame recurring across
+    headings, sentences, or paragraph closers (2026-09-16)."""
+
+    def deck(self, titles):
+        return "# Deck\n\n" + "\n\n".join(f"## {i}. {t}\n\nBody line for slide {i}." for i, t in enumerate(titles, 1)) + "\n"
+
+    def test_titles_on_one_mould_fire(self):
+        titles = ["A choice with reasoning, not a default selection", "A recommender you evaluate, not an oracle",
+                  "Cheat sheets to get you started, not manuals", "Picking the type is not the last decision"]
+        titles += [f"Section {i}" for i in range(30)]
+        self.assertIn("frame", rules(self.deck(titles)))
+
+    def test_one_or_two_titles_do_not(self):
+        titles = ["A recommender you evaluate, not an oracle", "Prettier is not fixed"] + [f"Section {i}" for i in range(30)]
+        self.assertNotIn("frame", rules(self.deck(titles)))
+
+    def test_subtitle_under_a_heading_counts_as_title_text(self):
+        text = "# Deck\n\n" + "\n\n".join(
+            f"## {i}. Section {i}\nA choice with reasoning, not a default selection.\n\nBody." for i in range(1, 5))
+        text += "\n\n" + "\n\n".join(f"## {i}. Section {i}\n\nBody." for i in range(5, 40))
+        self.assertIn("frame", rules(text))
+
+    def test_sentences_on_one_mould_fire(self):
+        sent = "We take this as a problem statement, not a solved result. "
+        plain = "The reviewer reads the record and decides. "
+        text = (sent + plain * 3) * 12
+        self.assertIn("frame", rules(text + "\n"))
+        self.assertNotIn("frame", rules((sent + plain * 9) * 12 + "\n"), "below the share it is a habit, not a frame")
+
+    def test_finding_quotes_the_units_and_names_the_kind(self):
+        titles = ["A choice, not a default"] * 5 + [f"Section {i}" for i in range(10)]
+        out = run(["--json", "-"], self.deck(titles)).stdout
+        f = [x for x in json.loads(out)["files"]["-"] if x["rule"] == "frame"][0]
+        self.assertEqual(f["rule_id"], "structure.frame.contrast.heading")
+        self.assertIn("5/16 headings", f["match"])  # the # Deck title is a heading too
+        self.assertIn("A choice, not a default", f["match"])
+
+    def test_thresholds_are_configurable(self):
+        titles = ["A choice, not a default"] * 3 + [f"Section {i}" for i in range(40)]
+        self.assertNotIn("frame", rules(self.deck(titles)))
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "c.json")
+            json.dump({"structure": {"frame_heading_share": 0.05}}, open(p, "w"))
+            self.assertIn("frame", rules(self.deck(titles), ["--config", p]))
+
+
 class InterrogativeHeadings(unittest.TestCase):
     # A rate check, added 2026-08-23. Brian flagged the habit in FA550 slide
     # titles and judged it a universal issue rather than a personal preference.

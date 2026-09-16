@@ -12,6 +12,9 @@ reach. Between them they cover the families named in voice-authoring.md under
 The phrase-shaped half of that list lives in voice_config.json as soft_phrases.
 The four checks here are the ones with no string to match:
 
+    frame         A syntactic template recurring across the document's
+                  headings, sentences, or paragraph closers ("X, not Y"
+                  on five titles). Document-level; the units are quoted.
     two-beat      A clipped balanced parallel. Two short sentences side by
                   side, similar length. The neat symmetry is the tell, and
                   voice-rules Bucket 2 flags it even as a single instance.
@@ -75,6 +78,52 @@ DEFAULT_THRESHOLDS = {
     "density_per_100": 2.0,   # flagged constructions per 100 words
     "interrogative_pct": 30.0,  # percent of headings before the rate fires
     "interrogative_min": 10,    # headings needed before the rate means anything
+    # The repeated-frame check (2026-09-16), three unit kinds, each with a count
+    # floor and a share, or an absolute count that fires regardless of share.
+    "frame_heading_min": 3,     # matching headings needed
+    "frame_heading_share": 0.10,  # ... and this share of eligible headings and subtitles
+    "frame_heading_abs": 5,     # or this many matching headings, whatever the share
+    "frame_sentence_min": 8,    # matching sentences needed
+    "frame_sentence_share": 0.15,  # ... and this share of all sentences
+    "frame_closer_min": 3,      # matching paragraph closers needed
+    "frame_closer_share": 0.40,  # ... and this share of long paragraphs
+}
+
+# A frame is a syntactic template a writer can fall into across a document: no
+# single instance is a fault, the recurrence is. Found on two lecture decks
+# (five or six titles on one mould) and a paper (one sentence in four, five
+# paragraph closers in eleven) on 2026-09-15 and 16, by the judgment pass; the
+# phrase layer saw nothing because each instance is a true contrast. This check
+# reads the whole document: its headings, its sentences, and the closing
+# sentence of each long paragraph, and reports one advisory finding per frame
+# per unit kind when the recurrence clears the thresholds above.
+FRAMES = {
+    # Each frame has a loose pattern for titles (a short unit, where a bare "not"
+    # is almost always the foil) and a strict one for running sentences.
+    # "X, not Y" / "X rather than Y" / "not X but Y" / "X is not Y": the contrastive foil
+    "contrast": {
+        "title": re.compile(r",\s*(?:and\s+)?not\b|\brather than\b|\b(?:is|are|was|were)\s+not\b|\bnot\b.*\bbut\b", re.I),
+        "sentence": re.compile(
+            r",\s*(?:and\s+)?not\s+(?:a|an|the|as|merely|only|about|just|one|some|because|of|to|in|by|that|what|whether)\b"
+            r"|\brather than\b"
+            r"|;\s*not\s+\w"
+            r"|\bnot\s+(?:a|an|the|as|merely|only)\b[^.;:]{2,60}?\bbut\b", re.I),
+    },
+    # "The one thing that ...", "The thing nobody ..."
+    "the-one-thing": {
+        "title": re.compile(r"^\s*the\s+(?:one\s+)?(?:thing|part|piece)\s+(?:that|nobody|no one|everyone|most)\b", re.I),
+        "sentence": re.compile(r"\bthe\s+(?:one\s+)?(?:thing|part|piece)\s+(?:that|nobody|no one|everyone|most)\b", re.I),
+    },
+    # "What X gets wrong", "What everyone misses"
+    "what-gets-wrong": {
+        "title": re.compile(r"^\s*what\s+.{1,40}?\s+(?:gets? wrong|misses|forgets|gets? right)\b", re.I),
+        "sentence": re.compile(r"\bwhat\s+.{1,40}?\s+(?:gets? wrong|misses|forgets|gets? right)\b", re.I),
+    },
+    # "Why X matters"
+    "why-matters": {
+        "title": re.compile(r"^\s*why\s+.{1,40}?\s+matters?\b", re.I),
+        "sentence": re.compile(r"\bwhy\s+.{1,40}?\s+matters?\b", re.I),
+    },
 }
 
 # Headers that pose rather than name. Deliberately narrow: each is a stance,
@@ -301,6 +350,58 @@ def _sentences(text: str) -> list[str]:
     return [p for p in parts if len(p) > 1 and not p.endswith(":")]
 
 
+def check_frames(lines: list[str], heads: list[tuple[int, str]], paras: list[tuple[int, str]], t: dict) -> list[Finding]:
+    """One advisory finding per frame per unit kind, when a frame recurs across
+    the document's headings, its sentences, or its paragraph closers past the
+    thresholds. The finding's match lists every unit that carries the frame,
+    which is what a decision on it hashes: change one of them and the finding
+    is new again. Excluded from density by the combined runner."""
+    out: list[Finding] = []
+    # units: headings, plus the short line right under a heading (a slide's
+    # subtitle or section tagline, where the deck frames lived); sentences of
+    # every prose paragraph; the last sentence of every long paragraph
+    titles: list[tuple[int, str]] = list(heads)
+    for i, _h in heads:
+        if i < len(lines):
+            nxt = lines[i].strip()
+            if nxt and len(nxt.split()) <= 14 and not nxt.isupper() and not LIST_ITEM.match(nxt) \
+                    and not TABLE_ROW.match(nxt) and not HEADER_LINE.match(nxt):
+                titles.append((i + 1, nxt))
+    titles.sort()
+    sentences: list[tuple[int, str]] = []
+    closers: list[tuple[int, str]] = []
+    for i, body in paras:
+        sents = _sentences(RUNIN_LABEL.sub("", body))
+        sentences.extend((i, s_) for s_ in sents)
+        if len(body.split()) >= 40 and sents:
+            closers.append((i, sents[-1]))
+    # The heading share is taken over the headings themselves (the slides, the
+    # sections), while hits are counted over headings and subtitles: five of
+    # thirty-nine slides carrying the frame in their title text is the case.
+    kinds = (
+        ("heading", titles, len(heads), int(t["frame_heading_min"]), float(t["frame_heading_share"]), int(t["frame_heading_abs"])),
+        ("sentence", sentences, len(sentences), int(t["frame_sentence_min"]), float(t["frame_sentence_share"]), 0),
+        ("closer", closers, len(closers), int(t["frame_closer_min"]), float(t["frame_closer_share"]), 0),
+    )
+    for name, pats in FRAMES.items():
+        for kind, units, total, floor, share, absolute in kinds:
+            if not units or not total:
+                continue
+            pat = pats["title"] if kind == "heading" else pats["sentence"]
+            hits = [(i, u) for i, u in units if pat.search(u)]
+            n = len(hits)
+            fires = (n >= floor and n / total >= share) or (absolute and n >= absolute)
+            if not fires:
+                continue
+            quoted = "; ".join(u.strip()[:70] for _, u in hits[:6]) + (" ..." if n > 6 else "")
+            out.append(Finding(hits[0][0], "frame",
+                               f"{n}/{total} {kind}s: {quoted}",
+                               f"the '{name}' frame recurs across {n} of {total} {kind}s; "
+                               f"no one is wrong, the repetition is the tell",
+                               rule_id=f"structure.frame.{name}.{kind}"))
+    return out
+
+
 def check_text(raw: str, thresholds: dict | None = None) -> list[Finding]:
     t = dict(DEFAULT_THRESHOLDS)
     t.update(thresholds or {})
@@ -405,6 +506,8 @@ def check_text(raw: str, thresholds: dict | None = None) -> list[Finding]:
                                  f"{len(q)}/{len(heads)} headings",
                                  f"{pct:.0f}% of headings open with a question word; "
                                  f"name the sections instead"))
+
+    found.extend(check_frames(lines, heads, paras, t))
 
     words = len(re.findall(r"\b\w+\b", "\n".join(lines)))
     cap = float(t["density_per_100"])
