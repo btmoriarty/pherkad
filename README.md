@@ -43,7 +43,7 @@ Rules live in [`tools/voice_config.json`](skills/pherkad/tools/voice_config.json
 
 The default rule set is the one I run on my own writing. I added each entry after meeting a phrase or construction across many AI-assisted documents, in many contexts, until it read as a signature. That makes it a useful house default, not proof that the phrase is bad or machine-written. A hit flags a pattern; it does not judge how the text was written.
 
-The defaults are still my conclusions, and your register may differ. The rules are a JSON file, so changing them is the easy part: clone the tool and edit `tools/voice_config.json` to your purpose, or keep the defaults and relax specific rules in your own config. The one ask: when you loosen a rule, do it because the evidence of your own writing shows the habit is really yours, and record the override in your voice profile so the linter and the judgment layer agree.
+The defaults are still my conclusions, and your register may differ. The rules are a JSON file, so changing them is the easy part: clone the tool and edit `tools/voice_config.json` to your purpose, or keep the defaults and relax specific rules in your own config. The one ask: when you loosen a rule, do it because the evidence of your own writing shows the habit is yours, and record the override in your voice profile so the linter and the judgment layer agree.
 
 ## Why this exists
 
@@ -66,7 +66,7 @@ One page, every mode, what to say, what you get: [docs/CHEATSHEET.md](docs/CHEAT
 
 ## Your data
 
-The voice profile is built from your writing and stays in your folder. This repository ships no profiles and no personal data; the only persona in it (Rosa Vantani) is fictional. Corrections you make ("that flag is wrong, that's really me") append to your profile, so a later run applies the recorded correction instead of repeating the flag.
+The voice profile is built from your writing and stays in your folder. This repository ships no profiles and no personal data; the only persona in it (Rosa Vantani) is fictional. Corrections you make ("that flag is wrong, that's me") append to your profile, so a later run applies the recorded correction instead of repeating the flag.
 
 ## Install
 

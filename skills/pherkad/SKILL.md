@@ -169,7 +169,7 @@ Clustering weighs separately: two or more antithesis constructions (5c) or two o
 
 ## Step 5: Produce the verdict
 
-The verdict follows from the dimension scores (Step 2) and the signals (Steps 3 and 4), not from a general impression. "Voice dimensions" below means 1 to 4, 6, and 7; Dimension 5 is the tell read.
+The verdict follows from the dimension scores (Step 2) and the signals (Steps 3 and 4), not from a general impression. "Voice dimensions" below means 1 to 4, 6, and 7; Dimension 5 is the read for tells.
 
 - **PASS**: every voice dimension scores 4 or 5, Dimension 5 is 4 or 5, and there is no density warning and no cluster warning. Minor surface edits only.
 - **REVISE**: the core voice is present but a section drifts. Any one of: a voice dimension at 3; exactly one voice dimension at 2 or below (whether from a missing-markers flattening or one off-profile score); a density warning; a cluster warning; or three or more individual hits.
