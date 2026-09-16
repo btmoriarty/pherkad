@@ -1,6 +1,6 @@
 # Roadmap (2026-09-15)
 
-Status, end of 2026-09-15: all thirteen items shipped, 0.5.3 through 0.5.15. What remains is not code: the saga's six prose errors, the README's two warnings, and running the two experiments on real data.
+Status, end of 2026-09-16: all nineteen items shipped, 0.5.3 through 0.5.24. What remains is not code: the saga's six prose errors, the README's two warnings, the NeurIPS and Week 4 edits, and running the two experiments on real data.
 
 One ordered list, drawn from `docs/priority-fixes.md` (what is still wrong) and `docs/feature-review-comparison-2026-09-15.md` (what to build, and which of two reviews' designs to take). Ordered by dependency first, then by value per day. Each item names what it unblocks and how it is judged done. Effort is developer days, author review time excluded.
 
@@ -52,7 +52,7 @@ One ordered list, drawn from `docs/priority-fixes.md` (what is still wrong) and 
 | 15 | Done, 0.5.20. **Judgment packet**: `pherkad.py review-pack --surface X` emits the prompt and bundle for a quick-mode run. | 11 | One command replaces the skill's context-assembly steps. | 1 |
 | 16 | Done, 0.5.21. **Resumable eval runs**: `study.py run --jobs N` executes the judging prompts with status, validation, retries, hashes. | 13 | The 264-judgment detect pilot is an afternoon. | 1 |
 | 17 | Done, 0.5.23. **Labelled calibration**: `corpusscan review` and `score-review`, precision per rule per surface. | 3 | A rule carries a precision number, not an impression. | 1.5 |
-| 18 | **Persist judgment findings**: `pherkad.py review-import` records a quick-mode row into the decision store. | 7, 15 | A row ruled intentional stays ruled until the text changes. | 2 |
+| 18 | Done, 0.5.24. **Persist judgment findings**: `pherkad.py review-import` records a quick-mode row into the decision store. | 7, 15 | A row ruled intentional stays ruled until the text changes. | 2 |
 | 19 | Done, 0.5.22. The three weaknesses from that review: explicit scope with all evidence locations on rate findings; an implementation revision in every structural rule's hash; overlay fixtures asserted under the effective stack. | 7 | A decision cannot outlive the reason it was made. | 0.5 |
 
 ## Deferred, with the reason

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.5.24 (2026-09-16)
+
+Item 18 of `docs/ROADMAP.md`, the last of phase 5: a judgment ruling is kept.
+
+- **`pherkad.py review-import TABLE --file DRAFT --decisions FILE [--surface S]`** records the ruled rows of a quick-mode table (the Markdown table the skill returns, or a JSON list of the same rows; `-` reads stdin) in the decision store. A row whose `decision` is `intentional`, `literal`, `not applicable`, or `quoted` is a decision; `fix` rows and rows without a quote or a rationale are skipped and said so. A row whose `rule_ref` is a mechanical rule id resolves to the finding at the quote and is recorded exactly as `decide` would record it. Any other reference becomes a `judgment.<family>` record (`judgment (5c)` becomes `judgment.5c`, `positive-register` becomes `judgment.positive-register`) keyed on the quote and the line it sits on, with the rationale as the reason. Importing the same table twice updates the records in place.
+- **The next packet lists what has been ruled.** `review-pack` carries `already_ruled` (rule id, quote, disposition, reason) for every judgment record whose quote is still in the draft, and the prompt prints them under a heading that tells the model not to raise them again.
+- **A judgment record is live while its quote is in the file.** `decisions` reports one `stale (quote gone)` when the sentence has been edited or cut, and `--prune` drops it, so a ruling cannot outlive the text it was made on. Judgment records never suppress mechanical findings and never enter the density.
+- A row with no quote (a whole-document ruling such as "positive register not applicable") is not recorded; there is nothing in the text to key it on, and a ruling keyed on the file would go stale on any edit.
+- Four tests.
+- `VERSION` 0.5.24.
+
 ## v0.5.23 (2026-09-16)
 
 Item 17 of `docs/ROADMAP.md`, labelled calibration.

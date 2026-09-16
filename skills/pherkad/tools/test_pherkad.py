@@ -669,3 +669,81 @@ class ReviewPack(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReviewImport(unittest.TestCase):
+    TABLE = (
+        "| rule_ref | quote | decision | rationale | proposed_edit |\n"
+        "|---|---|---|---|---|\n"
+        "| honest-framing | `The honest answer is that we slipped.` | fix | announces candour | `We slipped.` |\n"
+        "| soft.is-the-point | `That is the point of the audit.` | intentional | the sentence is the point | |\n"
+        "| judgment (5c) | `Not a failure, but a lesson.` | intentional | a real contrast, once | |\n"
+        "| judgment (5a) | `Not in this draft.` | intentional | quote is not in the file | |\n"
+        "| positive-register | | not applicable | a status email | |\n"
+    )
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.d = self.tmp.name
+        self.draft = os.path.join(self.d, "draft.md")
+        self.table = os.path.join(self.d, "table.md")
+        self.dec = os.path.join(self.d, "dec.json")
+        open(self.draft, "w").write("The honest answer is that we slipped. That is the point of the audit.\n\n"
+                                    "Not a failure, but a lesson. We shipped on Tuesday.\n")
+        open(self.table, "w").write(self.TABLE)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def do_import(self):
+        return run(["review-import", self.table, "--file", self.draft, "--decisions", self.dec, "--surface", "email"])
+
+    def test_parse_table_rows(self):
+        rows = pherkad.parse_review_table(self.TABLE)
+        self.assertEqual([r["rule_ref"] for r in rows],
+                         ["honest-framing", "soft.is-the-point", "judgment (5c)", "judgment (5a)", "positive-register"])
+        self.assertEqual(rows[1]["quote"], "That is the point of the audit.")
+        self.assertEqual(pherkad._judgment_id("judgment (5c)"), "judgment.5c")
+        self.assertEqual(pherkad._judgment_id("positive-register"), "judgment.positive-register")
+
+    def test_records_ruled_rows_only(self):
+        code, out, err = self.do_import()
+        self.assertEqual(code, 0, err)
+        recs = json.load(open(self.dec))
+        self.assertEqual(sorted(r["rule_id"] for r in recs), ["judgment.5c", "soft.is-the-point"])
+        j = next(r for r in recs if r["rule_id"] == "judgment.5c")
+        self.assertEqual((j["quote"], j["line"], j["disposition"], j["scope"]),
+                         ("Not a failure, but a lesson.", 3, "intentional", "quote"))
+        m = next(r for r in recs if r["rule_id"] == "soft.is-the-point")
+        self.assertEqual((m["line"], m["scope"]), (1, "line"))
+        self.assertIn("quote not found", out)     # the 5a row
+        self.assertIn("needs a quote", out)       # the row without one
+        # the mechanical record is a real decision: check hides it
+        code, out, err = run(["check", "--surface", "email", "--decisions", self.dec, self.draft])
+        self.assertIn("1 decided (1 intentional)", out)
+        self.assertNotIn("is the point", out.split("pherkad:")[0])
+
+    def test_judgment_record_lives_by_quote(self):
+        self.do_import()
+        code, out, err = run(["decisions", "--surface", "email", "--decisions", self.dec, self.draft])
+        self.assertIn("2 decision(s) live, 0 stale", out)
+        code, out, err = run(["review-pack", "--surface", "email", "--no-profile-text", "--decisions", self.dec,
+                              "--format", "json", self.draft])
+        self.assertEqual(code, 0, err)
+        p = json.loads(out)
+        self.assertEqual([d["rule_id"] for d in p["already_ruled"]], ["judgment.5c"])
+        code, out, err = run(["review-pack", "--surface", "email", "--no-profile-text", "--decisions", self.dec, self.draft])
+        self.assertIn("ALREADY RULED BY THE AUTHOR", out)
+        text = open(self.draft).read().replace("Not a failure, but a lesson.", "A lesson.")
+        open(self.draft, "w").write(text)
+        code, out, err = run(["decisions", "--surface", "email", "--decisions", self.dec, self.draft])
+        self.assertIn("stale (quote gone)", out)
+        self.assertIn("1 decision(s) live, 1 stale", out)
+        code, out, err = run(["review-pack", "--surface", "email", "--no-profile-text", "--decisions", self.dec,
+                              "--format", "json", self.draft])
+        self.assertEqual(json.loads(out)["already_ruled"], [])
+
+    def test_reimport_updates_in_place(self):
+        self.do_import()
+        self.do_import()
+        self.assertEqual(len(json.load(open(self.dec))), 2)

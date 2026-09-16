@@ -13,6 +13,7 @@ and prints one format.
     pherkad.py check --surface fiction --config OV   # a surface, then a project overlay on top
     pherkad.py surfaces [--surfaces MAP] [--json]    # every surface, with speaker and register
     pherkad.py review-pack --surface X FILE          # the quick-mode judgment packet: prompt, or --format json, or --out DIR
+    pherkad.py review-import TABLE --file FILE --decisions D   # record a table's ruled rows; the next packet lists them
     pherkad.py check --format json FILE              # voicelint's envelope, plus provenance
     pherkad.py check --format sarif FILE             # SARIF 2.1.0 for editors and CI
     pherkad.py check --advisory structure. FILE      # report, never count, rule ids under a prefix
@@ -237,7 +238,9 @@ def config_sha256(cfg: dict) -> str:
 # ---------------------------------------------------------------------------
 DISPOSITIONS = ("accepted", "intentional", "deferred")
 _DECISION_KEYS = frozenset({"rule_id", "path", "context_hash", "rule_hash", "count",
-                            "disposition", "reason", "decided", "line", "match", "note", "scope"})
+                            "disposition", "reason", "decided", "line", "match", "note", "scope", "quote"})
+JUDGMENT_PREFIX = "judgment."
+JUDGMENT_HASH = "judgment"  # a judgment record has no pattern to hash; the reference itself is the rule
 
 
 def _hash(text: str) -> str:
@@ -834,6 +837,7 @@ def build_pack(path: str, surface: str, config: str | None, decisions_path: str 
         if e["exists"]:
             item["text"] = open(e["path"], encoding="utf-8", errors="replace").read()
         excerpts.append(item)
+    ruled, _stale = judgment_records_for(decisions, rel_path(path, droot), text) if decisions else ([], [])
     speaker = info["speaker"] if info else "author"
     register = info["positive_register"] if info else "profile"
     rules = list(JUDGMENT_RULES["always"])
@@ -853,6 +857,8 @@ def build_pack(path: str, surface: str, config: str | None, decisions_path: str 
         "mechanical": {"findings": findings, "suppressed": suppressed,
                        "decided": sum(1 for f in findings if f["decision"]),
                        "decisions": decisions_path or ""},
+        "already_ruled": [{"rule_id": d["rule_id"], "quote": d.get("quote", d.get("match", "")),
+                           "disposition": d["disposition"], "reason": d["reason"]} for d in ruled],
         "judgment_rules": rules,
         "instructions": _quick_instructions(),
         "output_schema": OUTPUT_SCHEMA,
@@ -885,6 +891,10 @@ def render_prompt(pack: dict) -> str:
         parts.append("(none)")
     if m["decided"]:
         parts.append(f"({m['decided']} finding(s) already decided by the author and hidden)")
+    if pack.get("already_ruled"):
+        parts += ["", "=== ALREADY RULED BY THE AUTHOR (do not raise these again) ==="]
+        for d in pack["already_ruled"]:
+            parts.append(f"{d['rule_id']}: `{d['quote'][:100]}`  ->  {d['disposition']}: {d['reason']}")
     parts += ["", f"=== DRAFT ({pack['source']['words']} words) ===", pack["source"]["text"].rstrip(), ""]
     return "\n".join(p for p in parts if p is not None)
 
@@ -908,6 +918,130 @@ def cmd_review_pack(args) -> int:
         print(json.dumps(pack, indent=2, ensure_ascii=False))
     else:
         print(render_prompt(pack))
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Persisting judgment findings (roadmap item 18)
+# ---------------------------------------------------------------------------
+# A quick-mode row the author rules on (intentional, literal, not applicable,
+# quoted) is recorded in the same decision store as a mechanical finding. A
+# mechanical row resolves to its finding by the quote; a judgment row becomes a
+# `judgment.<family>` record keyed on the quote and the line it sits on. The
+# next packet for that file lists what has been ruled so the model does not
+# raise it again; `decisions` reports a judgment record stale when its quote
+# is gone from the file.
+_ROW_DISPOSITION = {"intentional": "intentional", "literal": "accepted", "not applicable": "accepted", "quoted": "accepted"}
+
+
+def parse_review_table(text: str) -> list[dict]:
+    """Rows of a quick-mode table (Markdown), or a JSON list of row objects."""
+    text = text.strip()
+    if text.startswith("["):
+        return json.loads(text)
+    rows = []
+    for line in text.split("\n"):
+        if not line.strip().startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) < 4 or cells[0].lower() in ("rule_ref", "rule") or set(cells[0]) <= {"-", ":"}:
+            continue
+        rows.append({"rule_ref": cells[0].strip("`"), "quote": cells[1].strip().strip("`\"'"),
+                     "decision": cells[2].lower(), "rationale": cells[3] if len(cells) > 3 else "",
+                     "proposed_edit": cells[4] if len(cells) > 4 else ""})
+    return rows
+
+
+def _judgment_id(ref: str) -> str:
+    inner = re.sub(r"^judgment\s*\(?|\)?$", "", ref.strip(), flags=re.I).strip() or "general"
+    return JUDGMENT_PREFIX + re.sub(r"[^a-z0-9.]+", "-", inner.lower()).strip("-")
+
+
+def judgment_records_for(decisions: list[dict], path_rel: str, text: str) -> tuple[list[dict], list[dict]]:
+    """(live, stale) judgment records for a file: live while the quote is still in the text."""
+    live, stale = [], []
+    for d in decisions:
+        if d["path"] != path_rel or not d["rule_id"].startswith(JUDGMENT_PREFIX):
+            continue
+        q = " ".join((d.get("quote") or "").split())
+        if q and q in " ".join(text.split()):
+            live.append(d)
+        else:
+            stale.append(d)
+    return live, stale
+
+
+def cmd_review_import(args) -> int:
+    """Record the ruled rows of a quick-mode table against the file they were about."""
+    try:
+        table = read_source(args.table)
+        text = read_source(args.file)
+    except OSError as exc:
+        sys.stderr.write(f"pherkad: {exc}\n")
+        return 2
+    rows = parse_review_table(table)
+    if not rows:
+        sys.stderr.write("pherkad: no rows found in the table\n")
+        return 2
+    decisions = load_decisions(args.decisions)
+    root = args.root or os.path.dirname(os.path.abspath(args.decisions))
+    rel = rel_path(args.file, root)
+    cfg, _s = load_layers(args.surface, args.config, args.surfaces)
+    hashes = rule_hashes(cfg)
+    findings, _ = run_text(text, cfg, density=False)
+    import datetime
+    today = datetime.date.today().isoformat()
+    flat = " ".join(text.split())
+    lines = text.split("\n")
+    recorded = skipped = 0
+    for r in rows:
+        dec = r.get("decision", "").strip().lower()
+        if dec not in _ROW_DISPOSITION:
+            skipped += 1  # fix rows and anything else are not decisions
+            continue
+        quote = " ".join((r.get("quote") or "").split())
+        reason = (r.get("rationale") or "").strip()
+        if not quote or not reason:
+            print(f"skipped (needs a quote and a rationale): {r.get('rule_ref')} {quote[:40]!r}")
+            skipped += 1
+            continue
+        if quote not in flat:
+            print(f"skipped (quote not found in {rel}): {quote[:60]!r}")
+            skipped += 1
+            continue
+        line_no = next((i for i, ln in enumerate(lines, 1) if quote[:40] in " ".join(ln.split())), 0)
+        ref = r.get("rule_ref", "").strip()
+        if ref in hashes and not ref.startswith(JUDGMENT_PREFIX):
+            at = [f for f in findings if f["rule_id"] == ref and f["line"] == line_no]
+            if not at:
+                at = [f for f in findings if f["rule_id"] == ref and quote[:20] in " ".join(lines[f["line"] - 1].split())]
+            if not at:
+                print(f"skipped (no {ref} finding at the quote): {quote[:60]!r}")
+                skipped += 1
+                continue
+            f = at[0]
+            ctx = _document_context(f) or context_hash(text, f["line"], _scope(f))
+            n = sum(1 for g in findings if g["rule_id"] == ref and g["line"]
+                    and (_document_context(g) or context_hash(text, g["line"], _scope(g))) == ctx)
+            rec = {"rule_id": ref, "path": rel, "context_hash": ctx, "rule_hash": hashes[ref], "count": n,
+                   "disposition": _ROW_DISPOSITION[dec], "reason": reason, "decided": today,
+                   "line": f["line"], "match": f["match"],
+                   "scope": "document" if _document_context(f) else ("paragraph" if _scope(f) else "line")}
+        else:
+            rid = ref if ref.startswith(JUDGMENT_PREFIX) else _judgment_id(ref)
+            rec = {"rule_id": rid, "path": rel, "context_hash": _hash(" ".join(lines[line_no - 1].split())) if line_no else _hash(quote),
+                   "rule_hash": JUDGMENT_HASH, "count": 1, "disposition": _ROW_DISPOSITION[dec], "reason": reason,
+                   "decided": today, "line": line_no, "match": quote[:120], "quote": quote, "scope": "quote"}
+        existing = next((d for d in decisions if d["path"] == rel and d["rule_id"] == rec["rule_id"]
+                         and d["context_hash"] == rec["context_hash"]), None)
+        if existing:
+            existing.update(rec)
+        else:
+            decisions.append(rec)
+        recorded += 1
+        print(f"recorded {rec['disposition']}: {rel}:{rec['line']} {rec['rule_id']}  ->  {rec['match'][:70]!r}")
+    save_decisions(args.decisions, decisions)
+    print(f"pherkad: {recorded} row(s) recorded, {skipped} skipped, in {args.decisions}")
     return 0
 
 
@@ -998,12 +1132,24 @@ def cmd_decisions(args) -> int:
         for d in apply_decisions(findings, text, rel_path(path, root), decisions, hashes):
             live.add(id(d))
     checked = {rel_path(p, root) for p in args.files}
+    texts = {}
+    for path in args.files:
+        try:
+            texts[rel_path(path, root)] = read_source(path)
+        except OSError:
+            pass
     stale, kept, unchecked = [], [], []
     for d in decisions:
         if id(d) in live:
             kept.append(d)
         elif d["path"] not in checked:
             unchecked.append(d)
+        elif d["rule_id"].startswith(JUDGMENT_PREFIX):
+            lv, _st = judgment_records_for([d], d["path"], texts.get(d["path"], ""))
+            if lv:
+                kept.append(d)
+            else:
+                stale.append((d, "quote gone"))
         else:
             why = ("rule changed" if d["rule_hash"] != hashes.get(d["rule_id"], "")
                    else "rule gone" if d["rule_id"] not in hashes else "line changed or finding gone")
@@ -1114,6 +1260,15 @@ def main(argv=None) -> int:
     prp.add_argument("--format", choices=["prompt", "json"], default="prompt")
     prp.add_argument("--out", help="write pack.json and prompt.md into this directory instead of printing")
     prp.set_defaults(fn=cmd_review_pack)
+    pri = sub.add_parser("review-import", help="record the ruled rows of a quick-mode table as decisions")
+    pri.add_argument("table", help="the table: a Markdown file with the quick-mode rows, or a JSON list, or - for stdin")
+    pri.add_argument("--file", required=True, help="the draft the table was about")
+    pri.add_argument("--decisions", required=True)
+    pri.add_argument("--root")
+    pri.add_argument("--surface")
+    pri.add_argument("--surfaces")
+    pri.add_argument("--config")
+    pri.set_defaults(fn=cmd_review_import)
     psf = sub.add_parser("surfaces", help="every surface a name could resolve to")
     psf.add_argument("--surfaces")
     psf.add_argument("--json", action="store_true")
