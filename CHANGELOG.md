@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.5.23 (2026-09-16)
+
+Item 17 of `docs/ROADMAP.md`, labelled calibration.
+
+- **`corpusscan.py review DIR --surface S --out labels.jsonl`** exports a labelling sample as JSONL: up to `--per-rule` hits for every rule (path, line, a hash of the line, the span, the context, an empty `label`) and up to `--unflagged` paragraphs of 40 to 200 words on which nothing fired, with a meta line carrying the surface, corpus size, base hash, and the labelling convention. The reader marks each hit `TP` or `FP`, and each unflagged unit `clean` or the rule id that should have fired. The tool never writes a label.
+- **`corpusscan.py score-review labels.jsonl ...`** reports, per surface and rule, TP, FP, precision, and false flags per 1,000 words; the misses the reader named on unflagged units; the units confirmed clean; and how many records are still unlabelled. So a rule can carry a number instead of an impression, and a bad number is grounds to narrow or drop it.
+- Three tests.
+- `VERSION` 0.5.23.
+
 ## v0.5.22 (2026-09-16)
 
 Item 19 of `docs/ROADMAP.md`: the three weaknesses the Astra review of 0.5.17 named, each a way a decision could outlive its reason.
