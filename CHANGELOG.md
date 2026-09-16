@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.5.20 (2026-09-16)
+
+Item 15 of `docs/ROADMAP.md`, the judgment packet.
+
+- **`pherkad.py review-pack --surface X FILE`**, new. One command assembles everything a quick-mode judgment run needs: the surface (speaker, positive-register expectation, guidance, approved excerpts from the user map), the three profile files found by `--profile-dir`, `PHERKAD_PROFILE`, the repository root, or the working directory (inlined with a sha256 each, or by path and hash only with `--no-profile-text`), the mechanical findings with the decision file applied and density over what counts, the judgment-only rules that apply to this speaker and register, the Quick mode instructions lifted from `SKILL.md` (with step 1 rewritten, since the findings are already there and the model is told not to run a tool), and the output schema. `--format json` prints the bundle; the default prints the prompt; `--out DIR` writes `pack.json` and `prompt.md`. The surface is required and never inferred. A missing profile is said in the prompt, not hidden: an explicit `--profile-dir` without one is a profile-less scan and the report has to say so.
+- `SKILL.md` Quick mode gains a step 0: assemble the packet when a runtime is available; steps 1 and 2 are then done.
+- Eight tests.
+- `VERSION` 0.5.20.
+
 ## v0.5.19 (2026-09-16)
 
 The repeated-frame check, the first feature from the Astra review of 0.5.17 and the first check that reads a whole document rather than a sentence.
