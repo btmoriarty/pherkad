@@ -44,6 +44,17 @@ One ordered list, drawn from `docs/priority-fixes.md` (what is still wrong) and 
 | 12 | Done, 0.5.14. **Revision experiment** in `eval/study.py`: same drafts, arms for untouched, generic self-review (the control), mechanical feedback, judgment feedback, both; same editing model and budget; blind rating with factual preservation required; manifest carries model, prompt, config hash, repeat. | 6, 9 | A number for whether the tools beat another editing pass, with the failures quoted. | 5 |
 | 13 | Done, 0.5.15. **Detection experiment**: per-rule precision and false flags per 1,000 words for the linters; supported diagnoses, unnecessary edits, and repeat stability for the judgment layer. Protocol already in `docs/blind-eval.md`. | 12 | `docs/review-followups.md` item 2 closes. | 5 |
 
+## Phase 5: from the review of 0.5.17 (`docs/codex-features-astra-2026-09-16.md`)
+
+| # | Item | Depends on | Done when | Effort |
+|---|---|---|---|---|
+| 14 | Done, 0.5.19. **Repeated-frame check** in structlint: a syntactic template recurring across headings and subtitles, sentences, or paragraph closers; document-scoped, advisory, outside density. | 4, 7 | The pre-edit Week 3 deck and the NeurIPS paper fire; the edited deck, the saga, and this repo's docs do not. | 1 |
+| 15 | **Judgment packet**: `pherkad.py review-pack --surface X` emits the prompt and bundle for a quick-mode run. | 11 | One command replaces the skill's context-assembly steps. | 1 |
+| 16 | **Resumable eval runs**: `study.py run --jobs N` executes the judging prompts with status, validation, retries, hashes. | 13 | The 264-judgment detect pilot is an afternoon. | 1 |
+| 17 | **Labelled calibration**: `corpusscan review` and `score-review`, precision per rule per surface. | 3 | A rule carries a precision number, not an impression. | 1.5 |
+| 18 | **Persist judgment findings**: `pherkad.py review-import` records a quick-mode row into the decision store. | 7, 15 | A row ruled intentional stays ruled until the text changes. | 2 |
+| 19 | The three weaknesses from that review: explicit scope with all evidence locations on rate findings; an implementation revision in every structural rule's hash; overlay fixtures asserted under the effective stack. | 7 | A decision cannot outlive the reason it was made. | 0.5 |
+
 ## Deferred, with the reason
 
 - Moving `aggregator_domains` out of the voice schema: right, but it only matters to the news-brief example; do it when the surfaces land (11).

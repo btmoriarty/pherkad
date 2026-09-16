@@ -335,6 +335,22 @@ class Decisions(unittest.TestCase):
         code, out, _ = run(["decisions", "--decisions", self.dec, "--config", ov, p])
         self.assertIn("rule changed", out)
 
+    def test_frame_finding_is_document_scoped_and_outside_density(self):
+        titles = ["A choice, not a default"] * 5 + [f"Section {i}" for i in range(10)]
+        text = "# Deck\n\n" + "\n\n".join(f"## {i}. {t}\n\nBody line for slide {i}." for i, t in enumerate(titles, 1)) + "\n"
+        p = os.path.join(self.root, "deck.md")
+        open(p, "w").write(text)
+        code, out, _ = run(["check", p])
+        self.assertIn("structure.frame.contrast.heading", out)
+        self.assertNotIn("density", out)
+        code, out, _ = run(["decide", "--decisions", self.dec, "--reason", "the deck's refrain", p + ":3:structure.frame.contrast.heading"])
+        self.assertEqual(code, 0, out)
+        self.assertEqual(json.load(open(self.dec))[0]["scope"], "document")
+        self.assertIn("1 decided", run(["check", "--decisions", self.dec, p])[1])
+        # change one of the quoted titles: the finding is new again
+        open(p, "w").write(text.replace("## 2. A choice, not a default", "## 2. A choice, not a default, revised"))
+        self.assertNotIn("decided", run(["check", "--decisions", self.dec, p])[1])
+
     def test_deferred_counts_separately(self):
         self.decide("canon/a.md:3", "fix next pass", "deferred")
         code, out = self.check()
