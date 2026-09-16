@@ -255,15 +255,25 @@ class RunItems(ReviseTask):
         # a failed item is not retried again without --force
         code, out = self._run(["run", "d1", "--runner", bad, "--retries", "1", "--limit", "1"])
         self.assertNotIn("attempts", out)
-        good = self._runner("print('{\"rating\": 2, \"verdict\": \"REVISE\"}')")
+        good = self._runner("print('{\"rating\": 2, \"verdict\": \"REVISE\", \"evidence\": [\"e\"]}')")
         code, out = self._run(["run", "d1", "--runner", good, "--force", "--limit", "1"])
         self.assertEqual(code, 0, out)
 
     def test_bad_rating_is_invalid(self):
         self.assertFalse(study._validate_reply("detect", '{"rating": 9, "verdict": "PASS"}')[0])
         self.assertFalse(study._validate_reply("detect", '{"rating": 3, "verdict": "MAYBE"}')[0])
-        self.assertTrue(study._validate_reply("detect", 'ok {"rating": 3, "verdict": "light REVISE"} done')[0])
+        self.assertTrue(study._validate_reply("detect", 'ok {"rating": 3, "verdict": "light REVISE", "evidence": ["x"]} done')[0])
         self.assertFalse(study._validate_reply("revise", "short")[0])
+
+    def test_contradictory_verdicts_are_invalid(self):
+        # detect-01 produced PASS/1 and PASS with no evidence; both are now retried, not scored
+        ok, why = study._validate_reply("detect", '{"rating": 1, "verdict": "PASS", "evidence": ["x"]}')
+        self.assertFalse(ok); self.assertIn("disagree", why)
+        ok, why = study._validate_reply("detect", '{"rating": 4, "verdict": "REWRITE", "evidence": ["x"]}')
+        self.assertFalse(ok); self.assertIn("disagree", why)
+        ok, why = study._validate_reply("detect", '{"rating": 4, "verdict": "PASS", "evidence": []}')
+        self.assertFalse(ok); self.assertIn("no quoted evidence", why)
+        self.assertTrue(study._validate_reply("detect", '{"rating": 2, "verdict": "REWRITE", "evidence": ["it"]}')[0])
 
     def test_runner_failure_is_reported_not_hidden(self):
         self._detect_run()

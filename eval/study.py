@@ -710,6 +710,13 @@ def _validate_reply(task, reply):
             return False, "rating missing or outside 1 to 5"
         if v.get("verdict") not in ("PASS", "light REVISE", "REVISE", "REWRITE"):
             return False, f"verdict {v.get('verdict')!r} is not one of PASS, light REVISE, REVISE, REWRITE"
+        r = float(v["rating"])
+        if v["verdict"] == "PASS" and r < 3:
+            return False, f"PASS with rating {r:g}: the verdict and the rating disagree"
+        if v["verdict"] == "REWRITE" and r > 2:
+            return False, f"REWRITE with rating {r:g}: the verdict and the rating disagree"
+        if not [e for e in v.get("evidence") or [] if str(e).strip()]:
+            return False, "no quoted evidence for the verdict"
         return True, ""
     if len(reply.strip()) < 40:
         return False, "reply is empty or too short to be a draft"
