@@ -627,7 +627,7 @@ def check_counting(text: str, cfg: dict):
                     "heavy dash use is an AI tell")
 
     if cfg.get("load_bearing_literal_only", True):
-        for m in _iter(r"load[-\s]?bearing\b", text):
+        for m in _iter(r"\bload[-\s]?bearing\b", text):  # \b on the left: "workload bearing on" is not it
             nxt = re.match(r"\s+([^\W\d_]+)", text[m.end():])  # next alphabetic word
             word = nxt.group(1).lower() if nxt else ""
             if word in _LOAD_BEARING_PHYSICAL:

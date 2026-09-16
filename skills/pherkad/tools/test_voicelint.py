@@ -72,6 +72,8 @@ FIRING = [
      "This is the load-bearing structure of the argument.", "load-bearing-context", True),
     ("load-bearing frame is a context warning (the one physical noun used figuratively)",
      "The load-bearing frame of the argument failed.", "load-bearing-context", True),
+    ("workload bearing on something is not load-bearing (2026-09-16, a NeurIPS paper)",
+     "Some are better read as determinants, workload bearing on exercise and sustainment.", "load-bearing-context", False),
     ("predicate load-bearing is a context warning",
      "That claim is load-bearing.", "load-bearing-context", True),
     ("engineering member is fully exempt (no finding)",
