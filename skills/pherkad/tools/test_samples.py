@@ -102,7 +102,11 @@ class Mail(unittest.TestCase):
                 box.add(msg)
             box.flush()
             d = os.path.join(tmp, "samples")
-            self.assertEqual(samples.main(["import-mbox", path, "--dir", d, "--from", "me@example.org"]), 0)
+            # an Apple Mail export folder (Sent.mbox/mbox) is accepted as the file
+            apple = os.path.join(tmp, "Sent.mbox")
+            os.makedirs(apple)
+            os.rename(path, os.path.join(apple, "mbox"))
+            self.assertEqual(samples.main(["import-mbox", apple, "--dir", d, "--from", "me@example.org"]), 0)
             m = json.load(open(os.path.join(d, "samples.json")))
             self.assertEqual(len(m["samples"]), 1)
             s = m["samples"][0]
