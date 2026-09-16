@@ -816,6 +816,97 @@ def run_items(args):
 
 
 # ---------------------------------------------------------------------------
+# flatten: the detect task's flattened cases, written by a runner that never
+# sees the profile (docs/blind-eval.md: facts, examples, argument, and paragraph
+# function kept; framing, syntax, hedging, transitions, and rhythm neutralised;
+# within 10 percent of the source length). Use a different model family from
+# the judge. Each flattening carries a meta file with the runner and hashes.
+FLATTEN_PROMPT = """You are an editor producing a neutral, house-style version of a piece of writing.
+
+Rewrite the text below so that it reads like competent, generic professional prose with no
+individual voice. Keep every fact, number, name, example, citation, claim, and the order and
+function of every paragraph; a heading stays a heading, a list stays a list. Change only the
+framing, sentence shapes, hedging, transitions, and rhythm. Do not add content, do not summarise,
+do not editorialise, and do not comment on the text. Keep the length within 10 percent of the
+original ({words} words). Reply with the rewritten text only.
+{variant}
+=== TEXT ===
+{text}
+"""
+_FLATTEN_VARIANTS = {
+    1: "",
+    2: "Prefer longer, evenly paced sentences and standard connective phrases; smooth every abrupt turn.\n",
+    3: "Prefer short declarative sentences and plain vocabulary; remove every rhetorical device.\n",
+}
+
+
+def flatten(args):
+    """Write flattened/<holdout>.<k>.md for every held-out piece of a writer."""
+    import concurrent.futures
+    import datetime
+    wdir = os.path.join(WRITERS, args.writer)
+    hold = os.path.join(wdir, "holdout")
+    if not os.path.isdir(hold):
+        sys.exit(f"no holdout/ for writer '{args.writer}'")
+    out_dir = os.path.join(wdir, "flattened")
+    _ensure(out_dir)
+    jobs = []
+    for name in sorted(os.listdir(hold)):
+        if not name.endswith(".md"):
+            continue
+        for k in range(1, args.k + 1):
+            dst = os.path.join(out_dir, name[:-3] + f".{k}.md")
+            if os.path.exists(dst) and not args.force:
+                continue
+            jobs.append((name, k, dst))
+    if not jobs:
+        print("nothing to flatten: every held-out piece has its flattenings (use --force to redo)")
+        return 0
+    if args.dry_run:
+        for name, k, dst in jobs:
+            print(f"  {name} -> {os.path.relpath(dst, DATA)}")
+        print(f"{len(jobs)} flattening(s) would be written with runner {args.runner!r}")
+        return 0
+
+    def work(job):
+        name, k, dst = job
+        src = _read(os.path.join(hold, name))
+        words = len(src.split())
+        prompt = FLATTEN_PROMPT.format(words=words, variant=_FLATTEN_VARIANTS.get(k, ""), text=src.strip())
+        last = ""
+        for attempt in range(args.retries + 1):
+            reply, err = _run_one(args.runner, prompt, args.timeout)
+            if reply is None:
+                last = err
+                continue
+            n = len(reply.split())
+            if not 0.85 * words <= n <= 1.15 * words:
+                last = f"length {n} words, source {words}; outside the 10 percent band"
+                continue
+            _write(dst, reply.strip() + "\n")
+            _write(dst[:-3] + ".meta.json", json.dumps({
+                "source": name, "k": k, "runner": args.runner, "model": args.model or "",
+                "source_sha256": _sha(src), "reply_sha256": _sha(reply), "source_words": words, "words": n,
+                "prompt_sha256": _sha(prompt), "written": datetime.datetime.now().isoformat(timespec="seconds")},
+                indent=2, sort_keys=True) + "\n")
+            return dst, ""
+        return dst, last
+
+    done = failed = 0
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.jobs)) as ex:
+        for dst, err in ex.map(work, jobs):
+            if err:
+                failed += 1
+                print(f"failed {os.path.relpath(dst, DATA)}: {err}")
+            else:
+                done += 1
+                print(f"wrote {os.path.relpath(dst, DATA)}")
+    print(f"flatten {args.writer}: {done} written, {failed} failed. Read each one against its source before "
+          f"planning; a flattening that dropped a fact is a confound, not a flatter voice.")
+    return 1 if failed else 0
+
+
+# ---------------------------------------------------------------------------
 def _load_manifest(run):
     p = os.path.join(RUNS, run, "manifest.json")
     if not os.path.exists(p):
@@ -869,6 +960,17 @@ def main(argv):
     s.add_argument("--force", action="store_true", help="redo items already done or given up on")
     s.add_argument("--dry-run", action="store_true")
     s.set_defaults(fn=run_items)
+    s = sub.add_parser("flatten", help="write the detect task's flattened cases for a writer through a runner that never sees the profile")
+    s.add_argument("writer")
+    s.add_argument("--runner", required=True, help="a different model family from the judge")
+    s.add_argument("--model", help="record this model name in each flattening's meta file")
+    s.add_argument("--k", type=int, default=2, help="flattenings per held-out piece")
+    s.add_argument("--jobs", type=int, default=2)
+    s.add_argument("--retries", type=int, default=2)
+    s.add_argument("--timeout", type=int, default=600)
+    s.add_argument("--force", action="store_true")
+    s.add_argument("--dry-run", action="store_true")
+    s.set_defaults(fn=flatten)
     s = sub.add_parser("score"); s.add_argument("run"); s.set_defaults(fn=score)
     args = ap.parse_args(argv)
     _ensure(DATA, WRITERS, BRIEFS, RUNS)
