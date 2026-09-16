@@ -17,6 +17,19 @@ Message 4 was verified and fixed the same evening, as 0.5.16: the combined densi
 
 The rest of the prompt is unanswered. Re-run after the limit resets.
 
+
+## Third attempt, 2026-09-16, 06:00
+
+Re-run against `af412b4` (0.5.16) with the prompt below amended to exclude the 0.5.16 fixes. **It ran out of usage again**, after 50,733 tokens, before writing the report; the next reset is 7:43 AM. Its interim messages, verbatim:
+
+1. "I'll read the changelog first, then inspect the implementation and prior reviews, run the tests, and try the tools on the repository docs. I'll check each proposed feature against what already shipped."
+2. "The tests are hitting the read-only sandbox: suites that create temporary fixtures cannot finish. I'm separating those setup errors from test failures and using in-memory probes for the remaining checks. I'm also checking how much document context the current finding schema preserves, since repeated slide-title frames need more than a phrase match."
+3. "A synthetic six-title deck with repeated `X, not Y` titles and presenter narration produces no findings under `slides`. The existing corpus scanner cannot calibrate that gap: it runs only voicelint and has no surface option. I also reproduced stale structural decisions: changing part of a flagged paragraph or changing a threshold can leave an old decision in force."
+
+Message 3 was verified and fixed the same morning as 0.5.17: `corpusscan` runs both engines through `pherkad.run_text` and takes `--surface`; a structural finding's decision is keyed on its paragraph, and a structural rule's hash includes the thresholds. The first sentence of message 3, that the repeated `X, not Y` title frame and presenter narration produce no mechanical finding under `slides`, is the open question the prompt asked about (a document-level checker for cross-slide repetition) and remains unanswered.
+
+The ranked feature list is still outstanding. Two attempts have each spent 50 to 100K tokens reading before the account's limit stopped them; a third attempt should either wait for a fresh window or give the model less to read (the prompt could point it at CHANGELOG.md and pherkad.py only).
+
 ## The prompt
 
 You are reviewing the repository at /Users/moriarty/Documents/kochab/pherkad, read-only. Do not modify files.

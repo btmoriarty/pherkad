@@ -32,8 +32,10 @@ decision file is a project-owned JSON list of records:
      "rule_hash": "…", "count": 1, "disposition": "accepted", "reason": "…",
      "decided": "2026-09-15"}
 
-The context is the whole line the finding sits on, whitespace collapsed; the
-rule hash is the rule's pattern. A finding matches a decision when rule id,
+The context is the line the finding sits on, whitespace collapsed, or for a
+structural finding the whole paragraph, since structlint reports a paragraph
+against its first line; the rule hash is the rule's pattern, plus the
+thresholds for a structural rule. A finding matches a decision when rule id,
 path, context, and rule all match, up to ``count`` occurrences on that line;
 a changed line, a changed rule, or an extra occurrence surfaces the finding
 again as new. Decided findings are hidden from the list (``--show-decided``
@@ -234,24 +236,48 @@ def config_sha256(cfg: dict) -> str:
 # ---------------------------------------------------------------------------
 DISPOSITIONS = ("accepted", "intentional", "deferred")
 _DECISION_KEYS = frozenset({"rule_id", "path", "context_hash", "rule_hash", "count",
-                            "disposition", "reason", "decided", "line", "match", "note"})
+                            "disposition", "reason", "decided", "line", "match", "note", "scope"})
 
 
 def _hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
-def context_hash(text: str, line: int) -> str:
-    """The hash of the whole line a finding sits on, whitespace collapsed.
-    A finding at line 0 (the density) has no context and cannot be decided."""
+def context_hash(text: str, line: int, paragraph: bool = False) -> str:
+    """The hash of what a finding sits on, whitespace collapsed: the line for a
+    phrase finding; for a structural finding, the whole paragraph from that
+    line to the next blank line, because structlint reports a paragraph
+    against its first line and an edit further down would otherwise leave an
+    old decision in force. A finding at line 0 (the density) has no context."""
     lines = text.split("\n")
     if not 1 <= line <= len(lines):
         return ""
-    return _hash(" ".join(lines[line - 1].split()))
+    if not paragraph:
+        return _hash(" ".join(lines[line - 1].split()))
+    block = []
+    for ln in lines[line - 1:]:
+        if not ln.strip():
+            break
+        block.append(ln)
+    return _hash(" ".join(" ".join(block).split()))
+
+
+def _scope(f: dict) -> bool:
+    return f.get("engine") == "structure"
 
 
 def rule_hashes(cfg: dict) -> dict:
-    return {r["id"]: _hash(r.get("pattern", "")) for r in all_rules(cfg)}
+    """Rule id -> hash of what would change the rule: the pattern, and for the
+    structural rules and the density, the thresholds too, so a decision made
+    under one threshold does not survive a change to it."""
+    thresholds = json.dumps(cfg.get("structure") or {}, sort_keys=True)
+    out = {}
+    for r in all_rules(cfg):
+        seed = r.get("pattern", "")
+        if r["id"].startswith("structure.") or r["id"] == "density":
+            seed += "|" + thresholds
+        out[r["id"]] = _hash(seed)
+    return out
 
 
 def load_decisions(path: str | None) -> list[dict]:
@@ -318,7 +344,7 @@ def apply_decisions(findings: list[dict], text: str, path_rel: str, decisions: l
         f["decision"] = None
         if not f["line"]:
             continue
-        key = (f["rule_id"], context_hash(text, f["line"]))
+        key = (f["rule_id"], context_hash(text, f["line"], _scope(f)))
         slot = budget.get(key)
         if slot and slot[1] > 0:
             slot[1] -= 1
@@ -703,14 +729,17 @@ def cmd_decide(args) -> int:
             sys.stderr.write(f"pherkad: no finding at {loc}; nothing to decide\n")
             return 2
         rel = rel_path(path, root)
-        ctx = context_hash(text, line)
         by_rule = {}
         for f in at:
             by_rule.setdefault(f["rule_id"], []).append(f)
         for rid, fs in by_rule.items():
-            # The record is keyed on the line's text, so it covers every line in the
-            # file with that text; count all of them, not only the line named.
-            n = sum(1 for f in findings if f["rule_id"] == rid and f["line"] and context_hash(text, f["line"]) == ctx)
+            para = _scope(fs[0])
+            ctx = context_hash(text, line, para)
+            # The record is keyed on the text (the line, or the paragraph for a
+            # structural finding), so it covers every place in the file with that
+            # text; count all of them, not only the line named.
+            n = sum(1 for f in findings if f["rule_id"] == rid and f["line"]
+                    and context_hash(text, f["line"], _scope(f)) == ctx)
             existing = next((d for d in decisions if d["path"] == rel and d["rule_id"] == rid
                              and d["context_hash"] == ctx), None)
             if existing:
@@ -719,7 +748,8 @@ def cmd_decide(args) -> int:
             else:
                 decisions.append({"rule_id": rid, "path": rel, "context_hash": ctx, "rule_hash": hashes[rid],
                                   "count": n, "disposition": args.disposition, "reason": args.reason,
-                                  "decided": today, "line": line, "match": fs[0]["match"]})
+                                  "decided": today, "line": line, "match": fs[0]["match"],
+                                  "scope": "paragraph" if para else "line"})
             added += 1
             print(f"decided {args.disposition}: {rel}:{line} {rid} ({n} occurrence(s) of this line's text)  ->  {fs[0]['match']!r}")
     save_decisions(args.decisions, decisions)

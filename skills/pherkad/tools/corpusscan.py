@@ -6,8 +6,8 @@ corpus before it ships; until now that count was done by hand and recorded as
 a config comment. This makes it one command, and the same command previews a
 candidate rule and diffs two releases of the rule set under one overlay.
 
-    corpusscan.py scan DIR [DIR...] [--config OVERLAY]
-        every rule: hits, files, hits per 1,000 words, sorted by hits
+    corpusscan.py scan DIR [DIR...] [--config OVERLAY] [--surface S]
+        every rule, both engines: hits, files, hits per 1,000 words, sorted by hits
     corpusscan.py scan DIR --rule soft.is-the-point --contexts 8
         one rule (repeatable), with sampled contexts
     corpusscan.py scan DIR --candidate "soft_phrases:the one that" --contexts 8
@@ -45,6 +45,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 import voicelint  # noqa: E402
+import pherkad  # noqa: E402
 
 DEFAULT_EXTS = (".md", ".txt", ".html", ".htm")
 
@@ -127,8 +128,10 @@ def config_with_candidates(cfg: dict, candidates: list[dict]) -> tuple[dict, lis
     return cfg, ids
 
 
-def run_corpus(files: list[str], cfg: dict, base: str | None = None) -> dict:
-    """Lint every file; return per-file findings, words, and the effective rules."""
+def run_corpus(files: list[str], cfg: dict, base: str | None = None, structure: bool = True) -> dict:
+    """Both engines over every file (pherkad.run_text, no density); return
+    per-file findings as dicts, words, and the effective rules. Structural
+    rules count here too, so a surface's thresholds can be calibrated."""
     per_file = {}
     words = 0
     for path in files:
@@ -138,9 +141,9 @@ def run_corpus(files: list[str], cfg: dict, base: str | None = None) -> dict:
             sys.stderr.write(f"corpusscan: {exc}\n")
             continue
         words += len(re.findall(r"\w+", text))
-        findings, _ = voicelint.check_counting(text, cfg)
+        findings, _ = pherkad.run_text(text, cfg, structure=structure, density=False)
         per_file[path] = (findings, text)
-    return {"per_file": per_file, "words": words, "rules": {r["id"]: r for r in voicelint.all_rules(cfg)}}
+    return {"per_file": per_file, "words": words, "rules": {r["id"]: r for r in pherkad.all_rules(cfg)}}
 
 
 def _context(text: str, line: int, col: int, match: str, width: int = 60) -> str:
@@ -164,12 +167,12 @@ def summarize(result: dict, roots: list[str], only: set[str] | None = None,
     sev = collections.Counter()
     for path, (findings, text) in result["per_file"].items():
         for f in findings:
-            if only and f.rule_id not in only:
+            if only and f["rule_id"] not in only:
                 continue
-            hits[f.rule_id] += 1
-            files_hit[f.rule_id].add(path)
-            sev[f.severity] += 1
-            samples[f.rule_id].append((path, f.line, _context(text, f.line, f.col, f.match)))
+            hits[f["rule_id"]] += 1
+            files_hit[f["rule_id"]].add(path)
+            sev[f["severity"]] += 1
+            samples[f["rule_id"]].append((path, f["line"], _context(text, f["line"], f["col"], f["match"])))
     words = result["words"] or 1
     rng = random.Random(seed)
     rows = []
@@ -203,14 +206,24 @@ def _rel(path: str, roots: list[str]) -> str:
 
 
 def _keyset(result: dict, roots: list[str]) -> dict:
-    return {(_rel(p, roots), f.line, f.rule_id, f.match.lower()): (p, f, text)
+    return {(_rel(p, roots), f["line"], f["rule_id"], f["match"].lower()): (p, f, text)
             for p, (findings, text) in result["per_file"].items() for f in findings}
 
 
+def _layered(surface: str | None, overlay: str | None, base: str | None = None) -> dict:
+    """Base (shipped, or the one given), then the surface's overlay, then the project's."""
+    info = pherkad.resolve_surface(surface) if surface else None
+    cfg = voicelint.load_config(info["overlay"] if info and info["overlay"] else None, base=base)
+    if overlay:
+        ov = voicelint._read_json(overlay, "config")
+        cfg = voicelint._apply_list_ops(voicelint._deep_merge(cfg, ov))
+    return cfg
+
+
 def diff_corpus(files: list[str], old_base: str, new_base: str, overlay: str | None,
-                roots: list[str], contexts: int = 3, seed: int = 1) -> dict:
-    old_cfg = voicelint.load_config(overlay, base=old_base)
-    new_cfg = voicelint.load_config(overlay, base=new_base)
+                roots: list[str], contexts: int = 3, seed: int = 1, surface: str | None = None) -> dict:
+    old_cfg = _layered(surface, overlay, old_base)
+    new_cfg = _layered(surface, overlay, new_base)
     old = run_corpus(files, old_cfg)
     new = run_corpus(files, new_cfg)
     # A rule whose id changed but whose pattern did not (a string that became
@@ -223,20 +236,20 @@ def diff_corpus(files: list[str], old_base: str, new_base: str, overlay: str | N
         old["rules"][target] = old["rules"].pop(rid)
     for findings, _ in old["per_file"].values():
         for f in findings:
-            if f.rule_id in renamed:
-                f.rule_id = renamed[f.rule_id]
+            if f["rule_id"] in renamed:
+                f["rule_id"] = renamed[f["rule_id"]]
     ok, nk = _keyset(old, roots), _keyset(new, roots)
     appeared = [nk[k] for k in nk.keys() - ok.keys()]
     vanished = [ok[k] for k in ok.keys() - nk.keys()]
     old_rules, new_rules = set(old["rules"]), set(new["rules"])
 
     def per_rule(items):
-        c = collections.Counter(f.rule_id for _, f, _ in items)
+        c = collections.Counter(f["rule_id"] for _, f, _ in items)
         return c
 
     app_c, van_c = per_rule(appeared), per_rule(vanished)
-    old_counts = collections.Counter(f.rule_id for fs, _ in old["per_file"].values() for f in fs)
-    new_counts = collections.Counter(f.rule_id for fs, _ in new["per_file"].values() for f in fs)
+    old_counts = collections.Counter(f["rule_id"] for fs, _ in old["per_file"].values() for f in fs)
+    new_counts = collections.Counter(f["rule_id"] for fs, _ in new["per_file"].values() for f in fs)
     rows = []
     for rid in sorted(set(old_counts) | set(new_counts) | app_c.keys() | van_c.keys(),
                       key=lambda r: -(app_c[r] + van_c[r])):
@@ -251,11 +264,11 @@ def diff_corpus(files: list[str], old_base: str, new_base: str, overlay: str | N
     rng = random.Random(seed)
     by_rule = collections.defaultdict(list)
     for p, f, text in appeared:
-        by_rule[f.rule_id].append((_rel(p, roots), f.line, _context(text, f.line, f.col, f.match)))
+        by_rule[f["rule_id"]].append((_rel(p, roots), f["line"], _context(text, f["line"], f["col"], f["match"])))
     samples = {rid: sorted(v if len(v) <= contexts else rng.sample(v, contexts)) for rid, v in by_rule.items()}
 
     def sev_counts(res):
-        c = collections.Counter(f.severity for fs, _ in res["per_file"].values() for f in fs)
+        c = collections.Counter(f["severity"] for fs, _ in res["per_file"].values() for f in fs)
         return {"errors": c["error"], "warnings": c["warning"]}
 
     return {"files": len(files), "words": new["words"],
@@ -311,6 +324,8 @@ def main(argv=None) -> int:
     def common(p):
         p.add_argument("paths", nargs="+", help="corpus directories or files")
         p.add_argument("--config", help="overlay config (for example a downstream project's)")
+        p.add_argument("--surface", help="a surface (its overlay and thresholds are applied before --config)")
+        p.add_argument("--no-structure", action="store_true", help="voicelint rules only")
         p.add_argument("--ext", action="append", default=[], help="file extension to include (repeatable; replaces the default .md .txt .html)")
         p.add_argument("--exclude", action="append", default=[], help="glob to skip, against the path relative to its directory")
         p.add_argument("--contexts", type=int, default=None, help="sampled contexts per rule")
@@ -338,7 +353,7 @@ def main(argv=None) -> int:
              "files": len(files)}
 
     if args.cmd == "scan":
-        cfg = voicelint.load_config(args.config)
+        cfg = _layered(args.surface, args.config)
         only = set(args.rule)
         title = "Corpus scan"
         if args.candidate:
@@ -348,14 +363,14 @@ def main(argv=None) -> int:
         elif only:
             title = "Rule(s): " + ", ".join(sorted(only))
         contexts = args.contexts if args.contexts is not None else (5 if only else 0)
-        result = run_corpus(files, cfg)
+        result = run_corpus(files, cfg, structure=not args.no_structure)
         s = summarize(result, args.paths, only or None, contexts, args.seed)
         s.update(stamp, base_sha256=_sha(voicelint.DEFAULTS_PATH), candidates=args.candidate)
         print(json.dumps(s, indent=2, ensure_ascii=False) if args.json else render_scan(s, title))
         return 0
 
     contexts = args.contexts if args.contexts is not None else 3
-    d = diff_corpus(files, args.old, args.new, args.config, args.paths, contexts, args.seed)
+    d = diff_corpus(files, args.old, args.new, args.config, args.paths, contexts, args.seed, args.surface)
     d.update(stamp, old_base=args.old, old_sha256=_sha(args.old), new_base=args.new, new_sha256=_sha(args.new))
     print(json.dumps(d, indent=2, ensure_ascii=False) if args.json else render_diff(d, args.old, args.new))
     return 0

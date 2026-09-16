@@ -1,8 +1,8 @@
 {
   "tool": "pherkad",
-  "version": "0.5.16",
+  "version": "0.5.17",
   "schema": 1,
-  "generated": "2026-09-15",
+  "generated": "2026-09-16",
   "required": [
     "pherkad.py",
     "voicelint.py",
@@ -11,14 +11,14 @@
     "voice_config.json"
   ],
   "files": {
-    "pherkad.py": "7fc8989005df0a4bd338dc9c744fa7f002eafb64117f1794a1b6f8f2d1d4fad7",
+    "pherkad.py": "4a835c373d513675cfb03f97a67fe30cbd965de5e815cf6f9ec4e405f0cc233d",
     "voicelint.py": "ab3447b5faee3999be803e19b71c1172b0282676f6d2292c7a621c278708d2ee",
     "structlint.py": "f9d1e3a21aed7a0a3864640082335d0f5892a17810b58fc53f588210c98d38e3",
     "mdmask.py": "a6bc483a2bccc0559d8bbfd408c471b14d45b345fc47aad91ca9cdec250bfe41",
     "voice_config.json": "f6bccf5eef038b44d671c2ff74b14fedc7adba9c8f9559214a653ac5472f7120",
     "replycheck.py": "d60dd1fc2fb43a4588fdf84bccf9bcca645e32ef21b3d1dd4204ef1d80463bb6",
     "replycheck-hook.py": "74af116bb1a487db85633ba78b7067ec9f79446afcaf074d1f89cb65a4b99c45",
-    "corpusscan.py": "67b22e05a8fbe4fd3a65c238b4e178bb365ec6415174c340a151f41d7633f74d",
+    "corpusscan.py": "0de239cb2116c8b618f238f3031e31b89dfc4b2332d8eed6dccf2ac2ebf43fff",
     "corrections.py": "a3ed804826a3f9a0901e65182ecff958fe4c31f982066f40d7841d5810aee6a0",
     "surfaces/assistant-chat.json": "ca9d9721df2513a8d40a2f4351f1f7c7713fdff8da6c8c1ecca1813858a72224",
     "surfaces/email.json": "25d23c7f262a00f698377edde3da75008cc9016797227baab431e886d8cd6cac",
