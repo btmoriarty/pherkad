@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.5.17 (2026-09-16)
+
+Two more defects from the Astra re-run, which again ran out of usage before it could report (`docs/codex-features-astra-2026-09-15-second-pass.md`, third attempt).
+
+- **`corpusscan` runs both engines and takes `--surface`.** It ran voicelint alone, so the structural rules could not be counted or calibrated on a corpus, and it had no way to apply a surface's thresholds. `run_corpus` now goes through `pherkad.run_text` (no density), findings are the shared dicts, `scan` and `diff` accept `--surface` (applied before `--config`) and `--no-structure`. On the saga the structural rules count 103 staccato, 12 two-beat, 1 header, the same 116 the gate reports as advisory.
+- **A structural decision is keyed on its paragraph, and on the thresholds.** structlint reports a paragraph against its first line, so a decision keyed on that line survived an edit further down; and a threshold change did not change the rule's hash, so a decision made under one threshold survived another. `context_hash` takes the whole paragraph for a structural finding (the record says `scope: paragraph`), and `rule_hashes` folds the `structure` thresholds into every structural rule's hash and the density's.
+- Tests for both.
+- `VERSION` 0.5.17.
+
 ## v0.5.16 (2026-09-15)
 
 Three defects, two of them named by a second Astra review that ran out of usage before it could finish (`docs/codex-features-astra-2026-09-15-second-pass.md`).

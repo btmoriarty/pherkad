@@ -306,6 +306,35 @@ class Decisions(unittest.TestCase):
         self.assertIn("8 decided", out)
         self.assertNotIn("density", out)
 
+    def test_structural_decision_is_keyed_on_the_paragraph(self):
+        # Astra, 2026-09-16: a structural finding is reported against its
+        # paragraph's first line, so an edit further down left the decision in force.
+        text = "None of them wrong. None of them ours.\nThe second line of the same paragraph.\n\nPlain prose.\n"
+        p = os.path.join(self.root, "para.md")
+        open(p, "w").write(text)
+        code, out, _ = run(["decide", "--decisions", self.dec, "--reason", "refrain", p + ":1:structure.staccato"])
+        self.assertEqual(code, 0, out)
+        self.assertEqual(json.load(open(self.dec))[0]["scope"], "paragraph")
+        code, out, _ = run(["check", "--decisions", self.dec, p])
+        self.assertIn("1 decided", out)
+        open(p, "w").write(text.replace("The second line", "An edited second line"))
+        code, out, _ = run(["check", "--decisions", self.dec, p])
+        self.assertNotIn("decided", out, "an edit anywhere in the paragraph makes it new again")
+        self.assertIn("structure.staccato", out)
+
+    def test_threshold_change_invalidates_a_structural_decision(self):
+        text = "None of them wrong. None of them ours.\n"
+        p = os.path.join(self.root, "th.md")
+        open(p, "w").write(text)
+        run(["decide", "--decisions", self.dec, "--reason", "refrain", p + ":1:structure.two-beat"])
+        self.assertIn("1 decided", run(["check", "--decisions", self.dec, p])[1])
+        ov = os.path.join(self.root, "ov.json")
+        json.dump({"structure": {"two_beat_diff": 20}}, open(ov, "w"))
+        code, out, _ = run(["check", "--decisions", self.dec, "--config", ov, p])
+        self.assertNotIn("decided", out, "a changed threshold is a changed rule")
+        code, out, _ = run(["decisions", "--decisions", self.dec, "--config", ov, p])
+        self.assertIn("rule changed", out)
+
     def test_deferred_counts_separately(self):
         self.decide("canon/a.md:3", "fix next pass", "deferred")
         code, out = self.check()
