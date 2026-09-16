@@ -20,4 +20,4 @@ One page. Everything Pherkad does and what to say to trigger it. It validates ag
 
 **Your data:** your voice profile is built from your writing and stays in your folder. The repository ships no personal data; its only persona is fictional.
 
-**The one rule:** every verdict carries quoted evidence. A fully human-written draft can fail, because the test is you, not humanity in general. Density is the tell; a single contrast or one stray phrase never sinks a draft.
+**The one rule:** every verdict carries quoted evidence. A fully human-written draft can fail, because the test is you, not humanity in general. Density is what gives it away; a single contrast or one stray phrase never sinks a draft.
