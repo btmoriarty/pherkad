@@ -17,6 +17,7 @@ and prints one format.
     pherkad.py check --format json FILE              # voicelint's envelope, plus provenance
     pherkad.py check --format sarif FILE             # SARIF 2.1.0 for editors and CI
     pherkad.py check --advisory structure. FILE      # report, never count, rule ids under a prefix
+    pherkad.py check --fingerprint F FILE            # measured voice.* findings against the author's fingerprint (advisory)
     pherkad.py check --strict FILE                   # warnings fail too
     pherkad.py check --no-structure FILE             # voicelint only
     pherkad.py rules [--config OVERLAY] [--json]     # every rule both engines would run
@@ -468,8 +469,45 @@ def to_sarif(results: list[tuple[str, list[dict]]], cfg: dict, advisory: list[st
                       "results": sarif_results}]}
 
 
+def voice_findings(text: str, fp: dict, surface_name: str | None, threshold: float) -> list[dict]:
+    """Advisory findings from the measured profile: one per feature that sits
+    past `threshold` of the author's own standard deviations, quoting the
+    text's sentence and the author's. Never counted in density; never an error."""
+    import fingerprint as fpm
+    res = fpm.compare(text, fp, surface_name, threshold)
+    if "error" in res:
+        return []
+    lines = text.split("\n")
+    out = []
+    for d in res["flagged"]:
+        quote = d.get("quote") or ""
+        line = next((i for i, ln in enumerate(lines, 1) if quote[:40] and quote[:40] in " ".join(ln.split())), 0)
+        more = "more" if d["z"] > 0 else "less"
+        out.append({"line": line, "col": 1, "severity": "advisory", "rule": "voice",
+                    "rule_id": "voice." + d["feature"],
+                    "match": quote[:160] or d["feature"],
+                    "message": f"{d['feature']} {more} than the author by {abs(d['z']):.1f} sd ({d['value']} against "
+                               f"{d['author_mean']} ± {d['author_sd']}, basis {res['basis']})"
+                               + (f"; the author: {d['author_quote'][:80]!r}" if d.get("author_quote") else ""),
+                    "engine": "fingerprint"})
+    out.append({"line": 0, "col": 0, "severity": "advisory", "rule": "voice", "rule_id": "voice.distance",
+                "match": f"Delta {res['delta']}, shape {res['shape_distance']}",
+                "message": f"distance from the author's fingerprint: Delta {res['delta']} over function words, "
+                           f"shape {res['shape_distance']} (mean |z| over the shape features); basis {res['basis']}",
+                "engine": "fingerprint"})
+    return out
+
+
 def cmd_check(args) -> int:
     cfg, surface = load_layers(args.surface, args.config, args.surfaces)
+    fp = None
+    if getattr(args, "fingerprint", None):
+        try:
+            with open(args.fingerprint, encoding="utf-8") as fh:
+                fp = json.load(fh)
+        except (OSError, ValueError) as exc:
+            sys.stderr.write(f"pherkad: fingerprint: {exc}\n")
+            return 2
     overlay = args.config or (surface["overlay"] if surface else None)
     advisory = args.advisory or []
     seen = set()
@@ -502,6 +540,10 @@ def cmd_check(args) -> int:
         if d:
             d["decision"] = None
             findings.append(d)
+        if fp:
+            for v in voice_findings(text, fp, surface["name"] if surface else None, args.fingerprint_threshold):
+                v["decision"] = None
+                findings.append(v)
         results.append((path, findings))
         suppressed += dropped
         for f in findings:
@@ -562,7 +604,7 @@ MANIFEST_SCHEMA = 1
 # The five a gate needs are required wherever the bundle is vendored; the rest
 # are listed so their hashes travel, but a vendored copy may leave them out.
 REQUIRED_FILES = ("pherkad.py", "voicelint.py", "structlint.py", "mdmask.py", "voice_config.json")
-BUNDLE_FILES = REQUIRED_FILES + ("replycheck.py", "replycheck-hook.py", "corpusscan.py", "corrections.py")
+BUNDLE_FILES = REQUIRED_FILES + ("replycheck.py", "replycheck-hook.py", "corpusscan.py", "corrections.py", "samples.py", "fingerprint.py")
 
 
 def _file_sha(path: str) -> str:
@@ -1211,6 +1253,8 @@ def main(argv=None) -> int:
     pc.add_argument("--config", help="a project overlay, applied after the surface's")
     pc.add_argument("--format", choices=["text", "json", "sarif"], default="text")
     pc.add_argument("--strict", action="store_true", help="warnings fail too")
+    pc.add_argument("--fingerprint", metavar="FILE", help="the measured profile (fingerprint.py build); adds advisory voice.* findings")
+    pc.add_argument("--fingerprint-threshold", type=float, default=2.0, help="standard deviations before a feature is reported")
     pc.add_argument("--advisory", action="append", metavar="PREFIX",
                     help="rule ids under this prefix are reported but never counted (repeatable), e.g. structure.")
     pc.add_argument("--no-structure", action="store_true", help="voicelint only")
