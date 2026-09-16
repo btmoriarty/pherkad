@@ -89,6 +89,21 @@ DEFAULT_THRESHOLDS = {
     "frame_closer_share": 0.40,  # ... and this share of long paragraphs
 }
 
+# The implementation revision of each structural check. A decision on a
+# structural finding is hashed with the rule's thresholds AND this number, so
+# changing how a check works (a regex, the parallelism test) wakes up every
+# decision made under the old version. Bump the number when the behaviour of a
+# check changes; leave it when only its thresholds move (those are hashed too).
+STRUCT_REVISION = {
+    "two-beat": 2,               # 2: the syntactic parallel test (0.5.6)
+    "staccato": 2,               # 2: spans masked rather than lines dropped (0.5.6)
+    "header": 2,                 # 2: the real/actual and where-sits patterns tightened (0.5.6)
+    "aphorism": 1,
+    "interrogative-headers": 2,  # 2: document-scoped, all headings quoted (0.5.22)
+    "frame": 1,
+    "density": 1,
+}
+
 # A frame is a syntactic template a writer can fall into across a document: no
 # single instance is a fault, the recurrence is. Found on two lecture decks
 # (five or six titles on one mould) and a paper (one sentence in four, five
@@ -502,8 +517,13 @@ def check_text(raw: str, thresholds: dict | None = None) -> list[Finding]:
              if INTERROGATIVE_HEAD.match(h) and not h.rstrip().endswith("?")]
         pct = 100.0 * len(q) / len(heads)
         if pct > float(t["interrogative_pct"]):
+            # Document-scoped: the match lists every heading in the rate, question
+            # ones and not, so a decision on this finding is invalidated by any
+            # heading change that moves the rate, not only by the first one.
+            listed = "; ".join(("? " if INTERROGATIVE_HEAD.match(h) and not h.rstrip().endswith("?") else "") + h[:60]
+                               for _, h in heads)
             found.append(Finding(q[0][0], "interrogative-headers",
-                                 f"{len(q)}/{len(heads)} headings",
+                                 f"{len(q)}/{len(heads)} headings: {listed}",
                                  f"{pct:.0f}% of headings open with a question word; "
                                  f"name the sections instead"))
 

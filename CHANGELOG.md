@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.5.22 (2026-09-16)
+
+Item 19 of `docs/ROADMAP.md`: the three weaknesses the Astra review of 0.5.17 named, each a way a decision could outlive its reason.
+
+- **The heading-rate finding is document-scoped.** `structure.interrogative-headers` now quotes every heading in the rate (question ones marked), and a decision on it is keyed on that list, so a change to any heading that moves the rate makes the finding new again. Before, it was anchored to the first question heading and the 0.5.17 paragraph fix did not reach it.
+- **A structural rule's hash carries its implementation revision.** `structlint.STRUCT_REVISION` numbers each check; `rule_hashes` folds the number in beside the thresholds. Changing how a check works (a regex, the parallelism test) is now a rule change that wakes every decision made under the old version; the numbers already record the 0.5.6 changes.
+- **Overlay fixtures are also run under the effective stack.** `check-overlay` still tests each rule alone (that proves matching), and now says when a `fires` example that passes alone loses its span to another rule under the full configuration, naming the rule that wins: `worth [word] than` against the shipped `worth more than`, for one.
+- Three tests.
+- `VERSION` 0.5.22.
+
 ## v0.5.21 (2026-09-16)
 
 Item 16 of `docs/ROADMAP.md`, resumable eval runs.
