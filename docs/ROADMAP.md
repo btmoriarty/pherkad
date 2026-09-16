@@ -49,7 +49,7 @@ One ordered list, drawn from `docs/priority-fixes.md` (what is still wrong) and 
 | # | Item | Depends on | Done when | Effort |
 |---|---|---|---|---|
 | 14 | Done, 0.5.19. **Repeated-frame check** in structlint: a syntactic template recurring across headings and subtitles, sentences, or paragraph closers; document-scoped, advisory, outside density. | 4, 7 | The pre-edit Week 3 deck and the NeurIPS paper fire; the edited deck, the saga, and this repo's docs do not. | 1 |
-| 15 | **Judgment packet**: `pherkad.py review-pack --surface X` emits the prompt and bundle for a quick-mode run. | 11 | One command replaces the skill's context-assembly steps. | 1 |
+| 15 | Done, 0.5.20. **Judgment packet**: `pherkad.py review-pack --surface X` emits the prompt and bundle for a quick-mode run. | 11 | One command replaces the skill's context-assembly steps. | 1 |
 | 16 | **Resumable eval runs**: `study.py run --jobs N` executes the judging prompts with status, validation, retries, hashes. | 13 | The 264-judgment detect pilot is an afternoon. | 1 |
 | 17 | **Labelled calibration**: `corpusscan review` and `score-review`, precision per rule per surface. | 3 | A rule carries a precision number, not an impression. | 1.5 |
 | 18 | **Persist judgment findings**: `pherkad.py review-import` records a quick-mode row into the decision store. | 7, 15 | A row ruled intentional stays ruled until the text changes. | 2 |

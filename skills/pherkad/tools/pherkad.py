@@ -12,6 +12,7 @@ and prints one format.
     pherkad.py check --surface assistant-chat FILE   # a shipped surface
     pherkad.py check --surface fiction --config OV   # a surface, then a project overlay on top
     pherkad.py surfaces [--surfaces MAP] [--json]    # every surface, with speaker and register
+    pherkad.py review-pack --surface X FILE          # the quick-mode judgment packet: prompt, or --format json, or --out DIR
     pherkad.py check --format json FILE              # voicelint's envelope, plus provenance
     pherkad.py check --format sarif FILE             # SARIF 2.1.0 for editors and CI
     pherkad.py check --advisory structure. FILE      # report, never count, rule ids under a prefix
@@ -702,6 +703,202 @@ def cmd_check_overlay(args) -> int:
     return 1 if errors else 0
 
 
+# ---------------------------------------------------------------------------
+# Judgment packet (roadmap item 15)
+# ---------------------------------------------------------------------------
+# One command assembles everything a quick-mode judgment run needs, so the
+# context is the same every time and any model or tool can run it without
+# reading the skill: the surface (speaker, register, guidance, approved
+# excerpts), the profile files, the mechanical findings with decisions applied,
+# the judgment-only rules that apply to this surface, the instructions, the
+# output schema, and a hash of every input.
+PROFILE_FILES = ("Voice_Profile.md", "voice-rules.md", "voice-authoring.md")
+
+JUDGMENT_RULES = {
+    "always": [
+        "5c: the antithesis family ('not X but Y', 'X, not Y', 'less about X than Y') where it recurs; the repeated-frame check reports the mechanical part, read for it only under its threshold",
+        "5f: triplet noun piling where the three are decoration rather than an enumeration",
+        "5g: counter-X constructions ('counter-intuitive', 'contrary to popular belief')",
+        "5h: authenticity language ('to be honest', 'I want to be clear', announced candour or directness)",
+        "5i: structural artifacts (a paragraph that announces its own structure, a closing sentence that gestures at a theme, a demonstrative pointer 'that is the part that')",
+        "the profile's companion files: any ban stated there that no regex expresses",
+    ],
+    "assistant": [
+        "the chat-only rules: a markdown link where a full path belongs, a tilde path, question praise, a presenter-style narration of what the assistant will do",
+    ],
+    "register": {
+        "no": [],
+        "profile": ["positive register: one of the profile's markers where the profile shows it in this register; a status message needs none"],
+        "frame": ["positive register in the frame and transitions only: the opening, the close, the joins; the core is held to accuracy"],
+        "yes": ["positive register throughout: a draft clean of every tell with none of the profile's markers has flattened; say where one marker would go"],
+        "own-voice-document": ["the project's own voice document governs; do not apply the personal profile's markers"],
+    },
+}
+
+OUTPUT_SCHEMA = {
+    "header": "QUICK VOICE CHECK (surface: <name>, <speaker>, register <register>; profile <loaded|missing>; <n> words)",
+    "row": {"rule_ref": "a mechanical rule_id, or 'judgment (5c)' etc., or 'positive-register'",
+            "quote": "the passage, verbatim, in backticks",
+            "decision": "fix | intentional | literal | not applicable | quoted",
+            "rationale": "one clause",
+            "proposed_edit": "only when decision is fix; changes no fact, name, number, date, source, or emphasis"},
+    "verdict": "PASS when no row is fix; REVISE when any is; REWRITE only when the positive-register row is fix and three or more other rows are",
+}
+
+_QUICK_FALLBACK = """Quick mode. One table, one verdict line. Nothing is scored and nothing is rewritten that was not flagged.
+1. The mechanical findings are listed below with any decisions already applied; do not re-run them.
+2. Read the draft once for the judgment-only rules listed for this surface, not the whole catalog. Add a row per supported hit.
+3. Decide each row: fix (the tell is real here; the row carries a proposed edit), intentional (the writer's own move), literal (the plain sense), not applicable (the rule does not apply to this surface), quoted (someone else's words).
+4. Read the positive register only where the surface expects it (stated below); where it does and the draft shows none of the profile's markers, add one positive-register row with decision fix.
+5. Verdict: PASS when no row is fix; REVISE when any is; REWRITE only when the positive-register row is fix and three or more other rows are."""
+
+
+def _quick_instructions() -> str:
+    """The Quick mode section of SKILL.md when it is beside the tools (the
+    repository); an embedded condensed version in a vendored copy."""
+    skill = os.path.join(HERE, "..", "SKILL.md")
+    try:
+        text = open(skill, encoding="utf-8").read()
+        m = re.search(r"^## Quick mode\n(.*?)^## Full mode", text, re.S | re.M)
+        if m:
+            body = m.group(1).strip()
+            # The packet has already run the mechanical layer; the skill's step 1 says to run it.
+            body = re.sub(r"^1\. \*\*Run the mechanical layer once\*\*.*?(?=\n2\. )",
+                          "1. **The mechanical findings are already below**, with the author's decisions applied; do not run any tool.",
+                          body, count=1, flags=re.S | re.M)
+            return body
+    except OSError:
+        pass
+    return _QUICK_FALLBACK
+
+
+def _profile_dir(explicit: str | None) -> str | None:
+    """An explicit directory is used as given, profile or not, so a missing
+    profile is reported rather than papered over by a fallback. Otherwise:
+    PHERKAD_PROFILE, the repository root (where the maintainer's live), then
+    the working directory."""
+    if explicit:
+        return explicit
+    for cand in (os.environ.get("PHERKAD_PROFILE"),
+                 os.path.abspath(os.path.join(HERE, "..", "..", "..")), os.getcwd()):
+        if cand and os.path.exists(os.path.join(cand, "Voice_Profile.md")):
+            return cand
+    return None
+
+
+def build_pack(path: str, surface: str, config: str | None, decisions_path: str | None,
+               root: str | None, profile_dir: str | None, surfaces_map: str | None,
+               inline_profile: bool = True, structure: bool = True) -> dict:
+    cfg, info = load_layers(surface, config, surfaces_map)
+    text = read_source(path)
+    findings, suppressed = run_text(text, cfg, structure=structure, density=False)
+    decisions = load_decisions(decisions_path)
+    droot = root or (os.path.dirname(os.path.abspath(decisions_path)) if decisions_path else os.getcwd())
+    if decisions:
+        apply_decisions(findings, text, rel_path(path, droot), decisions, rule_hashes(cfg))
+    else:
+        for f in findings:
+            f["decision"] = None
+    live = [f for f in findings if not f["decision"]]
+    d = density_finding(live, text, cfg)
+    if d:
+        d["decision"] = None
+        findings.append(d)
+    pdir = _profile_dir(profile_dir)
+    profile = {"dir": pdir or "", "files": {}}
+    for name in PROFILE_FILES:
+        p = os.path.join(pdir, name) if pdir else ""
+        entry = {"path": p, "present": bool(p and os.path.exists(p))}
+        if entry["present"]:
+            body = open(p, encoding="utf-8", errors="replace").read()
+            entry["sha256"] = _hash(body)
+            entry["words"] = len(re.findall(r"\w+", body))
+            if inline_profile:
+                entry["text"] = body
+        profile["files"][name] = entry
+    excerpts = []
+    for e in (info["excerpts"] if info else []):
+        item = dict(e)
+        if e["exists"]:
+            item["text"] = open(e["path"], encoding="utf-8", errors="replace").read()
+        excerpts.append(item)
+    speaker = info["speaker"] if info else "author"
+    register = info["positive_register"] if info else "profile"
+    rules = list(JUDGMENT_RULES["always"])
+    if speaker == "assistant":
+        rules += JUDGMENT_RULES["assistant"]
+    rules += JUDGMENT_RULES["register"].get(register, [])
+    import datetime
+    return {
+        "tool": "pherkad", "version": _version(), "generated": datetime.datetime.now().isoformat(timespec="seconds"),
+        "depth": "quick",
+        "surface": {"name": info["name"] if info else "", "speaker": speaker, "positive_register": register,
+                    "guidance": info["guidance"] if info else "", "overlay": info["overlay"] if info else "",
+                    "excerpts": excerpts},
+        "project_overlay": config or "", "config_sha256": config_sha256(cfg),
+        "profile": profile,
+        "source": {"path": path, "sha256": _hash(text), "words": len(re.findall(r"\w+", text)), "text": text},
+        "mechanical": {"findings": findings, "suppressed": suppressed,
+                       "decided": sum(1 for f in findings if f["decision"]),
+                       "decisions": decisions_path or ""},
+        "judgment_rules": rules,
+        "instructions": _quick_instructions(),
+        "output_schema": OUTPUT_SCHEMA,
+    }
+
+
+def render_prompt(pack: dict) -> str:
+    s = pack["surface"]
+    parts = ["You are running Pherkad's quick voice check. Everything you need is below; do not run any tool.", "",
+             f"SURFACE: {s['name'] or '(none)'}; speaker {s['speaker']}; positive register {s['positive_register']}.",
+             f"GUIDANCE: {s['guidance']}" if s["guidance"] else "", ""]
+    parts += ["=== INSTRUCTIONS ===", pack["instructions"], ""]
+    parts += ["=== JUDGMENT-ONLY RULES FOR THIS SURFACE ===", *[f"- {r}" for r in pack["judgment_rules"]], ""]
+    parts += ["=== OUTPUT ===", json.dumps(pack["output_schema"], indent=2, ensure_ascii=False), ""]
+    for name, e in pack["profile"]["files"].items():
+        if e.get("present") and e.get("text"):
+            parts += [f"=== PROFILE: {name} ===", e["text"].strip(), ""]
+    if not any(e.get("present") for e in pack["profile"]["files"].values()):
+        parts += ["=== PROFILE ===", "(no Voice_Profile.md found; this is a profile-less scan and the report must say so)", ""]
+    for ex in s["excerpts"]:
+        if ex.get("text"):
+            parts += [f"=== APPROVED EXCERPT: {os.path.basename(ex['path'])} ===", ex["text"].strip(), ""]
+    parts += ["=== MECHANICAL FINDINGS (decisions applied; do not re-run) ==="]
+    m = pack["mechanical"]
+    live = [f for f in m["findings"] if not f["decision"]]
+    if live:
+        for f in live:
+            parts.append(f"line {f['line']}: [{f['severity']}] {f['rule_id']}: {f['message']}  ->  {f['match']!r}")
+    else:
+        parts.append("(none)")
+    if m["decided"]:
+        parts.append(f"({m['decided']} finding(s) already decided by the author and hidden)")
+    parts += ["", f"=== DRAFT ({pack['source']['words']} words) ===", pack["source"]["text"].rstrip(), ""]
+    return "\n".join(p for p in parts if p is not None)
+
+
+def cmd_review_pack(args) -> int:
+    pack = build_pack(args.file, args.surface, args.config, args.decisions, args.root, args.profile_dir,
+                      args.surfaces, inline_profile=not args.no_profile_text, structure=not args.no_structure)
+    if args.out:
+        os.makedirs(args.out, exist_ok=True)
+        with open(os.path.join(args.out, "pack.json"), "w", encoding="utf-8") as fh:
+            json.dump(pack, fh, indent=2, ensure_ascii=False)
+        with open(os.path.join(args.out, "prompt.md"), "w", encoding="utf-8") as fh:
+            fh.write(render_prompt(pack))
+        missing = [n for n, e in pack["profile"]["files"].items() if not e.get("present")]
+        print(f"pherkad: wrote {args.out}/pack.json and prompt.md; surface {pack['surface']['name']}, "
+              f"{len([f for f in pack['mechanical']['findings'] if not f['decision']])} live finding(s), "
+              f"{len(pack['judgment_rules'])} judgment rule(s)"
+              + (f"; profile files missing: {', '.join(missing)}" if missing else ""))
+        return 0
+    if args.format == "json":
+        print(json.dumps(pack, indent=2, ensure_ascii=False))
+    else:
+        print(render_prompt(pack))
+    return 0
+
+
 def _parse_location(loc: str):
     """path:line or path:line:rule_id."""
     parts = loc.rsplit(":", 2)
@@ -892,6 +1089,19 @@ def main(argv=None) -> int:
     po = sub.add_parser("check-overlay", help="does a downstream overlay still fit this base?")
     po.add_argument("overlay")
     po.set_defaults(fn=cmd_check_overlay)
+    prp = sub.add_parser("review-pack", help="assemble the quick-mode judgment packet for one draft")
+    prp.add_argument("file", help="the draft, or - for stdin")
+    prp.add_argument("--surface", required=True, help="what the draft is; required, never inferred")
+    prp.add_argument("--surfaces")
+    prp.add_argument("--config", help="a project overlay, applied after the surface's")
+    prp.add_argument("--decisions")
+    prp.add_argument("--root")
+    prp.add_argument("--profile-dir", help="where Voice_Profile.md and its companions live (default: PHERKAD_PROFILE, the repo root, or the working directory)")
+    prp.add_argument("--no-profile-text", action="store_true", help="reference the profile files by path and hash only")
+    prp.add_argument("--no-structure", action="store_true")
+    prp.add_argument("--format", choices=["prompt", "json"], default="prompt")
+    prp.add_argument("--out", help="write pack.json and prompt.md into this directory instead of printing")
+    prp.set_defaults(fn=cmd_review_pack)
     psf = sub.add_parser("surfaces", help="every surface a name could resolve to")
     psf.add_argument("--surfaces")
     psf.add_argument("--json", action="store_true")

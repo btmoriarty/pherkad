@@ -538,5 +538,99 @@ class Surfaces(unittest.TestCase):
         self.assertEqual((d["surface"], d["speaker"], d["positive_register"]), ("paper", "author", "frame"))
 
 
+class ReviewPack(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.d = self.tmp.name
+        self.draft = os.path.join(self.d, "draft.md")
+        with open(self.draft, "w") as fh:
+            fh.write("The honest answer is that we slipped. That is the point of the audit.\n\nNone of them wrong. None of them ours.\n")
+        self.prof = os.path.join(self.d, "prof")
+        os.makedirs(self.prof)
+        for name, body in (("Voice_Profile.md", "# profile\n\nmarker one\n"), ("voice-rules.md", "# rules\n\nno X\n")):
+            open(os.path.join(self.prof, name), "w").write(body)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def pack(self, *extra):
+        code, out, err = run(["review-pack", "--surface", "email", "--profile-dir", self.prof, "--format", "json", *extra, self.draft])
+        self.assertEqual(code, 0, err)
+        return json.loads(out)
+
+    def test_bundle_shape(self):
+        p = self.pack()
+        for k in ("tool", "version", "generated", "depth", "surface", "config_sha256", "profile", "source",
+                  "mechanical", "judgment_rules", "instructions", "output_schema"):
+            self.assertIn(k, p)
+        self.assertEqual((p["surface"]["name"], p["surface"]["speaker"], p["surface"]["positive_register"]),
+                         ("email", "author", "profile"))
+        self.assertEqual([f["rule_id"] for f in p["mechanical"]["findings"]],
+                         ["honest-framing", "soft.is-the-point", "structure.two-beat"])
+        self.assertEqual(p["source"]["words"], 22)
+        self.assertTrue(p["source"]["sha256"])
+
+    def test_profile_files_found_hashed_and_inlined(self):
+        p = self.pack()
+        files = p["profile"]["files"]
+        self.assertTrue(files["Voice_Profile.md"]["present"])
+        self.assertTrue(files["voice-rules.md"]["present"])
+        self.assertFalse(files["voice-authoring.md"]["present"])
+        self.assertIn("marker one", files["Voice_Profile.md"]["text"])
+        self.assertTrue(files["Voice_Profile.md"]["sha256"])
+        p = self.pack("--no-profile-text")
+        self.assertNotIn("text", p["profile"]["files"]["Voice_Profile.md"])
+
+    def test_judgment_rules_follow_speaker_and_register(self):
+        email = self.pack()["judgment_rules"]
+        self.assertTrue(any("positive register" in r for r in email))
+        code, out, _ = run(["review-pack", "--surface", "technical", "--profile-dir", self.prof, "--format", "json", self.draft])
+        tech = json.loads(out)["judgment_rules"]
+        self.assertFalse(any("positive register" in r for r in tech))
+        code, out, _ = run(["review-pack", "--surface", "assistant-chat", "--profile-dir", self.prof, "--format", "json", self.draft])
+        chat = json.loads(out)["judgment_rules"]
+        self.assertTrue(any("chat-only" in r for r in chat))
+        self.assertFalse(any("positive register" in r for r in chat))
+
+    def test_decisions_apply_to_the_packet(self):
+        dec = os.path.join(self.d, "dec.json")
+        run(["decide", "--decisions", dec, "--reason", "the audit is the point", self.draft + ":1:soft.is-the-point"])
+        p = self.pack("--decisions", dec)
+        self.assertEqual(p["mechanical"]["decided"], 1)
+        live = [f["rule_id"] for f in p["mechanical"]["findings"] if not f["decision"]]
+        self.assertNotIn("soft.is-the-point", live)
+        code, out, _ = run(["review-pack", "--surface", "email", "--profile-dir", self.prof, "--decisions", dec, self.draft])
+        self.assertIn("1 finding(s) already decided", out)
+        self.assertNotIn("soft.is-the-point", out.split("=== MECHANICAL FINDINGS")[1].split("=== DRAFT")[0])
+
+    def test_prompt_has_every_section_and_no_run_instruction(self):
+        code, out, _ = run(["review-pack", "--surface", "email", "--profile-dir", self.prof, self.draft])
+        for sec in ("=== INSTRUCTIONS ===", "=== JUDGMENT-ONLY RULES FOR THIS SURFACE ===", "=== OUTPUT ===",
+                    "=== PROFILE: Voice_Profile.md ===", "=== MECHANICAL FINDINGS", "=== DRAFT (22 words) ==="):
+            self.assertIn(sec, out)
+        self.assertIn("do not run any tool", out)
+        self.assertNotIn("**Run the mechanical layer once**", out)
+        self.assertIn("The honest answer is that we slipped.", out)
+
+    def test_out_dir_writes_both_files(self):
+        o = os.path.join(self.d, "out")
+        code, out, _ = run(["review-pack", "--surface", "email", "--profile-dir", self.prof, "--out", o, self.draft])
+        self.assertEqual(code, 0)
+        self.assertTrue(os.path.exists(os.path.join(o, "pack.json")))
+        self.assertTrue(os.path.exists(os.path.join(o, "prompt.md")))
+        self.assertIn("3 live finding(s)", out)
+        self.assertIn("profile files missing: voice-authoring.md", out)
+
+    def test_missing_profile_is_said_not_hidden(self):
+        empty = os.path.join(self.d, "noprof")
+        os.makedirs(empty)
+        code, out, _ = run(["review-pack", "--surface", "email", "--profile-dir", empty, self.draft])
+        self.assertIn("profile-less scan", out)
+
+    def test_surface_is_required_and_checked(self):
+        self.assertEqual(run(["review-pack", self.draft])[0], 2)
+        self.assertEqual(run(["review-pack", "--surface", "memo", self.draft])[0], 2)
+
+
 if __name__ == "__main__":
     unittest.main()
