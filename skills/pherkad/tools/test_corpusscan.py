@@ -138,5 +138,61 @@ class Corpus(unittest.TestCase):
         self.assertEqual(run(["scan", empty])[0], 2)
 
 
+class LabelledCalibration(Corpus):
+    def test_review_exports_hits_and_unflagged_units(self):
+        self.w("long.md", ("A plain sentence about the weather with nothing to flag in it at all. " * 8) + "\n")
+        out = os.path.join(self.d, "labels.jsonl")
+        code, msg, err = run(["review", self.d, "--exclude", "[0-9][0-9]-*.md", "--surface", "post",
+                              "--per-rule", "5", "--unflagged", "5", "--out", out])
+        self.assertEqual(code, 0, err)
+        rows = [json.loads(l) for l in open(out)]
+        self.assertEqual(rows[0]["type"], "meta")
+        self.assertEqual(rows[0]["surface"], "post")
+        hits = [r for r in rows if r["type"] == "hit"]
+        un = [r for r in rows if r["type"] == "unflagged"]
+        self.assertTrue(any(r["rule_id"] == "banned.game-changer" for r in hits))
+        self.assertTrue(all(r["label"] == "" for r in rows[1:]), "the tool never writes a label")
+        self.assertTrue(all(k in hits[0] for k in ("path", "line", "source_hash", "span", "context")))
+        self.assertEqual(len(un), 1, "the one long clean paragraph")
+        self.assertTrue(un[0]["path"].endswith("long.md"))
+
+    def test_score_review(self):
+        out = os.path.join(self.d, "labels.jsonl")
+        run(["review", self.d, "--surface", "post", "--per-rule", "5", "--unflagged", "5", "--out", out])
+        rows = [json.loads(l) for l in open(out)]
+        for r in rows:
+            if r["type"] == "hit":
+                r["label"] = "TP" if r["rule_id"] == "banned.game-changer" else "FP"
+        with open(out, "w") as fh:
+            fh.write("\n".join(json.dumps(r) for r in rows) + "\n")
+        code, msg, _ = run(["score-review", out, "--json"])
+        self.assertEqual(code, 0, msg)
+        sc = json.loads(msg)
+        by = {r["rule_id"]: r for r in sc["rules"]}
+        self.assertEqual(by["banned.game-changer"]["precision"], 1.0)
+        self.assertEqual(by["soft.is-the-point"]["precision"], 0.0)
+        self.assertIsNotNone(by["soft.is-the-point"]["false_flags_per_1k"])
+        self.assertEqual(sc["unlabelled"], {})
+        code, msg, _ = run(["score-review", out])
+        self.assertIn("banned.game-changer", msg)
+        self.assertIn("1.00", msg)
+
+    def test_unlabelled_and_misses_are_reported(self):
+        out = os.path.join(self.d, "labels.jsonl")
+        self.w("long.md", ("A plain sentence about the weather with nothing to flag in it at all. " * 8) + "\n")
+        run(["review", self.d, "--surface", "post", "--out", out])
+        rows = [json.loads(l) for l in open(out)]
+        for r in rows:
+            if r["type"] == "unflagged":
+                r["label"] = "structure.staccato"
+        with open(out, "w") as fh:
+            fh.write("\n".join(json.dumps(r) for r in rows) + "\n")
+        code, msg, _ = run(["score-review", out, "--json"])
+        sc = json.loads(msg)
+        self.assertEqual(sc["misses"], [{"surface": "post", "rule_id": "structure.staccato", "count": 1}])
+        self.assertGreater(sc["unlabelled"]["hit"], 0)
+        self.assertEqual(sc["rules"], [], "no labelled hit, no precision row")
+
+
 if __name__ == "__main__":
     unittest.main()

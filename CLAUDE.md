@@ -22,7 +22,7 @@ Every change to `voice_config.json` is counted against the saga corpus before it
 python3 /Users/moriarty/Documents/kochab/pherkad/skills/pherkad/tools/corpusscan.py diff /Users/moriarty/el_loco_lobo/canon /Users/moriarty/el_loco_lobo/deliverables --config /Users/moriarty/el_loco_lobo/tools/voice_config.json --exclude '[0-9][0-9]-*.md' --ext .md --old <previous voice_config.json> --new skills/pherkad/tools/voice_config.json
 ```
 
-with `<previous voice_config.json>` from `git show <last release>:skills/pherkad/tools/voice_config.json`. A candidate rule is tried before it is added with `corpusscan.py scan ... --candidate "field:pattern" --contexts 8`. The numbers are raw hits; read the contexts before calling one a violation. The ban list does not grow for migrating habits; those go to the judgment layer or corpus monitoring. Chat-only rules go in `tools/surfaces/assistant-chat.json`, never the shipped defaults.
+with `<previous voice_config.json>` from `git show <last release>:skills/pherkad/tools/voice_config.json`. A candidate rule is tried before it is added with `corpusscan.py scan ... --candidate "field:pattern" --contexts 8`. The numbers are raw hits; read the contexts before calling one a violation. To turn them into precision, `corpusscan.py review ... --out labels.jsonl` exports a sample for Brian to label and `score-review` scores it; only he labels. The ban list does not grow for migrating habits; those go to the judgment layer or corpus monitoring. Chat-only rules go in `tools/surfaces/assistant-chat.json`, never the shipped defaults.
 
 ## Corrections
 

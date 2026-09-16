@@ -13,6 +13,10 @@ candidate rule and diffs two releases of the rule set under one overlay.
     corpusscan.py scan DIR --candidate "soft_phrases:the one that" --contexts 8
         a rule that is not in the config yet, tried as an add_<field> entry;
         also a JSON object {"field": ..., "pattern": ..., "id": ...}
+    corpusscan.py review DIR --surface S --out labels.jsonl [--per-rule 10] [--unflagged 20]
+        a labelling sample: hits per rule and unflagged paragraphs, for TP/FP and missed-rule labels
+    corpusscan.py score-review labels.jsonl [...]
+        precision per rule per surface, misses named, false flags per 1,000 words
     corpusscan.py diff DIR --old OLD_BASE.json --new NEW_BASE.json [--config OVERLAY]
         what a release changes on this corpus: rules added and removed, per-rule
         deltas, findings that appear and disappear, with contexts for the new ones
@@ -280,6 +284,127 @@ def diff_corpus(files: list[str], old_base: str, new_base: str, overlay: str | N
 
 
 # ---------------------------------------------------------------------------
+# Labelled calibration (roadmap item 17)
+# ---------------------------------------------------------------------------
+# A count says how often a rule fires; it cannot say how often it is right.
+# `review` exports a sample of hits per rule, and a sample of paragraphs on
+# which nothing fired, as JSONL for a reader to label; `score-review` turns
+# the labels into precision per rule per surface, misses the reader named on
+# the unflagged units, and false flags per 1,000 words. The labels file is
+# the reader's; the tool never writes a label.
+def export_review(files: list[str], cfg: dict, roots: list[str], surface: str, per_rule: int,
+                  unflagged: int, seed: int, only: set | None = None) -> list[dict]:
+    result = run_corpus(files, cfg)
+    rng = random.Random(seed)
+    hits = collections.defaultdict(list)
+    clean_paras = []
+    for path, (findings, text) in result["per_file"].items():
+        lines = text.split("\n")
+        flagged_lines = {f["line"] for f in findings}
+        for f in findings:
+            if not f["line"] or (only and f["rule_id"] not in only):
+                continue
+            hits[f["rule_id"]].append({"type": "hit", "surface": surface, "rule_id": f["rule_id"],
+                                       "path": _rel(path, roots), "line": f["line"],
+                                       "source_hash": hashlib.sha256(" ".join(lines[f["line"] - 1].split()).encode()).hexdigest()[:16],
+                                       "span": f["match"], "context": _context(text, f["line"], f["col"], f["match"]),
+                                       "severity": f["severity"], "label": ""})
+        # unflagged paragraphs: a run of prose lines with no finding on any of them
+        start = None
+        for i, ln in enumerate(lines + [""], 1):
+            if ln.strip():
+                if start is None:
+                    start = i
+            elif start is not None:
+                block = range(start, i)
+                if len(block) and not any(j in flagged_lines for j in block):
+                    para = " ".join(lines[j - 1].strip() for j in block)
+                    if 40 <= len(para.split()) <= 200:
+                        clean_paras.append({"type": "unflagged", "surface": surface, "rule_id": "",
+                                            "path": _rel(path, roots), "line": start,
+                                            "source_hash": hashlib.sha256(" ".join(para.split()).encode()).hexdigest()[:16],
+                                            "span": "", "context": para[:600], "severity": "", "label": ""})
+                start = None
+    out = [{"type": "meta", "surface": surface, "files": len(result["per_file"]), "words": result["words"],
+            "base_sha256": _sha(voicelint.DEFAULTS_PATH), "date": datetime.date.today().isoformat(),
+            "per_rule": per_rule, "unflagged": unflagged, "seed": seed,
+            "labels": "hit: TP (a real tell) or FP (the writer's own usage); unflagged: clean, or the rule_id that should have fired"}]
+    for rid in sorted(hits):
+        rows = hits[rid]
+        out.extend(sorted(rows if len(rows) <= per_rule else rng.sample(rows, per_rule), key=lambda r: (r["path"], r["line"])))
+    if clean_paras:
+        out.extend(sorted(clean_paras if len(clean_paras) <= unflagged else rng.sample(clean_paras, unflagged),
+                          key=lambda r: (r["path"], r["line"])))
+    return out
+
+
+def score_review(paths: list[str]) -> dict:
+    per = {}   # (surface, rule_id) -> [tp, fp]
+    misses = collections.Counter()  # (surface, rule_id named on an unflagged unit)
+    clean = collections.Counter()
+    unlabelled = collections.Counter()
+    words = collections.Counter()
+    for p in paths:
+        with open(p, encoding="utf-8") as fh:
+            for n, line in enumerate(fh, 1):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    r = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    sys.stderr.write(f"corpusscan: {p}:{n} is not JSON: {exc}\n")
+                    sys.exit(2)
+                if r.get("type") == "meta":
+                    words[r.get("surface", "")] += int(r.get("words", 0))
+                    continue
+                lab = (r.get("label") or "").strip()
+                surf = r.get("surface", "")
+                if r.get("type") == "hit":
+                    if lab.upper() == "TP":
+                        per.setdefault((surf, r["rule_id"]), [0, 0])[0] += 1
+                    elif lab.upper() == "FP":
+                        per.setdefault((surf, r["rule_id"]), [0, 0])[1] += 1
+                    else:
+                        unlabelled["hit"] += 1
+                elif r.get("type") == "unflagged":
+                    if lab.lower() == "clean":
+                        clean[surf] += 1
+                    elif lab:
+                        misses[(surf, lab)] += 1
+                    else:
+                        unlabelled["unflagged"] += 1
+    rows = []
+    for (surf, rid), (tp, fp) in sorted(per.items(), key=lambda kv: (kv[0][0], -(kv[1][1]), kv[0][1])):
+        rows.append({"surface": surf, "rule_id": rid, "tp": tp, "fp": fp,
+                     "precision": round(tp / (tp + fp), 2) if tp + fp else None,
+                     "false_flags_per_1k": round(fp * 1000 / words[surf], 2) if words.get(surf) else None})
+    return {"rules": rows, "misses": [{"surface": s_, "rule_id": r_, "count": c} for (s_, r_), c in misses.most_common()],
+            "clean_units": dict(clean), "unlabelled": dict(unlabelled), "words": dict(words)}
+
+
+def render_review_score(sc: dict) -> str:
+    out = ["# Labelled calibration", ""]
+    if sc["unlabelled"]:
+        out.append(f"Unlabelled: {sc['unlabelled']}. Precision counts labelled hits only.")
+        out.append("")
+    if sc["rules"]:
+        w = max(len(r["rule_id"]) for r in sc["rules"])
+        out.append(f"{'surface':<14} {'rule':<{w}}  {'TP':>4} {'FP':>4} {'prec':>5} {'FP/1k':>6}")
+        for r in sc["rules"]:
+            prec = "" if r["precision"] is None else f"{r['precision']:.2f}"
+            ff = "" if r["false_flags_per_1k"] is None else str(r["false_flags_per_1k"])
+            out.append(f"{r['surface']:<14} {r['rule_id']:<{w}}  {r['tp']:>4} {r['fp']:>4} {prec:>5} {ff:>6}")
+    if sc["misses"]:
+        out += ["", "Misses the reader named on unflagged units (a rule that should have fired):"]
+        for m in sc["misses"]:
+            out.append(f"  {m['surface']:<14} {m['rule_id']}  x{m['count']}")
+    if sc["clean_units"]:
+        out += ["", f"Unflagged units confirmed clean: {sc['clean_units']}"]
+    return "\n".join(out)
+
+
+# ---------------------------------------------------------------------------
 def render_scan(s: dict, title: str) -> str:
     out = [f"# {title}", "",
            f"{s['files']} file(s), {s['words']:,} words: {s['errors']} error(s), {s['warnings']} warning(s), "
@@ -337,12 +462,25 @@ def main(argv=None) -> int:
     ps.add_argument("--rule", action="append", default=[], help="restrict to this rule id (repeatable)")
     ps.add_argument("--candidate", action="append", default=[],
                     help="try a rule not in the config: field:pattern or a JSON object (repeatable)")
+    pr = sub.add_parser("review", help="export a labelled-calibration sample: hits per rule plus unflagged units, as JSONL")
+    common(pr)
+    pr.add_argument("--rule", action="append", default=[], help="restrict to this rule id (repeatable)")
+    pr.add_argument("--per-rule", type=int, default=10, help="hits sampled per rule")
+    pr.add_argument("--unflagged", type=int, default=20, help="unflagged paragraphs sampled")
+    pr.add_argument("--out", required=True, help="the JSONL file for the reader to label")
+    psr = sub.add_parser("score-review", help="precision per rule per surface from labelled JSONL")
+    psr.add_argument("labels", nargs="+")
+    psr.add_argument("--json", action="store_true")
     pd = sub.add_parser("diff", help="what a new base rule set changes on the corpus under one overlay")
     common(pd)
     pd.add_argument("--old", required=True, help="the old base voice_config.json")
     pd.add_argument("--new", required=True, help="the new base voice_config.json")
     args = ap.parse_args(argv)
 
+    if args.cmd == "score-review":
+        sc = score_review(args.labels)
+        print(json.dumps(sc, indent=2, ensure_ascii=False) if args.json else render_review_score(sc))
+        return 0
     exts = tuple(e if e.startswith(".") else "." + e for e in args.ext) or DEFAULT_EXTS
     files = collect_files(args.paths, exts, args.exclude)
     if not files:
@@ -352,6 +490,18 @@ def main(argv=None) -> int:
              "overlay": args.config or "", "overlay_sha256": _sha(args.config),
              "files": len(files)}
 
+    if args.cmd == "review":
+        cfg = _layered(args.surface, args.config)
+        rows = export_review(files, cfg, args.paths, args.surface or "", args.per_rule, args.unflagged,
+                             args.seed, set(args.rule) or None)
+        with open(args.out, "w", encoding="utf-8") as fh:
+            for r in rows:
+                fh.write(json.dumps(r, ensure_ascii=False) + "\n")
+        n_hits = sum(1 for r in rows if r["type"] == "hit")
+        n_un = sum(1 for r in rows if r["type"] == "unflagged")
+        print(f"corpusscan: wrote {args.out}: {n_hits} hit(s) across {len({r['rule_id'] for r in rows if r['type'] == 'hit'})} rule(s) "
+              f"and {n_un} unflagged unit(s) to label (TP/FP on hits; clean or a rule_id on unflagged units)")
+        return 0
     if args.cmd == "scan":
         cfg = _layered(args.surface, args.config)
         only = set(args.rule)
