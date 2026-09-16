@@ -208,7 +208,8 @@ def prompts(args, run_dir, manifest):
             profile_txt = study._read(os.path.join(run_dir, "profiles", it["profile"] + ".md"))
         else:
             profile_txt = study._read(os.path.join(study.WRITERS, it["profile"], "profile.md"))
-        prompt = f"{JUDGE_PROMPT}\n\n=== VOICE PROFILE ===\n{profile_txt}\n\n=== PASSAGE ===\n{text}\n"
+        prompt = (f"{JUDGE_PROMPT}\n\nSurface: {it['surface']} (judge the positive register as that surface expects it).\n\n"
+                  f"=== VOICE PROFILE ===\n{profile_txt}\n\n=== PASSAGE ===\n{text}\n")
         study._write(os.path.join(run_dir, "prompts", it["blind_id"] + ".txt"), prompt)
         it["prompt_sha256"] = study._sha(prompt)
         if args.model:

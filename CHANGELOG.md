@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.5.21 (2026-09-16)
+
+Item 16 of `docs/ROADMAP.md`, resumable eval runs.
+
+- **`study.py run <run> --runner "<command>" --jobs N`** executes a planned run's prompts through any command that reads a prompt on stdin and prints the reply (`claude -p --model ...`, `codex exec -`, a script), so the harness stays stdlib-only and model-agnostic. Every item's state lives in `runs/<run>/status.json`: attempts, prompt and reply sha256, runner, model, error, finish time. A stopped run resumes with the same command; a reply that fails validation (a detect reply without a JSON verdict, a rating outside 1 to 5, an unknown verdict word, a draft under forty characters) is retried up to `--retries` times and then marked failed with the reason; `--limit N` runs a smoke test; `--dry-run` lists; `--force` redoes. Only the JSON object of a detect reply is saved, not the chatter around it. `--model` is recorded on every completed item.
+- The detect judging prompt now names the surface, the one omission the Astra review found in it.
+- Four tests with fake runners: validation, retry then failure, resume, a runner that exits non-zero.
+- `VERSION` 0.5.21.
+
 ## v0.5.20 (2026-09-16)
 
 Item 15 of `docs/ROADMAP.md`, the judgment packet.
