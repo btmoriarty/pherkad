@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.5.26 (2026-09-16)
+
+From the first detect pilot (`eval/data/runs/detect-01`, 348 judgments).
+
+- **A judge reply must agree with itself.** The first run returned `PASS` with a rating of 1 twice and `PASS` with no evidence and no markers; the validator scored them. Now a `PASS` needs a rating of 3 or more, a `REWRITE` a rating of 2 or less, and every verdict needs at least one quoted phrase in `evidence`; a reply that fails is retried like any other invalid reply, and the judge prompt says so. One test.
+- **Two runners** in `eval/runners/`: `claude.sh` (the Claude CLI with no settings, so no hooks and no CLAUDE.md voice rules reach the control arm, no tools, no saved session) and `codex.sh` (the Codex binary, final message only). Documented in `eval/README.md`.
+- `VERSION` 0.5.26.
+
 ## v0.5.25 (2026-09-16)
 
 - **`study.py flatten <writer> --runner CMD [--k 2]`** writes the detect task's flattened cases: one prompt per held-out piece and variant, through a runner that never sees the profile, held to within 10 percent of the source length (a shorter text is a confound, not a flatter voice), retried otherwise, with a `.meta.json` beside each flattening carrying the runner, model, and hashes. Before this the protocol said how to make a flattening and nothing made one.

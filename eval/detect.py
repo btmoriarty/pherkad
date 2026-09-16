@@ -170,6 +170,9 @@ JUDGE_PROMPT = (
     '   "markers": [<the profile markers you found, by name>],\n'
     '   "evidence": [<one quoted phrase per cited marker or tell>]}\n'
     "A light REVISE is a REVISE driven by minor surface hits with the positive register present. "
+    "The rating and the verdict must agree: PASS means a rating of 3 or higher, REWRITE a rating of 2 or lower. "
+    "Every verdict cites at least one quoted phrase in evidence; a PASS quotes what sounds like the writer, "
+    "a failing verdict quotes what does not. "
     "Do not rewrite anything. Do not guess who wrote it.")
 
 
