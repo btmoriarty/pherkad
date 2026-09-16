@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.5.18 (2026-09-16)
+
+- **`load-bearing` needs a word boundary on the left.** The context check matched `load bearing` inside `workload bearing on exercise` in a real paper. One character, one test.
+- `VERSION` 0.5.18.
+
 ## v0.5.17 (2026-09-16)
 
 Two more defects from the Astra re-run, which again ran out of usage before it could report (`docs/codex-features-astra-2026-09-15-second-pass.md`, third attempt).
