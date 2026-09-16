@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.5.25 (2026-09-16)
+
+- **`study.py flatten <writer> --runner CMD [--k 2]`** writes the detect task's flattened cases: one prompt per held-out piece and variant, through a runner that never sees the profile, held to within 10 percent of the source length (a shorter text is a confound, not a flatter voice), retried otherwise, with a `.meta.json` beside each flattening carrying the runner, model, and hashes. Before this the protocol said how to make a flattening and nothing made one.
+- One test.
+- `VERSION` 0.5.25.
+
 ## v0.5.24 (2026-09-16)
 
 Item 18 of `docs/ROADMAP.md`, the last of phase 5: a judgment ruling is kept.

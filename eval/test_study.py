@@ -272,6 +272,31 @@ class RunItems(ReviseTask):
         self.assertEqual(code, 1)
         self.assertIn("runner exit 3", out)
 
+    def test_flatten_writes_k_per_holdout_within_length_band(self):
+        self._setup_writer()
+        hold = os.path.join(study.WRITERS, "brian", "holdout")
+        os.makedirs(hold, exist_ok=True)
+        src = " ".join(f"word{i}" for i in range(100)) + "\n"
+        with open(os.path.join(hold, "piece.md"), "w") as fh:
+            fh.write(src)
+        # echoes the text section back: same length, so inside the band; the prompt never carries the profile
+        echo = self._runner("import sys; p=sys.stdin.read(); assert 'marker one' not in p; print(p.split('=== TEXT ===')[1])")
+        code, out = self._run(["flatten", "brian", "--runner", echo, "--k", "2", "--model", "fam-b", "--dry-run"])
+        self.assertIn("2 flattening(s) would be written", out)
+        code, out = self._run(["flatten", "brian", "--runner", echo, "--k", "2", "--model", "fam-b"])
+        self.assertEqual(code, 0, out)
+        fl = os.path.join(study.WRITERS, "brian", "flattened")
+        self.assertEqual(sorted(os.listdir(fl)), ["piece.1.md", "piece.1.meta.json", "piece.2.md", "piece.2.meta.json"])
+        meta = json.load(open(os.path.join(fl, "piece.2.meta.json")))
+        self.assertEqual((meta["k"], meta["model"], meta["source_words"]), (2, "fam-b", 100))
+        code, out = self._run(["flatten", "brian", "--runner", echo])
+        self.assertIn("nothing to flatten", out)
+        short = self._runner("print('too short')")
+        code, out = self._run(["flatten", "brian", "--runner", short, "--k", "3", "--retries", "0"])
+        self.assertEqual(code, 1)
+        self.assertIn("outside the 10 percent band", out)
+        self.assertFalse(os.path.exists(os.path.join(fl, "piece.3.md")))
+
     def test_plan_prompts_sheet_score(self):
         pass  # covered by DetectTask
 
