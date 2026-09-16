@@ -103,7 +103,7 @@ class Mail(unittest.TestCase):
             box.flush()
             d = os.path.join(tmp, "samples")
             # an Apple Mail export folder (Sent.mbox/mbox) is accepted as the file
-            apple = os.path.join(tmp, "Sent.mbox")
+            apple = os.path.join(tmp, "Exported.mbox")
             os.makedirs(apple)
             os.rename(path, os.path.join(apple, "mbox"))
             self.assertEqual(samples.main(["import-mbox", apple, "--dir", d, "--from", "me@example.org"]), 0)
