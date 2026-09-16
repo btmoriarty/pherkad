@@ -49,6 +49,12 @@ jobs:
       - name: Run the correction-ledger tests
         run: python3 skills/pherkad/tools/test_corrections.py
 
+      - name: Run the samples tests
+        run: python3 skills/pherkad/tools/test_samples.py
+
+      - name: Run the fingerprint tests
+        run: python3 skills/pherkad/tools/test_fingerprint.py
+
       - name: Run the eval scorer tests
         run: python3 eval/test_study.py
 

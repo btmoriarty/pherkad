@@ -747,3 +747,34 @@ class ReviewImport(unittest.TestCase):
         self.do_import()
         self.do_import()
         self.assertEqual(len(json.load(open(self.dec))), 2)
+
+
+class Fingerprint(unittest.TestCase):
+    def test_check_reports_measured_voice_findings(self):
+        import fingerprint
+        import samples
+        with tempfile.TemporaryDirectory() as tmp:
+            sdir = os.path.join(tmp, "samples")
+            for i in range(4):
+                p = os.path.join(tmp, f"s{i}.md")
+                open(p, "w").write(("The dog sat. It rained. We left. Nobody spoke. " * 12 + "\n\n") * 5)
+                samples.main(["add", p, "--dir", sdir, "--provenance", "hand", "--surface", "note"])
+            fp = os.path.join(tmp, "fp.json")
+            fingerprint.main(["build", "--samples", sdir, "--out", fp])
+            draft = os.path.join(tmp, "draft.md")
+            open(draft, "w").write(("Because the committee had not decided whether the proposal would be funded, the team kept drafting "
+                                    "the protocol as if it would be, which meant several long evenings for everyone that spring; nobody objected. ") * 8 + "\n")
+            code, out, err = run(["check", "--fingerprint", fp, "--format", "json", draft])
+            self.assertEqual(code, 0, err)
+            fs = json.loads(out)["files"][draft]
+            ids = [f["rule_id"] for f in fs if f["engine"] == "fingerprint"]
+            self.assertIn("voice.sent_mean", ids)
+            self.assertIn("voice.distance", ids)
+            self.assertTrue(all(f["severity"] == "advisory" for f in fs if f["engine"] == "fingerprint"))
+            sm = next(f for f in fs if f["rule_id"] == "voice.sent_mean")
+            self.assertTrue(sm["match"].startswith("Because"))
+            self.assertIn("more than the author", sm["message"])
+            # text output prints them and the summary counts them as advisory, not warnings
+            code, out, err = run(["check", "--fingerprint", fp, draft])
+            self.assertIn("[advisory] voice (voice.sent_mean)", out)
+            self.assertIn("0 warning(s)", out)

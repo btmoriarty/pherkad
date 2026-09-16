@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.5.27 (2026-09-16)
+
+Roadmap phase 6, items 20 and 21: the measured profile (`docs/measured-profile.md`).
+
+- **`samples.py`**: the author's own writing with provenance. `add FILE --dir DIR --provenance hand|captured|approved --surface S` copies the text under the private samples folder and records id, surface, date, words, and sha256; nothing enters without a provenance and a surface, and the tool never guesses either. `import-captured CAPTURED.md` takes only the verbatim author items out of the saga's capture file (bold-quoted items and `Verbatim:` blocks; the assistant's prose around them is not his) as `captured/narrative`; `import-mbox FILE --from ADDR` takes the author's sent mail from an export he makes himself, quoted replies and signatures stripped, as `hand/email`. `list` and `verify`. Six tests.
+- **`fingerprint.py build --samples DIR --out F`**: the measured profile, stdlib. From `hand` and `captured` samples (never `approved`, which the tool already shaped), per surface and pooled, over 200-word chunks so every feature carries a mean and a standard deviation in the author's own units: sentence length and its spread, short and long shares, short-after-long runs, paragraph shape and closers, opener classes and first words, punctuation per sentence, contractions and questions, the construction rates (contrast frames, candour, pointers, hedges, intensifiers, initial And/But/So, passive shapes), 150 function-word rates (Burrows's Delta), word length, type-token ratio. Every feature keeps up to five quoted sentences with their sample ids. `compare FILE --fingerprint F` reports each feature past two standard deviations with the text's sentence and the author's beside it, plus Delta and a shape distance; `show` prints the profile. Seven tests.
+- **`pherkad.py check --fingerprint F`** adds advisory `voice.<feature>` findings and a `voice.distance` summary; never counted in density, never an error. One test. `samples.py` and `fingerprint.py` join the bundle.
+- First build, from 84 verbatim saga items (1,898 words, narrative register): the fingerprint separates nothing in the professional pilot corpus, and should not, since no hand-written professional sample exists yet. The tool is ready for the sent-mail export.
+- `VERSION` 0.5.27.
+
 ## v0.5.26 (2026-09-16)
 
 From the first detect pilot (`eval/data/runs/detect-01`, 348 judgments).

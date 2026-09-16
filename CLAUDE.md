@@ -1,6 +1,6 @@
 # Pherkad
 
-The voice tools live in `skills/pherkad/tools/`. Run the suites with `python3 <abs path>/test_voicelint.py`, `test_mdmask.py`, `test_structlint.py`, `test_pherkad.py`, `test_replycheck.py`, `test_corpusscan.py`, `test_corrections.py`, and `eval/test_study.py`; all eight are unittest modules and pytest collects them too.
+The voice tools live in `skills/pherkad/tools/`. Run the suites with `python3 <abs path>/test_voicelint.py`, `test_mdmask.py`, `test_structlint.py`, `test_pherkad.py`, `test_replycheck.py`, `test_corpusscan.py`, `test_corrections.py`, `test_samples.py`, `test_fingerprint.py`, and `eval/test_study.py`; all ten are unittest modules and pytest collects them too.
 
 ## Reply preflight
 
@@ -33,3 +33,7 @@ python3 /Users/moriarty/Documents/kochab/pherkad/skills/pherkad/tools/correction
 ```
 
 Then `trial` it on the saga (`... trial --ledger <ledger> <id> /Users/moriarty/el_loco_lobo/canon /Users/moriarty/el_loco_lobo/deliverables --config /Users/moriarty/el_loco_lobo/tools/voice_config.json --exclude '[0-9][0-9]-*.md'`), read the contexts, and only on his say-so `promote --overlay skills/pherkad/tools/voice_config.json --prose voice-rules.md`, which writes the rule with its fixtures and generates the mined-corrections line. A promotion into the shipped base is a release: `pherkad.py manifest --write`, the corpus count, the CHANGELOG. A factual correction never becomes a rule; a recast of meaning is judgment-only and gets prose only.
+
+## The measured profile
+
+Brian's own writing lives in `/Users/moriarty/Documents/voice-profile/samples/` (private), recorded with `samples.py add ... --provenance hand|captured|approved --surface S`; the tool never guesses either. `fingerprint.py build --samples /Users/moriarty/Documents/voice-profile/samples --out /Users/moriarty/Documents/voice-profile/fingerprint.json` computes the measured profile from `hand` and `captured` samples (never `approved`), and `pherkad.py check --fingerprint <that file>` reports advisory `voice.*` findings in his own standard-deviation units. Design and status: `docs/measured-profile.md`, roadmap phase 6.
