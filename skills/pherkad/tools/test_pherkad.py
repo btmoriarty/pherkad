@@ -288,6 +288,24 @@ class Decisions(unittest.TestCase):
         code, out, _ = run(["check", "--decisions", self.dec, "--format", "sarif", self.f])
         self.assertNotIn("honest-framing", {r["ruleId"] for r in json.loads(out)["runs"][0]["results"]})
 
+    def test_density_counts_only_what_counts(self):
+        # Codex, 2026-09-15: advisory findings fed a density warning that blocked.
+        text = "\n\n".join(["None of them wrong. None of them ours."] * 8) + "\n\n" + "word " * 120 + "\n"
+        p = os.path.join(self.root, "dense.md")
+        with open(p, "w") as fh:
+            fh.write(text)
+        code, out, _ = run(["check", "--strict", "--advisory", "structure.", p])
+        self.assertEqual(code, 0)
+        self.assertNotIn("density", out)
+        code, out, _ = run(["check", p])
+        self.assertIn("density", out, "without the advisory flag the same findings do count")
+        # decide the repeated line: one record covers all eight occurrences, and density goes with them
+        code, out, _ = run(["decide", "--decisions", self.dec, "--reason", "the refrain", p + ":1"])
+        self.assertIn("8 occurrence(s)", out)
+        code, out, _ = run(["check", "--decisions", self.dec, p])
+        self.assertIn("8 decided", out)
+        self.assertNotIn("density", out)
+
     def test_deferred_counts_separately(self):
         self.decide("canon/a.md:3", "fix next pass", "deferred")
         code, out = self.check()

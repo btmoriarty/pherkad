@@ -623,37 +623,44 @@ def score_revise(run_dir, manifest, key, ratings):
         per.setdefault(it["target"], {}).setdefault(it["arm"], []).append((val, flag, extras, it.get("repeat", 1)))
     lines = [f"# Results: run {manifest['run']} (brief {manifest['brief']}, revision task)", "",
              f"Arms: {', '.join(manifest['arms'])}. Repeats: {manifest['repeats']}. Surface: {manifest['surface']}.",
-             "A flagged draft (F) counts as a failure of its arm whatever its rating; the primary outcome",
-             "is an arm's mean rating minus the generic arm's, per writer, on unflagged drafts.", ""]
+             "A flagged draft (F) is scored 1 whatever its rating, and the primary outcome, an arm's mean",
+             "minus the generic arm's, is computed over every draft with that penalty in, so an arm that",
+             "invents facts cannot look good on its clean runs. The unflagged mean is shown beside it.", ""]
     pooled = {}
     for w in sorted(per):
         arms = per[w]
         lines.append(f"## {w}")
         lines.append("")
-        lines.append("| arm | n | rating | flagged | useful edits | unnecessary edits | minutes | vs generic |")
-        lines.append("|---|---|---|---|---|---|---|---|")
-        gen = [v for v, f, _, _ in arms.get("generic", []) if f != "F"]
-        gen_mean = sum(gen) / len(gen) if gen else None
+        lines.append("| arm | n | rating (unflagged) | flagged | penalised mean | useful edits | unnecessary edits | minutes | vs generic |")
+        lines.append("|---|---|---|---|---|---|---|---|---|")
+
+        def penalised(xs):
+            vals = [1.0 if f == "F" else v for v, f, _, _ in xs]
+            return sum(vals) / len(vals) if vals else None
+
+        gen_mean = penalised(arms.get("generic", []))
         for arm in manifest["arms"]:
             xs = arms.get(arm, [])
             if not xs:
-                lines.append(f"| {arm} | 0 | | | | | | not rated |")
+                lines.append(f"| {arm} | 0 | | | | | | | not rated |")
                 continue
             ok = [v for v, f, _, _ in xs if f != "F"]
             flagged = sum(1 for _, f, _, _ in xs if f == "F")
             mean = sum(ok) / len(ok) if ok else None
+            pen = penalised(xs)
             def avg(k):
                 vals = [e[k] for _, _, e, _ in xs if k in e]
                 return f"{sum(vals)/len(vals):.1f}" if vals else ""
             rng_s = f" ({min(ok):.0f} to {max(ok):.0f})" if len(ok) > 1 else ""
             vs = ""
-            if mean is not None and gen_mean is not None and arm != "generic":
-                d = mean - gen_mean
+            if pen is not None and gen_mean is not None and arm != "generic":
+                d = pen - gen_mean
                 vs = f"{d:+.2f}"
                 pooled.setdefault(arm, []).append(d)
             elif arm == "generic":
                 vs = "control"
             lines.append(f"| {arm} | {len(xs)} | {'' if mean is None else f'{mean:.2f}'}{rng_s} | {flagged}/{len(xs)} | "
+                         f"{'' if pen is None else f'{pen:.2f}'} | "
                          f"{avg('useful_edits')} | {avg('unnecessary_edits')} | {avg('minutes')} | {vs} |")
         lines.append("")
     if pooled:
@@ -665,6 +672,8 @@ def score_revise(run_dir, manifest, key, ratings):
         lines.append("")
     lines += ["## Reading it",
               "- An arm at or below generic has not earned its cost: another editing pass does as well.",
+              "- A high unflagged mean beside a low penalised mean is an arm that writes well when it does not invent;",
+              "  the penalised number is the one that counts.",
               "- An arm above generic with fidelity intact and few unnecessary edits is the claim, per writer.",
               "- A spread across repeats is instability; report it, do not average it away.",
               "- One rater on a few writers is a pilot. The writer is the unit; see docs/blind-eval.md."]

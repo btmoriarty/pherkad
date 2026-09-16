@@ -1,6 +1,6 @@
 {
   "tool": "pherkad",
-  "version": "0.5.15",
+  "version": "0.5.16",
   "schema": 1,
   "generated": "2026-09-15",
   "required": [
@@ -11,7 +11,7 @@
     "voice_config.json"
   ],
   "files": {
-    "pherkad.py": "47fc4eb3dd5c18cc7b0b79d557be2bf1f8a0b154b86ba36f6c1f054281da47b5",
+    "pherkad.py": "7fc8989005df0a4bd338dc9c744fa7f002eafb64117f1794a1b6f8f2d1d4fad7",
     "voicelint.py": "ab3447b5faee3999be803e19b71c1172b0282676f6d2292c7a621c278708d2ee",
     "structlint.py": "f9d1e3a21aed7a0a3864640082335d0f5892a17810b58fc53f588210c98d38e3",
     "mdmask.py": "a6bc483a2bccc0559d8bbfd408c471b14d45b345fc47aad91ca9cdec250bfe41",

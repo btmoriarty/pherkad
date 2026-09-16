@@ -328,11 +328,31 @@ def apply_decisions(findings: list[dict], text: str, path_rel: str, decisions: l
     return used
 
 
-def run_text(text: str, cfg: dict, structure: bool = True) -> tuple[list[dict], int]:
+def density_finding(findings: list[dict], text: str, cfg: dict) -> dict | None:
+    """One ``combined`` density finding over ``findings``, or None. Callers
+    pass the findings that COUNT: not advisory, not decided; a density built
+    from findings the gate has set aside would block on what it agreed to
+    ignore, which is the bug Codex reproduced on 2026-09-15."""
+    words = len(re.findall(r"\b\w+\b", voicelint.mask_code(text)))
+    cap = float((cfg.get("structure") or {}).get("density_per_100", structlint.DEFAULT_THRESHOLDS["density_per_100"]))
+    if words < 100 or cap <= 0:
+        return None
+    per100 = len(findings) * 100.0 / words
+    if per100 <= cap:
+        return None
+    return {"line": 0, "col": 0, "severity": "warning", "rule": "density",
+            "match": f"{len(findings)} findings / {words} words",
+            "message": f"{per100:.1f} flagged constructions per 100 words, over the {cap} cap",
+            "rule_id": "density", "engine": "combined"}
+
+
+def run_text(text: str, cfg: dict, structure: bool = True, density: bool = True) -> tuple[list[dict], int]:
     """Both engines over ``text``: one list of finding dicts in the shared
     schema, sorted by position, plus the number of findings an inline
     directive suppressed. Structural findings carry ``engine`` structure; the
-    per-document density is one ``combined`` finding."""
+    per-document density is one ``combined`` finding over every finding, unless
+    ``density`` is False, in which case the caller computes it over the
+    findings that count (see cmd_check)."""
     voice, suppressed = voicelint.check_counting(text, cfg)
     out = [dict(vars(f), engine="voice") for f in voice]
     if structure:
@@ -347,15 +367,10 @@ def run_text(text: str, cfg: dict, structure: bool = True) -> tuple[list[dict], 
                 continue  # the same tell, already named by a voicelint rule
             out.append(dict(vars(f), engine="structure"))
     out.sort(key=lambda f: (f["line"], f["col"]))
-    words = len(re.findall(r"\b\w+\b", voicelint.mask_code(text)))
-    cap = float((cfg.get("structure") or {}).get("density_per_100", structlint.DEFAULT_THRESHOLDS["density_per_100"]))
-    if words >= 100 and cap > 0:
-        per100 = len(out) * 100.0 / words
-        if per100 > cap:
-            out.append({"line": 0, "col": 0, "severity": "warning", "rule": "density",
-                        "match": f"{len(out)} findings / {words} words",
-                        "message": f"{per100:.1f} flagged constructions per 100 words, over the {cap} cap",
-                        "rule_id": "density", "engine": "combined"})
+    if density:
+        d = density_finding(out, text, cfg)
+        if d:
+            out.append(d)
     return out, suppressed
 
 
@@ -427,12 +442,19 @@ def cmd_check(args) -> int:
             sys.stderr.write(f"pherkad: {exc}\n")
             io_failed = True
             continue
-        findings, dropped = run_text(text, cfg, structure=not args.no_structure)
+        findings, dropped = run_text(text, cfg, structure=not args.no_structure, density=False)
         if decisions:
             apply_decisions(findings, text, rel_path(path, root), decisions, hashes)
         else:
             for f in findings:
                 f["decision"] = None
+        # Density over what counts: advisory and decided findings are set aside
+        # by this gate's own configuration and must not feed a warning that blocks.
+        counted = [f for f in findings if not f["decision"] and _level(f, advisory) != "advisory"]
+        d = density_finding(counted, text, cfg)
+        if d:
+            d["decision"] = None
+            findings.append(d)
         results.append((path, findings))
         suppressed += dropped
         for f in findings:
@@ -686,17 +708,20 @@ def cmd_decide(args) -> int:
         for f in at:
             by_rule.setdefault(f["rule_id"], []).append(f)
         for rid, fs in by_rule.items():
+            # The record is keyed on the line's text, so it covers every line in the
+            # file with that text; count all of them, not only the line named.
+            n = sum(1 for f in findings if f["rule_id"] == rid and f["line"] and context_hash(text, f["line"]) == ctx)
             existing = next((d for d in decisions if d["path"] == rel and d["rule_id"] == rid
                              and d["context_hash"] == ctx), None)
             if existing:
-                existing.update(count=len(fs), rule_hash=hashes[rid], disposition=args.disposition,
+                existing.update(count=n, rule_hash=hashes[rid], disposition=args.disposition,
                                 reason=args.reason, decided=today, line=line, match=fs[0]["match"])
             else:
                 decisions.append({"rule_id": rid, "path": rel, "context_hash": ctx, "rule_hash": hashes[rid],
-                                  "count": len(fs), "disposition": args.disposition, "reason": args.reason,
+                                  "count": n, "disposition": args.disposition, "reason": args.reason,
                                   "decided": today, "line": line, "match": fs[0]["match"]})
             added += 1
-            print(f"decided {args.disposition}: {rel}:{line} {rid} ({len(fs)} occurrence(s))  ->  {fs[0]['match']!r}")
+            print(f"decided {args.disposition}: {rel}:{line} {rid} ({n} occurrence(s) of this line's text)  ->  {fs[0]['match']!r}")
     save_decisions(args.decisions, decisions)
     print(f"pherkad: {added} decision(s) written to {args.decisions}")
     return 0

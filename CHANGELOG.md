@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.5.16 (2026-09-15)
+
+Three defects, two of them named by a second Astra review that ran out of usage before it could finish (`docs/codex-features-astra-2026-09-15-second-pass.md`).
+
+- **Density is computed over the findings that count.** `pherkad.py check` built its combined density over every finding, so eight advisory structural findings produced a counted density warning that blocked under `--strict`, and deciding every finding on a page left the density warning standing. `density_finding()` now runs after advisory and decisions are applied, over what remains; `run_text(density=False)` lets a caller do the same.
+- **A decision covers every line with that text.** `decide` set a record's `count` from the occurrences on the line named, so a refrain repeated eight times was decided once and reported seven times. It now counts every finding in the file whose rule and line text match.
+- **The revision scorer penalises a flagged draft instead of dropping it.** The primary contrast (arm minus generic) scored only unflagged drafts, so an arm that invented facts on half its runs could show a lift on the other half. A flagged draft is now scored 1 in the penalised mean that drives the contrast; the unflagged mean is shown beside it.
+- Tests for all three.
+- `VERSION` 0.5.16.
+
 ## v0.5.15 (2026-09-15)
 
 Item 13 of `docs/ROADMAP.md`, the detection experiment, which completes the roadmap and gives `docs/review-followups.md` item 2 its harness.
