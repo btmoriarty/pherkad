@@ -351,6 +351,33 @@ class Decisions(unittest.TestCase):
         open(p, "w").write(text.replace("## 2. A choice, not a default", "## 2. A choice, not a default, revised"))
         self.assertNotIn("decided", run(["check", "--decisions", self.dec, p])[1])
 
+    def test_heading_rate_decision_covers_every_heading(self):
+        # Astra, 2026-09-16: the rate finding was anchored to one heading, so a
+        # decision on it survived edits to the other headings that moved the rate.
+        heads = ["What thing %d does" % i for i in range(6)] + ["Section %d" % i for i in range(6)]
+        text = "# D\n\n" + "\n\n".join(f"## {h}\n\nBody." for h in heads) + "\n"
+        p = os.path.join(self.root, "rate.md")
+        open(p, "w").write(text)
+        code, out, _ = run(["check", p])
+        self.assertIn("structure.interrogative-headers", out)
+        line = [f for f in json.loads(run(["check", "--format", "json", p])[1])["files"][p] if f["rule"] == "interrogative-headers"][0]["line"]
+        code, out, _ = run(["decide", "--decisions", self.dec, "--reason", "house style", f"{p}:{line}:structure.interrogative-headers"])
+        self.assertEqual(code, 0, out)
+        self.assertEqual(json.load(open(self.dec))[0]["scope"], "document")
+        self.assertIn("1 decided", run(["check", "--decisions", self.dec, p])[1])
+        open(p, "w").write(text.replace("## Section 5", "## What section 5 does"))
+        self.assertNotIn("decided", run(["check", "--decisions", self.dec, p])[1], "another heading changed the rate")
+
+    def test_structural_revision_is_in_the_hash(self):
+        h1 = pherkad.rule_hashes(DEFAULT)["structure.two-beat"]
+        saved = pherkad.structlint.STRUCT_REVISION["two-beat"]
+        try:
+            pherkad.structlint.STRUCT_REVISION["two-beat"] = saved + 1
+            self.assertNotEqual(h1, pherkad.rule_hashes(DEFAULT)["structure.two-beat"])
+            self.assertEqual(pherkad.rule_hashes(DEFAULT)["structure.staccato"], pherkad.rule_hashes(DEFAULT)["structure.staccato"])
+        finally:
+            pherkad.structlint.STRUCT_REVISION["two-beat"] = saved
+
     def test_deferred_counts_separately(self):
         self.decide("canon/a.md:3", "fix next pass", "deferred")
         code, out = self.check()
@@ -445,6 +472,14 @@ class CheckOverlay(unittest.TestCase):
 
     def test_unknown_structure_key_is_a_config_error(self):
         self.assertEqual(run(["check-overlay", self.overlay({"structure": {"nope": 1}})])[0], 2)
+
+    def test_fixture_that_loses_its_span_under_the_stack_is_a_warning(self):
+        # "worth [word] than" fires alone, but the shipped "worth more than" wins the tie.
+        code, out, _ = run(["check-overlay", self.overlay({"add_soft_phrases": [
+            {"id": "soft.worth-word-than", "pattern": "worth [word] than",
+             "fires": ["It was worth more than the rest."]}]})])
+        self.assertEqual(code, 0)
+        self.assertIn("fires alone but under the full stack the finding is soft.worth-more-than", out)
 
     def test_shipped_surface_overlay_is_clean(self):
         code, out, _ = run(["check-overlay", os.path.join(HERE, "surfaces", "assistant-chat.json")])

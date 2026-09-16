@@ -267,10 +267,13 @@ def _scope(f: dict) -> bool:
     return f.get("engine") == "structure"
 
 
+DOCUMENT_RULES = ("frame", "interrogative-headers")
+
+
 def _document_context(f: dict) -> str | None:
-    """A document-level finding (the repeated frame) is keyed on the units it
-    quotes, not on any one line: its match lists them all."""
-    if f.get("rule") == "frame":
+    """A document-level finding (the repeated frame, the heading rate) is keyed
+    on the units it quotes, not on any one line: its match lists them all."""
+    if f.get("rule") in DOCUMENT_RULES:
         return _hash(" ".join(f["match"].split()))
     return None
 
@@ -284,7 +287,8 @@ def rule_hashes(cfg: dict) -> dict:
     for r in all_rules(cfg):
         seed = r.get("pattern", "")
         if r["id"].startswith("structure.") or r["id"] == "density":
-            seed += "|" + thresholds
+            family = r["id"].split(".")[1] if r["id"].startswith("structure.") else "density"
+            seed += "|" + thresholds + "|rev" + str(structlint.STRUCT_REVISION.get(family, 0))
         out[r["id"]] = _hash(seed)
     return out
 
@@ -684,6 +688,14 @@ def check_overlay(overlay_path: str) -> tuple[list[str], list[str]]:
             for text in e.get("fires", []):
                 if e["id"] not in {f.rule_id for f in voicelint.check(text, solo)}:
                     errors.append(f"{e['id']}: fires example does not fire: {text!r}")
+                    continue
+                # Under the effective stack another rule can win the same span on
+                # a tie, and then this rule never surfaces: say so.
+                full = voicelint.check(text, cfg)
+                if e["id"] not in {f.rule_id for f in full}:
+                    winners = sorted({f.rule_id for f in full}) or ["nothing"]
+                    warnings.append(f"{e['id']}: fires alone but under the full stack the finding is "
+                                    f"{', '.join(winners)}: {text!r}")
             for text in e.get("clean", []):
                 if e["id"] in {f.rule_id for f in voicelint.check(text, solo)}:
                     errors.append(f"{e['id']}: clean example fires: {text!r}")
