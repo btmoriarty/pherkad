@@ -177,11 +177,14 @@ class ReviseTask(unittest.TestCase):
         self.assertEqual(code, 0, out)
         res = open(os.path.join(run_dir, "results.md")).read()
         self.assertIn("revision task", res)
-        self.assertIn("| generic | 2 | 3.00 (3 to 3) | 0/2 |", res)
-        self.assertIn("| mechanical | 2 | 4.00 (4 to 4) | 0/2 | 2.0 | 0.0 | 1.0 | +1.00 |", res)
-        self.assertIn("| judgment | 2 | 5.00 | 1/2 |", res, "the flagged repeat is excluded from the mean and counted")
-        self.assertIn("| untouched | 2 | 2.00 (2 to 2) | 0/2 | 2.0 | 0.0 | 1.0 | -1.00 |", res)
+        self.assertIn("| generic | 2 | 3.00 (3 to 3) | 0/2 | 3.00 |", res)
+        self.assertIn("| mechanical | 2 | 4.00 (4 to 4) | 0/2 | 4.00 | 2.0 | 0.0 | 1.0 | +1.00 |", res)
+        # judgment rated 5 and 5, one flagged: unflagged mean 5.00, penalised (5 + 1) / 2 = 3.00, so no lift
+        self.assertIn("| judgment | 2 | 5.00 | 1/2 | 3.00 | 2.0 | 3.0 | 1.0 | +0.00 |", res,
+                      "a flagged draft is scored 1 in the primary contrast")
+        self.assertIn("| untouched | 2 | 2.00 (2 to 2) | 0/2 | 2.00 | 2.0 | 0.0 | 1.0 | -1.00 |", res)
         self.assertIn("**mechanical**: mean +1.00 over 1 writer(s)", res)
+        self.assertIn("**judgment**: mean +0.00 over 1 writer(s)", res)
 
     def test_generic_arm_is_required(self):
         self._setup_writer()
