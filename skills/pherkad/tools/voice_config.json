@@ -235,6 +235,54 @@
         "He answers it truthfully.",
         "It was enough to be honest about."
       ]
+    },
+    {
+      "id": "soft.earns-nothing",
+      "pattern": "earns nothing",
+      "rationale": "AI-speak consequence verb; say what happens instead",
+      "since": "2026-09-17",
+      "fires": [
+        "A mark with no reason written next to it earns nothing."
+      ],
+      "clean": [
+        "A mark with no reason written next to there is nothing to grade."
+      ]
+    },
+    {
+      "id": "soft.on-its-face",
+      "pattern": "on its face",
+      "rationale": "announced candour; the sentence after it is the fact",
+      "since": "2026-09-17",
+      "fires": [
+        "The eight cheat sheets run against one nine hundred row file. Each says on its face that what it leaves out is most of the tool."
+      ],
+      "clean": [
+        "The eight cheat sheets run against one nine hundred row file. cut"
+      ]
+    },
+    {
+      "id": "soft.leaves-out-is-most-of",
+      "pattern": "leaves out is most of",
+      "rationale": "manufactured-depth closer on a scope note",
+      "since": "2026-09-17",
+      "fires": [
+        "Everything it leaves out is most of the subject."
+      ],
+      "clean": [
+        "and stops there."
+      ]
+    },
+    {
+      "id": "soft.is-the-check",
+      "pattern": "re:\\bis the check\\b(?!-)",
+      "rationale": "copular equative closer (X is the check / the test / the tell); give the subject a verb",
+      "since": "2026-09-17",
+      "fires": [
+        "The count is the check. Five boroughs means five marks."
+      ],
+      "clean": [
+        "Count the marks before you read the chart. Five boroughs means five marks."
+      ]
     }
   ],
   "filler_words": [
