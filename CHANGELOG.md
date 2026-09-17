@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.5.28 (2026-09-17)
+
+From Brian's slide-by-slide reviews of the FA550 Week 3 rebuild and Week 4 revision, fifteen corrections through the ledger (`corrections.py add`, `trial`, `promote`), the first project ledger in use.
+
+- **Four soft phrases**, shipped in the base set because none is slide-specific: `soft.is-the-check` (the copular equative closer, `X is the check`, narrowed so `the check-in` does not fire), `soft.earns-nothing`, `soft.on-its-face`, `soft.leaves-out-is-most-of`. Trial counts on 624 files: 3, 2, 2, 0.
+- **Two `structlint` frames**: `paired-beat` (a title of two comma-joined halves with the same opener or a count on each side and no verb: "What you keep, what you change", "Twelve outputs, seven decisions") and `appositive-tail` (a noun phrase, a comma, and a tail that gestures: "Three layers, and tonight is the second visit", "The same paragraph, sent back three ways"). Both are rate checks across a document's headings and subtitles, like the other frames, and both accept a numbered heading. Two tests.
+- The judgment-only families are in `voice-rules.md` under the 2026-09-17 heading: the callback that asks the room to recall an earlier week, the compressed line that reads as noise, the points count standing in for a reason, the abstraction spoken about but not seen, and the section tagline that previews its section.
+- `VERSION` 0.5.28.
+
 ## v0.5.27 (2026-09-16)
 
 Roadmap phase 6, items 20 and 21: the measured profile (`docs/measured-profile.md`).

@@ -254,6 +254,27 @@ class RepeatedFrame(unittest.TestCase):
         self.assertIn("5/16 headings", f["match"])  # the # Deck title is a heading too
         self.assertIn("A choice, not a default", f["match"])
 
+    def test_paired_beat_titles_fire(self):
+        # FA550, 2026-09-13 to 2026-09-17: three of these across two decks, each fine alone
+        titles = ["What you keep, what you change", "Twelve outputs, seven decisions", "One question, four tools",
+                  "How it starts, how it ends", "Ten pages, five tools"] + [f"Section {i}" for i in range(20)]
+        out = run(["--json", "-"], self.deck(titles)).stdout
+        ids = [x["rule_id"] for x in json.loads(out)["files"]["-"] if x["rule"] == "frame"]
+        self.assertIn("structure.frame.paired-beat.heading", ids)
+        self.assertNotIn("frame", rules(self.deck(["Keeping what worked", "Dana's A1, annotated", "Ten pages, all posted"]
+                                                   + [f"Section {i}" for i in range(20)])))
+
+    def test_appositive_tail_subtitles_fire(self):
+        subs = ["Three layers, and tonight is the second visit to the second",
+                "One chart from start to finish, then your discovery list",
+                "The same paragraph about the revenue chart, sent back three ways",
+                "The same discipline, pointed at AI charts", "Last week's patterns, now nameable"]
+        text = "# Deck\n\n" + "\n\n".join(f"## {i}. Section {i}\n{s_}\n\nBody." for i, s_ in enumerate(subs, 1))
+        text += "\n\n" + "\n\n".join(f"## {i}. Section {i}\n\nBody." for i in range(6, 30))
+        out = run(["--json", "-"], text + "\n").stdout
+        ids = [x["rule_id"] for x in json.loads(out)["files"]["-"] if x["rule"] == "frame"]
+        self.assertIn("structure.frame.appositive-tail.heading", ids)
+
     def test_thresholds_are_configurable(self):
         titles = ["A choice, not a default"] * 3 + [f"Section {i}" for i in range(40)]
         self.assertNotIn("frame", rules(self.deck(titles)))

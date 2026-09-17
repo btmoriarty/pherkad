@@ -139,6 +139,33 @@ FRAMES = {
         "title": re.compile(r"^\s*why\s+.{1,40}?\s+matters?\b", re.I),
         "sentence": re.compile(r"\bwhy\s+.{1,40}?\s+matters?\b", re.I),
     },
+    # "What you keep, what you change", "Twelve outputs, seven decisions",
+    # "One question, four tools": two comma-joined halves with the same
+    # opener or a count on each side, and no verb. A title that scans instead
+    # of naming. Brian flagged three of these on FA550 decks between
+    # 2026-09-13 and 2026-09-17; each was fine alone and the habit was the tell.
+    "paired-beat": {
+        "title": re.compile(
+            r"^\s*(?:\d+[.)]\s*)?(?:(what|how|where|the|your|no|every|same)\s[^,]{1,30},\s*\1\s[^,]{1,30}"
+            r"|(?:one|two|three|four|five|six|seven|eight|nine|ten|twelve|twenty|\d+)\s+\w+(?:\s\w+)?,"
+            r"\s*(?:one|two|three|four|five|six|seven|eight|nine|ten|twelve|twenty|\d+)\s+\w+(?:\s\w+)?)\s*[.!]?\s*$", re.I),
+        "sentence": re.compile(
+            r"^\s*(?:(what|how|where)\s[^,]{1,30},\s*\1\s[^,]{1,30}"
+            r"|(?:one|two|three|four|five|six|seven|eight|nine|ten|twelve|twenty|\d+)\s+\w+(?:\s\w+)?,"
+            r"\s*(?:one|two|three|four|five|six|seven|eight|nine|ten|twelve|twenty|\d+)\s+\w+(?:\s\w+)?)\s*[.!]?\s*$", re.I),
+    },
+    # "Three layers, and tonight is the second visit", "One chart from start
+    # to finish, then your discovery list", "The same paragraph, sent back
+    # three ways", "Last week's patterns, now nameable": a noun phrase, a
+    # comma, and a tail that gestures. Subtitles and section taglines are
+    # where it lives; Brian called them useless (2026-09-17).
+    "appositive-tail": {
+        "title": re.compile(
+            r"^\s*(?:\d+[.)]\s*)?[^,.:;]{3,70},\s*(?:and\s+(?:tonight|now|this|that|each|none|no)\b|then\s+\w|now\s+\w"
+            r"|(?:sent|pointed|turned|seen|read|applied|named|built|run|taken)\s+\w)", re.I),
+        "sentence": re.compile(
+            r"^[^,.:;]{3,70},\s*(?:then\s+your\b|now\s+\w+able\b|(?:sent|pointed|turned)\s+(?:back|at)\b)", re.I),
+    },
 }
 
 # Headers that pose rather than name. Deliberately narrow: each is a stance,
