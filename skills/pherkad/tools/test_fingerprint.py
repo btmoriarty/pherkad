@@ -99,6 +99,36 @@ class BuildCompare(unittest.TestCase):
         self.assertIn("sent_mean", text)
         self.assertIn("more than the author", text)
 
+    def test_reference_and_discriminant_take_sides(self):
+        fingerprint.main(["build", "--samples", self.dir, "--out", self.fp_path])
+        fp = json.load(open(self.fp_path))
+        rdir = os.path.join(self.tmp.name, "ref")
+        os.makedirs(rdir)
+        for i in range(4):
+            open(os.path.join(rdir, f"r{i}.md"), "w").write(prose(LONG, 6, 4, 50 + i))
+        rp = os.path.join(self.tmp.name, "ref.json")
+        self.assertEqual(fingerprint.main(["build-reference", rdir, "--out", rp, "--name", "long"]), 0)
+        ref = json.load(open(rp))
+        self.assertEqual(ref["name"], "long")
+        self.assertIn("sent_mean", ref["features"])
+        mine = fingerprint.compare(prose(SHORT, 5, 12, 99), fp, reference=ref)["discriminant"]
+        theirs = fingerprint.compare(prose(LONG, 5, 4, 99), fp, reference=ref)["discriminant"]
+        self.assertGreater(mine["score"], 0)
+        self.assertLess(theirs["score"], 0)
+        self.assertGreater(mine["features_used"], 5)
+        self.assertEqual(mine["reference"], "long")
+        self.assertIn("sent_short_share", theirs["for_reference"] + mine["for_author"])
+        text = fingerprint.render(fingerprint.compare(prose(LONG, 5, 4, 99), fp, reference=ref), "x.md")
+        self.assertIn("nearer the reference", text)
+
+    def test_exclude_holds_samples_out(self):
+        fingerprint.main(["build", "--samples", self.dir, "--out", self.fp_path])
+        ids = [s["id"] for s in json.load(open(self.fp_path))["samples"]]
+        fingerprint.main(["build", "--samples", self.dir, "--out", self.fp_path, "--exclude", ids[0]])
+        fp = json.load(open(self.fp_path))
+        self.assertEqual(len(fp["samples"]), 3)
+        self.assertEqual(fp["excluded"], [ids[0]])
+
     def test_too_few_chunks_is_an_error_not_a_profile(self):
         d = os.path.join(self.tmp.name, "tiny")
         p = os.path.join(self.tmp.name, "t.md")

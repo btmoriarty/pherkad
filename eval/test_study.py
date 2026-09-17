@@ -331,6 +331,53 @@ class DetectTask(ReviseTask):
         open(os.path.join(w, "impostors", "rosa-shed.md"), "w").write("In the long light the shed gave up its water.\n")
         open(os.path.join(w, "override", "rhymes.md"), "w").write("Cat rhymes with hat, he said.\n")
 
+    def test_fingerprint_condition_writes_floor_verdicts(self):
+        import random
+        sys.path.insert(0, study.TOOLS)
+        import fingerprint
+        import samples
+        self._setup_detect()
+        sdir = os.path.join(self.tmp.name, "fsamples")
+        rng = random.Random(1)
+        short = ["The shed leaked.", "Forty bags.", "All wet.", "Nobody came.", "We counted.", "It rained."]
+        for i in range(4):
+            p = os.path.join(self.tmp.name, f"m{i}.md")
+            open(p, "w").write("\n\n".join(" ".join(rng.choice(short) for _ in range(14)) for _ in range(5)) + "\n")
+            samples.main(["add", p, "--dir", sdir, "--provenance", "hand", "--surface", "email"])
+        fpp = os.path.join(self.tmp.name, "fp.json")
+        fingerprint.main(["build", "--samples", sdir, "--out", fpp])
+        rdir = os.path.join(self.tmp.name, "refs")
+        os.makedirs(rdir)
+        long = "Because the storage facility had not been inspected in several months, the bags stored inside were found to be damaged by water when the team arrived. "
+        for i in range(4):
+            open(os.path.join(rdir, f"r{i}.md"), "w").write((long * 8 + "\n\n") * 3)
+        rp = os.path.join(self.tmp.name, "ref.json")
+        fingerprint.main(["build-reference", rdir, "--out", rp, "--name", "generic"])
+        code, out = self._run(["plan", "d2", "--task", "detect", "--writers", "brian", "--repeats", "1",
+                               "--conditions", "correct,linter,fingerprint"])
+        self.assertEqual(code, 0, out)
+        with self.assertRaises(SystemExit):
+            self._run(["prompts", "d2"])  # the condition needs the two profiles
+        code, out = self._run(["prompts", "d2", "--fingerprint", fpp, "--reference", rp])
+        self.assertEqual(code, 0, out)
+        run_dir = os.path.join(study.RUNS, "d2")
+        m = json.load(open(os.path.join(run_dir, "manifest.json")))
+        fps = [it for it in m["items"] if it["condition"] == "fingerprint"]
+        self.assertTrue(fps)
+        for it in fps:
+            v = json.load(open(os.path.join(run_dir, it["verdict"])))
+            self.assertTrue(v["fingerprint_only"])
+            self.assertIn(v["verdict"], ("PASS", "light REVISE", "REVISE", "REWRITE"))
+            self.assertEqual(it["model"], "none (fingerprint floor)")
+            self.assertTrue(it["fingerprint_sha256"])
+        # the score never asks a model for these; score runs with only the floors filled
+        for it in m["items"]:
+            if it["condition"] == "correct":
+                open(os.path.join(run_dir, it["verdict"]), "w").write('{"rating": 4, "verdict": "PASS", "evidence": ["x"]}')
+        code, out = self._run(["score", "d2"])
+        self.assertEqual(code, 0, out)
+        self.assertIn("fingerprint margins", open(os.path.join(run_dir, "results.md")).read())
+
     def test_plan_prompts_sheet_score(self):
         self._setup_detect()
         code, out = self._run(["plan", "d1", "--task", "detect", "--writers", "brian,rosa", "--repeats", "2"])

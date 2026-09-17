@@ -24,7 +24,8 @@ Features (per chunk, then mean and sd across chunks):
 
 Usage:
   fingerprint.py build --samples DIR --out fingerprint.json [--provenance hand,captured] [--surface S]
-  fingerprint.py compare FILE --fingerprint F [--surface S] [--format text|json] [--threshold 2.0]
+  fingerprint.py build-reference DIR_OR_FILES --out reference.json [--name flattened]
+  fingerprint.py compare FILE --fingerprint F [--reference R] [--surface S] [--format text|json] [--threshold 2.0]
   fingerprint.py show fingerprint.json
 
 Stdlib only.
@@ -239,7 +240,7 @@ def _scalar_keys(f: dict) -> list[str]:
 
 
 # --- build --------------------------------------------------------------------
-def load_samples(samples_dir: str, provenance: tuple[str, ...], surface: str | None) -> list[dict]:
+def load_samples(samples_dir: str, provenance: tuple[str, ...], surface: str | None, exclude: tuple[str, ...] = ()) -> list[dict]:
     import samples as smp
     m = smp.load(samples_dir)
     out = []
@@ -248,6 +249,8 @@ def load_samples(samples_dir: str, provenance: tuple[str, ...], surface: str | N
             continue
         if surface and s["surface"] != surface:
             continue
+        if s["id"] in exclude:
+            continue  # held out for a test; the fingerprint must not have seen it
         with open(os.path.join(samples_dir, s["file"]), encoding="utf-8") as fh:
             s = dict(s, text=fh.read())
         out.append(s)
@@ -294,12 +297,12 @@ def _profile_from(sample_list: list[dict]) -> dict | None:
             "first_words": [[w, round(c / nsent, 4)] for w, c in sorted(firsts.items(), key=lambda kv: -kv[1])[:20]]}
 
 
-def build(samples_dir: str, provenance=("hand", "captured"), surface=None) -> dict:
-    sample_list = load_samples(samples_dir, tuple(provenance), surface)
+def build(samples_dir: str, provenance=("hand", "captured"), surface=None, exclude=()) -> dict:
+    sample_list = load_samples(samples_dir, tuple(provenance), surface, tuple(exclude))
     if not sample_list:
         sys.exit("fingerprint: no samples match (check --samples, --provenance, --surface)")
     fp = {"tool": "pherkad-fingerprint", "version": _tool_version(), "built": datetime.date.today().isoformat(),
-          "chunk_words": CHUNK_WORDS, "provenance": list(provenance),
+          "chunk_words": CHUNK_WORDS, "provenance": list(provenance), "excluded": list(exclude),
           "samples": [{"id": s["id"], "sha256": s["sha256"], "provenance": s["provenance"], "surface": s["surface"], "words": s["words"]} for s in sample_list],
           "surfaces": {}, "pooled": None}
     by_surface = {}
@@ -316,8 +319,58 @@ def build(samples_dir: str, provenance=("hand", "captured"), surface=None) -> di
     return fp
 
 
+# --- reference and discriminant ----------------------------------------------
+# A fingerprint alone says how far a text sits from the author's mean, and a
+# generic text sits near everyone's mean, so distance cannot tell the author
+# from a flattening (the first mail test: flattenings were closer on 15 of 16).
+# Against a reference profile of what the author is NOT (flattenings, or other
+# writers in the register) the question becomes which of the two a text is
+# nearer to, feature by feature, on the features where the two differ. That is
+# a linear discriminant with equal variance; on held-out mail it put the author
+# above his flattening 16 of 16 times.
+def build_reference(paths: list[str], name: str = "reference") -> dict:
+    """A profile of a reference corpus from loose Markdown files (flattenings,
+    impostors): chunked like the author's samples, same features."""
+    paras = []
+    for p in paths:
+        with open(p, encoding="utf-8", errors="replace") as fh:
+            paras.extend(prose_paragraphs(fh.read()))
+    runs = chunks(paras)
+    per = [features(r)["f"] for r in runs if features(r)]
+    if len(per) < MIN_CHUNKS:
+        sys.exit(f"fingerprint: the reference needs at least {MIN_CHUNKS} chunks of {CHUNK_WORDS} words")
+    keys = _scalar_keys(per[0])
+    stats = {k: {"mean": statistics.fmean(x[k] for x in per), "sd": statistics.pstdev([x[k] for x in per])} for k in keys}
+    return {"tool": "pherkad-fingerprint-reference", "version": _tool_version(), "built": datetime.date.today().isoformat(),
+            "name": name, "files": [os.path.basename(p) for p in paths], "chunks": len(per),
+            "words": sum(x["_words"] for x in per), "features": stats}
+
+
+def discriminant(f: dict, author: dict, reference: dict, min_effect: float = 0.5) -> dict:
+    """Mean per-feature evidence that the text is the author's rather than the
+    reference's, over the features whose means differ by at least `min_effect`
+    pooled standard deviations. Positive means nearer the author."""
+    total, used, top = 0.0, 0, []
+    for k, a in author.items():
+        r = reference.get(k)
+        if r is None or k not in f:
+            continue
+        ps = ((a["sd"] ** 2 + r["sd"] ** 2) / 2) ** 0.5
+        ps = max(ps, 0.1 * (abs(a["mean"]) + abs(r["mean"])) + 1e-6)
+        if abs(a["mean"] - r["mean"]) / ps < min_effect:
+            continue
+        used += 1
+        term = ((f[k] - r["mean"]) ** 2 - (f[k] - a["mean"]) ** 2) / (2 * ps * ps)
+        total += term
+        top.append((term, k))
+    top.sort()
+    return {"score": round(total / used, 3) if used else 0.0, "features_used": used,
+            "for_author": [k for t, k in top[-5:][::-1] if t > 0],
+            "for_reference": [k for t, k in top[:5] if t < 0]}
+
+
 # --- compare ------------------------------------------------------------------
-def compare(text: str, fp: dict, surface: str | None = None, threshold: float = 2.0) -> dict:
+def compare(text: str, fp: dict, surface: str | None = None, threshold: float = 2.0, reference: dict | None = None) -> dict:
     """Deviation of a text from the fingerprint, feature by feature, in the
     author's own standard-deviation units; the overall distance is Burrows's
     Delta over the function words plus the mean absolute z of the shape
@@ -352,9 +405,12 @@ def compare(text: str, fp: dict, surface: str | None = None, threshold: float = 
         d["quote"] = (fe["ev"].get(k) or [""])[0][:240]
         d["author_quote"] = (prof["evidence"].get(k) or [{"quote": ""}])[0]["quote"]
     fw_flagged = sorted((d for d in fw if abs(d["z"]) >= threshold), key=lambda d: -abs(d["z"]))[:10]
-    return {"basis": basis, "words": f["_words"], "sentences": f["_sentences"],
-            "delta": round(delta, 3), "shape_distance": round(shape_dist, 3), "threshold": threshold,
-            "flagged": flagged, "function_words_flagged": fw_flagged, "n_features": len(devs)}
+    out = {"basis": basis, "words": f["_words"], "sentences": f["_sentences"],
+           "delta": round(delta, 3), "shape_distance": round(shape_dist, 3), "threshold": threshold,
+           "flagged": flagged, "function_words_flagged": fw_flagged, "n_features": len(devs)}
+    if reference:
+        out["discriminant"] = dict(discriminant(f, prof["features"], reference["features"]), reference=reference.get("name", "reference"))
+    return out
 
 
 def render(result: dict, path: str = "") -> str:
@@ -363,6 +419,12 @@ def render(result: dict, path: str = "") -> str:
     lines = [f"fingerprint: {path or 'text'}: {result['words']} words, {result['sentences']} sentences, "
              f"basis {result['basis']}; Delta {result['delta']} (function words), shape distance {result['shape_distance']} "
              f"(mean |z| over {result['n_features'] - len([1 for _ in ()])} features)"]
+    if result.get("discriminant"):
+        d = result["discriminant"]
+        side = "nearer the author" if d["score"] > 0 else "nearer the reference"
+        lines.append(f"  discriminant {d['score']:+.2f} against {d['reference']} over {d['features_used']} separating features: {side}"
+                     + (f"; for the author: {', '.join(d['for_author'])}" if d["for_author"] else "")
+                     + (f"; for the reference: {', '.join(d['for_reference'])}" if d["for_reference"] else ""))
     if not result["flagged"] and not result["function_words_flagged"]:
         lines.append(f"  nothing past {result['threshold']} of the author's standard deviations")
     for d in result["flagged"]:
@@ -379,7 +441,8 @@ def render(result: dict, path: str = "") -> str:
 
 # --- CLI ----------------------------------------------------------------------
 def cmd_build(args) -> int:
-    fp = build(args.samples, tuple(p.strip() for p in args.provenance.split(",") if p.strip()), args.surface)
+    fp = build(args.samples, tuple(p.strip() for p in args.provenance.split(",") if p.strip()), args.surface,
+               tuple(x.strip() for x in (args.exclude or "").split(",") if x.strip()))
     with open(args.out, "w", encoding="utf-8") as fh:
         json.dump(fp, fh, indent=1, sort_keys=True)
         fh.write("\n")
@@ -390,11 +453,30 @@ def cmd_build(args) -> int:
     return 0
 
 
+def cmd_build_reference(args) -> int:
+    paths = []
+    for p in args.paths:
+        if os.path.isdir(p):
+            paths.extend(sorted(os.path.join(p, f) for f in os.listdir(p) if f.endswith(".md")))
+        else:
+            paths.append(p)
+    ref = build_reference(paths, args.name)
+    with open(args.out, "w", encoding="utf-8") as fh:
+        json.dump(ref, fh, indent=1, sort_keys=True)
+        fh.write("\n")
+    print(f"fingerprint: reference '{args.name}' from {len(paths)} file(s), {ref['words']} words in {ref['chunks']} chunk(s) -> {args.out}")
+    return 0
+
+
 def cmd_compare(args) -> int:
     with open(args.fingerprint, encoding="utf-8") as fh:
         fp = json.load(fh)
+    ref = None
+    if args.reference:
+        with open(args.reference, encoding="utf-8") as fh:
+            ref = json.load(fh)
     text = sys.stdin.read() if args.file == "-" else open(args.file, encoding="utf-8", errors="replace").read()
-    res = compare(text, fp, args.surface, args.threshold)
+    res = compare(text, fp, args.surface, args.threshold, ref)
     if args.format == "json":
         print(json.dumps(res, indent=2))
     else:
@@ -430,10 +512,17 @@ def main(argv=None) -> int:
     b.add_argument("--out", required=True)
     b.add_argument("--provenance", default="hand,captured")
     b.add_argument("--surface")
+    b.add_argument("--exclude", help="comma-separated sample ids to hold out (a test set the profile never sees)")
     b.set_defaults(fn=cmd_build)
+    r = sub.add_parser("build-reference", help="a profile of what the author is not: flattenings, or other writers")
+    r.add_argument("paths", nargs="+", help="Markdown files or directories of them")
+    r.add_argument("--out", required=True)
+    r.add_argument("--name", default="reference")
+    r.set_defaults(fn=cmd_build_reference)
     c = sub.add_parser("compare")
     c.add_argument("file")
     c.add_argument("--fingerprint", required=True)
+    c.add_argument("--reference", help="a build-reference profile; adds the discriminant score")
     c.add_argument("--surface")
     c.add_argument("--format", choices=("text", "json"), default="text")
     c.add_argument("--threshold", type=float, default=2.0)

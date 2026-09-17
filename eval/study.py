@@ -951,6 +951,8 @@ def main(argv):
     s.add_argument("--seed", type=int, default=1); s.set_defaults(fn=plan)
     s = sub.add_parser("prompts"); s.add_argument("run")
     s.add_argument("--model", help="record the model that will run these prompts")
+    s.add_argument("--fingerprint", help="detect task: the measured profile for the fingerprint condition (fingerprint.py build)")
+    s.add_argument("--reference", help="detect task: the reference profile for the fingerprint condition (fingerprint.py build-reference)")
     s.set_defaults(fn=prompts)
     s = sub.add_parser("sheet"); s.add_argument("run")
     s.add_argument("--format", choices=["rating", "forcedchoice"], default="rating")

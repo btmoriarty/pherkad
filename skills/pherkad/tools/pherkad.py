@@ -469,12 +469,14 @@ def to_sarif(results: list[tuple[str, list[dict]]], cfg: dict, advisory: list[st
                       "results": sarif_results}]}
 
 
-def voice_findings(text: str, fp: dict, surface_name: str | None, threshold: float) -> list[dict]:
+def voice_findings(text: str, fp: dict, surface_name: str | None, threshold: float, ref: dict | None = None) -> list[dict]:
     """Advisory findings from the measured profile: one per feature that sits
     past `threshold` of the author's own standard deviations, quoting the
-    text's sentence and the author's. Never counted in density; never an error."""
+    text's sentence and the author's; with a reference profile, the
+    discriminant (nearer the author or nearer the reference) as well.
+    Never counted in density; never an error."""
     import fingerprint as fpm
-    res = fpm.compare(text, fp, surface_name, threshold)
+    res = fpm.compare(text, fp, surface_name, threshold, ref)
     if "error" in res:
         return []
     lines = text.split("\n")
@@ -495,16 +497,28 @@ def voice_findings(text: str, fp: dict, surface_name: str | None, threshold: flo
                 "message": f"distance from the author's fingerprint: Delta {res['delta']} over function words, "
                            f"shape {res['shape_distance']} (mean |z| over the shape features); basis {res['basis']}",
                 "engine": "fingerprint"})
+    if res.get("discriminant"):
+        d = res["discriminant"]
+        side = "nearer the author" if d["score"] > 0 else "nearer the reference"
+        out.append({"line": 0, "col": 0, "severity": "advisory", "rule": "voice", "rule_id": "voice.discriminant",
+                    "match": f"{d['score']:+.2f} against {d['reference']}",
+                    "message": f"{side}: {d['score']:+.2f} over {d['features_used']} separating features"
+                               + (f"; for the author: {', '.join(d['for_author'])}" if d["for_author"] else "")
+                               + (f"; for the reference: {', '.join(d['for_reference'])}" if d["for_reference"] else ""),
+                    "engine": "fingerprint"})
     return out
 
 
 def cmd_check(args) -> int:
     cfg, surface = load_layers(args.surface, args.config, args.surfaces)
-    fp = None
+    fp = ref = None
     if getattr(args, "fingerprint", None):
         try:
             with open(args.fingerprint, encoding="utf-8") as fh:
                 fp = json.load(fh)
+            if getattr(args, "reference", None):
+                with open(args.reference, encoding="utf-8") as fh:
+                    ref = json.load(fh)
         except (OSError, ValueError) as exc:
             sys.stderr.write(f"pherkad: fingerprint: {exc}\n")
             return 2
@@ -541,7 +555,7 @@ def cmd_check(args) -> int:
             d["decision"] = None
             findings.append(d)
         if fp:
-            for v in voice_findings(text, fp, surface["name"] if surface else None, args.fingerprint_threshold):
+            for v in voice_findings(text, fp, surface["name"] if surface else None, args.fingerprint_threshold, ref):
                 v["decision"] = None
                 findings.append(v)
         results.append((path, findings))
@@ -1255,6 +1269,7 @@ def main(argv=None) -> int:
     pc.add_argument("--strict", action="store_true", help="warnings fail too")
     pc.add_argument("--fingerprint", metavar="FILE", help="the measured profile (fingerprint.py build); adds advisory voice.* findings")
     pc.add_argument("--fingerprint-threshold", type=float, default=2.0, help="standard deviations before a feature is reported")
+    pc.add_argument("--reference", metavar="FILE", help="a fingerprint.py build-reference profile; adds the voice.discriminant finding")
     pc.add_argument("--advisory", action="append", metavar="PREFIX",
                     help="rule ids under this prefix are reported but never counted (repeatable), e.g. structure.")
     pc.add_argument("--no-structure", action="store_true", help="voicelint only")
