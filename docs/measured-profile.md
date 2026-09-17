@@ -30,6 +30,10 @@ Output: `fingerprint.json` with the sample ids it was built from, their hashes, 
 
 A text is compared to the fingerprint feature by feature: each feature's deviation in the author's own standard-deviation units, the features that deviate most, and a quoted example for each. `pherkad.py check --fingerprint F` adds these as `voice.<feature>` findings (advisory by default), and the detect harness gets a `fingerprint` condition: a verdict from distance alone, no model. That gives a number nobody can argue with: does the measured profile tell the author from flattened text and from impostors better than the model judge did (+0.26 and +0.83 lift over the pilot's controls)?
 
+## What the first mail test taught (2026-09-17)
+
+Distance to the author's mean cannot recognise the author: a flattening is generic, generic sits near everyone's mean, and on eight held-out emails the flattening was nearer than the original on 15 of 16 pairs. Recognition needs a second profile of what the author is not. `build-reference` makes one from flattenings or from other writers, and the discriminant over the features where the two profiles part company put the held-out email above its flattening 16 of 16 times, with the reference built from other emails' flattenings each time. The same score does not tell the author from six cohort notes, because the reference was flattenings, so what it learned is hand-typed mail against machine prose. Each reference answers one question; the next is a reference of other writers' mail.
+
 ## Prose from numbers (`fingerprint.py prose`)
 
 The prose profile is rendered from the fingerprint, each claim carrying its count and one quoted sentence with its sample id. A model may polish the rendering under review, but it may not add a claim the numbers do not make. `Voice_Profile.md` stops being the source of truth and becomes a view.

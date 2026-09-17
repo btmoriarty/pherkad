@@ -198,13 +198,27 @@ _REPLY_HEAD = re.compile(r"^(On .{5,120} wrote:|From: .*|-----Original Message--
 _SIG = re.compile(r"^-- ?$")
 
 
+_MACHINE = re.compile(r"is inviting you to a scheduled Zoom meeting|Join Zoom Meeting|Microsoft Teams meeting|"
+                      r"You have been invited to|Automatic reply:|This is an automated", re.I)
+_ANGLE_URL = re.compile(r"<(?:https?://|mailto:|tel:)[^>]*>")
+_BARE_URL = re.compile(r"https?://\S+")
+
+
+def machine_generated(body: str) -> bool:
+    """A calendar invitation, an auto-reply, or another body the author did not type."""
+    return bool(_MACHINE.search(body[:1500]))
+
+
 def strip_reply(body: str) -> str:
-    """The author's own lines of a message: cut quoted replies, reply headers, and the signature."""
+    """The author's own lines of a message: cut quoted replies, reply headers,
+    and the signature; drop the link targets Outlook appends in angle brackets."""
     out = []
     for line in body.replace("\r\n", "\n").split("\n"):
         if _QUOTE_LINE.match(line) or _REPLY_HEAD.match(line.strip()) or _SIG.match(line):
             break
-        out.append(line)
+        line = _ANGLE_URL.sub("", line)
+        line = _BARE_URL.sub("", line)
+        out.append(line.rstrip())
     text = "\n".join(out).strip()
     # collapse three or more blank lines
     return re.sub(r"\n{3,}", "\n\n", text)
@@ -235,15 +249,23 @@ def cmd_import_mbox(args) -> int:
         sys.stderr.write(f"samples: {exc}\n")
         return 2
     m = load(args.dir)
-    seen = added = 0
+    seen = added = skipped_machine = skipped_long = 0
     want = args.sender.lower()
     for msg in box:
         sender = parseaddr(msg.get("From", ""))[1].lower()
         if want and sender != want:
             continue
         seen += 1
-        text = strip_reply(_body_text(msg))
-        if len(text.split()) < args.min_words:
+        raw = _body_text(msg)
+        if machine_generated(raw):
+            skipped_machine += 1
+            continue
+        text = strip_reply(raw)
+        n_words = len(text.split())
+        if n_words < args.min_words:
+            continue
+        if n_words > args.max_words:
+            skipped_long += 1  # a pasted document or a forwarded report, not an email the author typed
             continue
         try:
             date = parsedate_to_datetime(msg.get("Date", "")).date().isoformat()
@@ -255,7 +277,8 @@ def cmd_import_mbox(args) -> int:
             added += 1
     save(args.dir, m)
     print(f"samples: {seen} message(s) from {args.sender or 'any sender'}, {added} added as hand/email "
-          f"(under {args.min_words} words skipped, duplicates skipped); {len(m['samples'])} in the manifest")
+          f"({skipped_machine} machine-generated and {skipped_long} over {args.max_words} words skipped, "
+          f"under {args.min_words} words and duplicates skipped); {len(m['samples'])} in the manifest")
     return 0
 
 
@@ -290,6 +313,7 @@ def main(argv=None) -> int:
     im.add_argument("--dir", required=True)
     im.add_argument("--from", dest="sender", default="", help="only messages from this address")
     im.add_argument("--min-words", type=int, default=60)
+    im.add_argument("--max-words", type=int, default=800, help="longer bodies are pasted documents, not typed mail")
     im.set_defaults(fn=cmd_import_mbox)
     args = ap.parse_args(argv)
     return args.fn(args)

@@ -80,6 +80,11 @@ class Captured(unittest.TestCase):
 
 
 class Mail(unittest.TestCase):
+    def test_machine_bodies_and_link_targets(self):
+        self.assertTrue(samples.machine_generated("Hi there,\n\nBrian Moriarty is inviting you to a scheduled Zoom meeting.\n"))
+        self.assertFalse(samples.machine_generated("Hi all,\n\nTwo things before Friday.\n"))
+        self.assertEqual(samples.strip_reply("See the form<https://forms.office.com/x> and reply.\n"), "See the form and reply.")
+
     def test_strip_reply_keeps_only_the_authors_lines(self):
         body = ("Hi all,\n\nTwo things before Friday.\n\nBrian\n\n-- \nBrian Moriarty\n"
                 "On Mon, Sep 1, 2026 at 9:00 AM Someone <s@x.org> wrote:\n> the quoted thread\n")
@@ -92,7 +97,9 @@ class Mail(unittest.TestCase):
             box = mailbox.mbox(path)
             from email.message import EmailMessage
             long = "This is a sentence the author typed. " * 20
-            for frm, body in (("me@example.org", long), ("other@example.org", long), ("me@example.org", "too short")):
+            for frm, body in (("me@example.org", long), ("other@example.org", long), ("me@example.org", "too short"),
+                              ("me@example.org", "Brian is inviting you to a scheduled Zoom meeting. " * 20),
+                              ("me@example.org", "A pasted report. " * 500)):
                 msg = EmailMessage()
                 msg["From"] = frm
                 msg["To"] = "you@example.org"

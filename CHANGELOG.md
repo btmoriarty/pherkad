@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.5.29 (2026-09-17)
+
+Roadmap item 22 and the first measured result. Brian's sent mail (an Apple Mail export of the Stevens account) went into the private samples folder: 231 messages, 34,969 hand-written words, after `import-mbox` learned to drop calendar invitations and auto-replies, Outlook's angle-bracket link targets, and bodies over 800 words (pasted documents, not typed mail).
+
+- **Distance is not recognition.** A fingerprint built from everything but eight held-out emails put each email's flattening nearer the author's mean than the email itself on 15 of 16 pairs: generic prose sits near everyone's mean. So `fingerprint.py build-reference DIR --out R` profiles what the author is not (flattenings, or other writers), and `compare --reference R` adds a **discriminant**: over the features where the author's mean and the reference's differ by half a pooled standard deviation or more, the mean per-feature evidence that the text is nearer the author (a linear discriminant, equal variance, floored). With the reference built from the other emails' flattenings each time, the held-out email scored above its own flattening on 16 of 16 pairs. Against six cohort notes the score does not separate: it has learned hand-typed mail from machine-flattened mail, not this writer from another, and a reference of other writers is what would teach it that.
+- `fingerprint.py build --exclude ID,ID` holds samples out; the fingerprint records them.
+- `pherkad.py check --fingerprint F --reference R` adds `voice.discriminant` beside `voice.distance`.
+- **The detect harness has a `fingerprint` condition**: `study.py prompts <run> --fingerprint F --reference R` writes its verdicts directly, no model, with the mapping fixed in `detect._fingerprint_verdict`, and `score` reports its margins beside the linter floor.
+- Four tests (reference and discriminant, exclude, the harness condition, the mail filters).
+- `VERSION` 0.5.29.
+
 ## v0.5.28 (2026-09-17)
 
 From Brian's slide-by-slide reviews of the FA550 Week 3 rebuild and Week 4 revision, fifteen corrections through the ledger (`corrections.py add`, `trial`, `promote`), the first project ledger in use.

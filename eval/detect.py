@@ -52,7 +52,7 @@ import sys
 
 import study
 
-CONDITIONS = ("correct", "wrong", "shuffled", "none", "linter")
+CONDITIONS = ("correct", "wrong", "shuffled", "none", "linter", "fingerprint")
 CASE_DIRS = {"holdout": "authentic", "flattened": "flattened", "impostors": "impostor", "override": "override"}
 VERDICTS = ("PASS", "light REVISE", "REVISE", "REWRITE")
 VERDICT_SCORE = {"PASS": 4, "light REVISE": 3, "REVISE": 2, "REWRITE": 1}
@@ -143,7 +143,7 @@ def plan(args, run_dir, writers, rng):
                         "case_type": case["type"], "case": case["name"], "text": case["file"],
                         "source": case.get("source", ""), "k": case.get("k", 0),
                         "profile": {"correct": target, "wrong": wrong, "shuffled": f"{target}-shuffled",
-                                    "none": None, "linter": None}[cond],
+                                    "none": None, "linter": None, "fingerprint": None}[cond],
                         "verdict": f"verdicts/{bid}.json", "surface": args.surface,
                         "tool_version": study._tool_version(), "config_sha256": study._config_sha(args.surface),
                         "profile_sha256": study._profile_sha(target), "model": "",
@@ -196,13 +196,50 @@ def _linter_verdict(text: str, surface: str) -> dict:
             "errors": errors, "warnings": warnings}
 
 
+def _fingerprint_verdict(text: str, surface: str, fp: dict, ref: dict) -> dict:
+    """The measured floor: a verdict from the fingerprint discriminant alone, no
+    model. The mapping is the pilot's, fixed before the run: a score above
+    +0.15 is PASS (5 above +0.40), 0 to +0.15 light REVISE, -0.15 to 0 REVISE,
+    below that REWRITE."""
+    sys.path.insert(0, study.TOOLS)
+    import fingerprint  # noqa: WPS433
+    res = fingerprint.compare(text, fp, surface, 2.0, ref)
+    d = res.get("discriminant") or {"score": 0.0, "features_used": 0, "for_author": [], "for_reference": []}
+    sc = d["score"]
+    if sc >= 0.40:
+        rating, verdict = 5, "PASS"
+    elif sc >= 0.15:
+        rating, verdict = 4, "PASS"
+    elif sc >= 0.0:
+        rating, verdict = 3, "light REVISE"
+    elif sc >= -0.15:
+        rating, verdict = 2, "REVISE"
+    else:
+        rating, verdict = 1, "REWRITE"
+    return {"rating": rating, "verdict": verdict, "positive_register": None, "markers": d["for_author"],
+            "evidence": d["for_reference"], "fingerprint_only": True, "score": sc,
+            "features_used": d["features_used"], "basis": res.get("basis", "")}
+
+
 def prompts(args, run_dir, manifest):
     n = floor = 0
+    fp = ref = None
+    if any(it["condition"] == "fingerprint" for it in manifest["items"]):
+        if not (getattr(args, "fingerprint", None) and getattr(args, "reference", None)):
+            sys.exit("the fingerprint condition needs --fingerprint F and --reference R (fingerprint.py build / build-reference)")
+        fp = json.load(open(args.fingerprint))
+        ref = json.load(open(args.reference))
     for it in manifest["items"]:
         text = study._read(os.path.join(study.DATA, it["text"])).strip()
         if it["condition"] == "linter":
             study._write(os.path.join(run_dir, it["verdict"]), json.dumps(_linter_verdict(text, it["surface"]), indent=2))
             it["model"] = "none (linter floor)"
+            floor += 1
+            continue
+        if it["condition"] == "fingerprint":
+            study._write(os.path.join(run_dir, it["verdict"]), json.dumps(_fingerprint_verdict(text, it["surface"], fp, ref), indent=2))
+            it["model"] = "none (fingerprint floor)"
+            it["fingerprint_sha256"] = study._sha(json.dumps(fp["samples"], sort_keys=True))
             floor += 1
             continue
         if it["profile"] is None:
@@ -220,7 +257,7 @@ def prompts(args, run_dir, manifest):
         n += 1
     with open(os.path.join(run_dir, "manifest.json"), "w") as fh:
         json.dump(manifest, fh, indent=2, sort_keys=True)
-    print(f"wrote {n} judging prompts to {run_dir}/prompts/ and {floor} linter-floor verdicts to {run_dir}/verdicts/")
+    print(f"wrote {n} judging prompts to {run_dir}/prompts/ and {floor} floor verdicts (linter, fingerprint) to {run_dir}/verdicts/")
     print("run every prompt with the SAME judging model and settings named in prereg.md; save each\n"
           f"JSON reply to {run_dir}/verdicts/<blind_id>.json, then: study.py sheet {args.run}")
 
@@ -397,10 +434,12 @@ def score(run_dir, manifest):
             lf = cf - _mean(ctrl_f) if cf is not None and ctrl_f else None
             li = ci - _mean(ctrl_i) if ci is not None and ctrl_i else None
             floor = margins.get("linter", (None, None))
+            fpf = margins.get("fingerprint", (None, None))
             lines.append("")
             lines.append(f"**Correct-profile lift** (correct margin minus the mean of {', '.join(controls) or 'no controls'}): "
                          f"flattened {_fmt(lf, True)}, impostor {_fmt(li, True)}"
-                         + (f"; linter-only floor margins {_fmt(floor[0], True)} / {_fmt(floor[1], True)}" if "linter" in margins else ""))
+                         + (f"; linter-only floor margins {_fmt(floor[0], True)} / {_fmt(floor[1], True)}" if "linter" in margins else "")
+                         + (f"; fingerprint margins {_fmt(fpf[0], True)} / {_fmt(fpf[1], True)}" if "fingerprint" in margins else ""))
             if lf is not None:
                 lifts_fl.append(lf)
             if li is not None:
