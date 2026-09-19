@@ -8,6 +8,7 @@ count. This is the ledger and the pipeline.
 
     corrections.py add     --ledger F --before "X" --after "Y" [--context "..."] [--source "..."]
                            [--surface S] [--kind K] [--rationale "..."] [--severity warning|error]
+    corrections.py mine    DRAFT EDITED --ledger F [--source "..."] [--surface S] [--dry-run]
     corrections.py trial   --ledger F ID DIR... [--config OVERLAY] [--contexts N]
     corrections.py promote --ledger F ID --overlay OVERLAY.json [--prose voice-rules.md] [--source "..."]
     corrections.py list    --ledger F [--status S]
@@ -430,6 +431,111 @@ def cmd_retire(args) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------------
+# mine: the author's edits of a draft as ledger candidates (roadmap item 24)
+# ---------------------------------------------------------------------------
+# The draft is what a model wrote; the edited file is what the author sent.
+# Sentences are aligned, and inside a changed sentence the changed run of
+# words is the candidate: "X -> Y" with the draft sentence as context. A cut
+# ("X -> ") is a candidate too. A sentence rewritten wholesale is a judgment
+# record (no regex). Every candidate enters as pending; trial and promote
+# still need the count and the author's say.
+_SENT_END = re.compile(r"(?<=[.!?])[\"')\]]*\s+(?=[\"'(\[]?[A-Z0-9])")
+_TOKEN = re.compile(r"\w[\w'’-]*|[^\w\s]")
+
+
+def _sentences(text: str) -> list[str]:
+    out = []
+    for para in re.split(r"\n\s*\n", text):
+        para = " ".join(para.split())
+        if para:
+            out.extend(p.strip() for p in _SENT_END.split(para) if p.strip())
+    return out
+
+
+def _phrase(tokens: list[str]) -> str:
+    """Tokens back to text, closing up before punctuation."""
+    out = ""
+    for t in tokens:
+        if out and not re.match(r"[^\w\s]", t):
+            out += " "
+        elif out and t in ("(", "[", "\"", "'"):
+            out += " "
+        out += t
+    return out.strip()
+
+
+def mine_pairs(draft: str, edited: str, max_words: int = 8, whole: float = 0.6) -> list[dict]:
+    """Candidates from the diff of two texts: {before, after, context, kind}."""
+    import difflib
+    a, b = _sentences(draft), _sentences(edited)
+    out = []
+    sm = difflib.SequenceMatcher(a=a, b=b, autojunk=False)
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag != "replace":
+            continue  # equal sentences carry nothing; a whole sentence added or deleted is not a phrase correction
+        # pair the replaced sentences in order; extra sentences on one side are left
+        for da, db in zip(a[i1:i2], b[j1:j2]):
+            ta, tb = _TOKEN.findall(da), _TOKEN.findall(db)
+            wm = difflib.SequenceMatcher(a=[t.lower() for t in ta], b=[t.lower() for t in tb], autojunk=False)
+            changed = sum(i2_ - i1_ for tg, i1_, i2_, _, _ in wm.get_opcodes() if tg != "equal")
+            words_a = [t for t in ta if re.match(r"\w", t)]
+            if words_a and changed / max(1, len(ta)) >= whole:
+                out.append({"before": da, "after": db, "context": da, "kind": "judgment"})
+                continue
+            for tg, x1, x2, y1, y2 in wm.get_opcodes():
+                if tg == "equal" or tg == "insert":
+                    continue
+                before = _phrase(ta[x1:x2])
+                after = _phrase(tb[y1:y2]) if tg == "replace" else ""
+                bw = re.findall(r"\w+", before)
+                if not bw or len(bw) > max_words:
+                    continue
+                if before.lower() == after.lower():
+                    continue  # case or punctuation only
+                if re.fullmatch(r"[\W\d]+", before):
+                    continue  # punctuation or a number
+                out.append({"before": before, "after": after, "context": da, "kind": ""})
+    return out
+
+
+def cmd_mine(args) -> int:
+    try:
+        draft = open(args.draft, encoding="utf-8", errors="replace").read()
+        edited = open(args.edited, encoding="utf-8", errors="replace").read()
+    except OSError as exc:
+        _fail(str(exc))
+    cands = mine_pairs(draft, edited, args.max_words)
+    if not cands:
+        print("mine: no phrase-level changes between the two texts")
+        return 0
+    records = load_ledger(args.ledger) if not args.dry_run else []
+    source = args.source or f"diff of {os.path.basename(args.draft)} and {os.path.basename(args.edited)}"
+    added = 0
+    for c in cands:
+        kind = c["kind"] or classify(c["before"], c["after"], c["context"])
+        dup = any(x["before"].lower() == c["before"].lower() and x["status"] not in ("retired", "rejected") for x in records)
+        mark = "  (already in the ledger)" if dup else ""
+        print(f"{kind:10} {c['before']!r} -> {c['after']!r}{mark}")
+        if args.dry_run or dup:
+            continue
+        r = {"id": _new_id(c["before"]), "date": _today(), "before": c["before"], "after": c["after"],
+             "context": c["context"], "source": source, "surface": args.surface or "", "kind": kind,
+             "rationale": "", "status": "pending", "rule_id": "", "supersedes": "", "history": []}
+        if kind in RULE_KINDS:
+            propose(r)
+        _note(r, f"mined from the author's edit ({source})")
+        records.append(r)
+        added += 1
+    if not args.dry_run:
+        save_ledger(args.ledger, records)
+    print(f"mine: {len(cands)} candidate(s), {added} added to {args.ledger}" if not args.dry_run
+          else f"mine: {len(cands)} candidate(s); dry run, nothing written")
+    if added:
+        print("next: read each, add a rationale or retire it, then corrections.py trial on the corpus; a factual change never becomes a rule")
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="The correction ledger: from X -> Y to a tested, counted rule.")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -448,6 +554,16 @@ def main(argv=None) -> int:
     pa.add_argument("--matcher", help="override the proposed pattern (a phrase, [word] slots, or re:)")
     pa.add_argument("--supersedes", default="", help="the id this replaces")
     pa.set_defaults(fn=cmd_add)
+
+    pm = sub.add_parser("mine", help="the author's edits of a draft as ledger candidates")
+    pm.add_argument("draft", help="what the model wrote")
+    pm.add_argument("edited", help="what the author sent")
+    pm.add_argument("--ledger", required=True)
+    pm.add_argument("--source", default="", help="where the edit came from (default: the two file names)")
+    pm.add_argument("--surface", default="")
+    pm.add_argument("--max-words", type=int, default=8, help="longest changed run treated as a phrase; longer runs become judgment records only when the whole sentence changed")
+    pm.add_argument("--dry-run", action="store_true")
+    pm.set_defaults(fn=cmd_mine)
 
     pt = sub.add_parser("trial", help="count the candidate on a corpus and check its examples")
     pt.add_argument("id")

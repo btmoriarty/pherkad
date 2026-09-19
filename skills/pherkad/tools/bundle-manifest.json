@@ -1,6 +1,6 @@
 {
   "tool": "pherkad",
-  "version": "0.5.31",
+  "version": "0.5.32",
   "schema": 1,
   "generated": "2026-09-18",
   "required": [
@@ -19,7 +19,7 @@
     "replycheck.py": "d60dd1fc2fb43a4588fdf84bccf9bcca645e32ef21b3d1dd4204ef1d80463bb6",
     "replycheck-hook.py": "74af116bb1a487db85633ba78b7067ec9f79446afcaf074d1f89cb65a4b99c45",
     "corpusscan.py": "18dc0f3264b0f08e19b93ef3b05e70c891a9c0ee4a6ee0644b24713b639af6c3",
-    "corrections.py": "a3ed804826a3f9a0901e65182ecff958fe4c31f982066f40d7841d5810aee6a0",
+    "corrections.py": "63977f7db53509e63e0c73b9d7c876904ba26be0490b08b59c403b40dd444251",
     "samples.py": "a9d5a91c3992a18e30ea3b3d01181b43dc175d2cfffd00762fdc59edc826eecc",
     "fingerprint.py": "139413f21b663431585f072f2e2f163ab6d537b079df6d94472c94917665bba6",
     "surfaces/assistant-chat.json": "ca9d9721df2513a8d40a2f4351f1f7c7713fdff8da6c8c1ecca1813858a72224",
