@@ -671,6 +671,28 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class MeasuredInPack(unittest.TestCase):
+    def test_measured_view_is_carried_when_named(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            draft = os.path.join(tmp, "d.md")
+            open(draft, "w").write("A short draft. It says one thing.\n")
+            prof = os.path.join(tmp, "prof")
+            os.makedirs(prof)
+            open(os.path.join(prof, "Voice_Profile.md"), "w").write("# profile\n\nmarker\n")
+            code, out, err = run(["review-pack", "--surface", "email", "--profile-dir", prof, "--format", "json", draft])
+            files = json.loads(out)["profile"]["files"]
+            self.assertNotIn("Voice_Profile.measured.md", files, "absent unless present or named")
+            measured = os.path.join(tmp, "elsewhere.md")
+            open(measured, "w").write("# Measured voice profile\n\n- 12.1 words on average\n")
+            code, out, err = run(["review-pack", "--surface", "email", "--profile-dir", prof, "--measured", measured, "--format", "json", draft])
+            files = json.loads(out)["profile"]["files"]
+            self.assertTrue(files["Voice_Profile.measured.md"]["present"])
+            self.assertEqual(files["Voice_Profile.measured.md"]["path"], measured)
+            self.assertIn("12.1 words on average", files["Voice_Profile.measured.md"]["text"])
+            code, out, err = run(["review-pack", "--surface", "email", "--profile-dir", prof, "--measured", measured, draft])
+            self.assertIn("12.1 words on average", out, "the prompt carries the measured view")
+
+
 class ReviewImport(unittest.TestCase):
     TABLE = (
         "| rule_ref | quote | decision | rationale | proposed_edit |\n"

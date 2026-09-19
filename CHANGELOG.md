@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.5.31 (2026-09-18)
+
+Roadmap item 23: prose from numbers.
+
+- **`fingerprint.py prose F [--surface a,b] [--reference R] [--out FILE]`** renders the prose profile from the fingerprint, one section per surface: sentences (mean, spread, median, quartiles, short and long shares, short-after-long), paragraphs, openers and the most frequent first words, punctuation per sentence, contractions and questions per 1,000 words, the construction rates with the ones that never occur named as absent, the function-word signature (against the reference when one is given: used more, used less, both rates), vocabulary. Every claim carries its count, and where the feature keeps evidence, one quoted sentence with the sample id that holds it. Evidence is now credited to the sample whose paragraph holds the sentence, and the short-sentence example is a real sentence of three words or more, not a list number.
+- **`pherkad.py review-pack --measured FILE`** carries the measured view into the judgment packet as `Voice_Profile.measured.md` (also picked up from the profile directory when present), so the model reads the numbers beside the archetype. The four archetype moves in the hand-written `Voice_Profile.md` (concrete object before concept, flat consequence, the telling wrong detail, the role reversal owned) are not counted by this fingerprint and stay as judgment guidance with quotes but no counts; the measured view sits beside them, and the roadmap's "no claim without a number" holds for the view, not yet for the archetype.
+- Two tests.
+- `VERSION` 0.5.31.
+
 ## v0.5.30 (2026-09-18)
 
 From importing two Gmail accounts (1,339 and 6,252 sent messages) into the author's private samples folder.

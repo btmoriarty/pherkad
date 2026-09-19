@@ -129,6 +129,33 @@ class BuildCompare(unittest.TestCase):
         self.assertEqual(len(fp["samples"]), 3)
         self.assertEqual(fp["excluded"], [ids[0]])
 
+    def test_prose_is_a_view_of_the_numbers(self):
+        fingerprint.main(["build", "--samples", self.dir, "--out", self.fp_path])
+        fp = json.load(open(self.fp_path))
+        text = fingerprint.prose(fp)
+        p = fp["surfaces"]["note"]
+        self.assertIn("## note", text)
+        self.assertIn(f"{p['features']['sent_mean']['mean']:.1f} words on average", text)
+        self.assertIn("(note-", text, "a quoted sentence carries its sample id")
+        self.assertIn("Never in", text, "constructions that never occur are named as absent")
+        self.assertIn("Most frequent first words", text)
+        # evidence is credited to the sample that holds the sentence
+        for e in p["evidence"]["sent_short_share"]:
+            sid = e["samples"][0]
+            path = next(s["file"] for s in json.load(open(os.path.join(self.dir, "samples.json")))["samples"] if s["id"] == sid)
+            self.assertIn(e["quote"], open(os.path.join(self.dir, path)).read())
+        rdir = os.path.join(self.tmp.name, "ref")
+        os.makedirs(rdir)
+        for i in range(4):
+            open(os.path.join(rdir, f"r{i}.md"), "w").write(prose(LONG, 6, 4, 50 + i))
+        rp = os.path.join(self.tmp.name, "ref.json")
+        fingerprint.main(["build-reference", rdir, "--out", rp, "--name", "long"])
+        out = os.path.join(self.tmp.name, "profile.md")
+        self.assertEqual(fingerprint.main(["prose", self.fp_path, "--reference", rp, "--out", out]), 0)
+        self.assertIn("Function words, against long", open(out).read())
+        with self.assertRaises(SystemExit):
+            fingerprint.main(["prose", self.fp_path, "--surface", "nope"])
+
     def test_too_few_chunks_is_an_error_not_a_profile(self):
         d = os.path.join(self.tmp.name, "tiny")
         p = os.path.join(self.tmp.name, "t.md")

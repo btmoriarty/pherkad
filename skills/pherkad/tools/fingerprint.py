@@ -27,6 +27,7 @@ Usage:
   fingerprint.py build-reference DIR_OR_FILES --out reference.json [--name flattened]
   fingerprint.py compare FILE --fingerprint F [--reference R] [--surface S] [--format text|json] [--threshold 2.0]
   fingerprint.py show fingerprint.json
+  fingerprint.py prose fingerprint.json [--surface email] [--reference R] [--out Voice_Profile.measured.md]
 
 Stdlib only.
 """
@@ -154,7 +155,8 @@ def features(paras: list[str]) -> dict:
     f["sent_long_share"] = sum(1 for x in lens if x > 35) / n
     f["short_after_long"] = (sum(1 for a, b in zip(lens, lens[1:]) if a > 20 and b < 8) / max(1, n - 1))
     ev["sent_long_share"] = [max(sents, key=lambda s: len(s.split()))]
-    ev["sent_short_share"] = [min(sents, key=lambda s: len(s.split()))]
+    real_short = [s for s in sents if 3 <= len(s.split()) < 8 and re.search(r"[A-Za-z]{2}", s)]
+    ev["sent_short_share"] = [min(real_short, key=lambda s: len(s.split()))] if real_short else []
 
     # paragraphs
     counts = [len(sentences(p)) for p in paras]
@@ -266,27 +268,29 @@ def _profile_from(sample_list: list[dict]) -> dict | None:
     runs = chunks([p for _, p in tagged])
     if len(runs) < MIN_CHUNKS:
         return None
-    # map chunks back to sample ids for evidence
+    # map chunks back to sample ids for evidence: a quoted sentence is credited
+    # to the sample whose paragraph holds it
     idx = 0
     per_chunk = []
     for run in runs:
-        ids = {tagged[i][0] for i in range(idx, idx + len(run))}
+        owners = tagged[idx:idx + len(run)]
         idx += len(run)
         fe = features(run)
         if fe:
-            per_chunk.append((ids, fe))
+            per_chunk.append((owners, fe))
     keys = _scalar_keys(per_chunk[0][1]["f"])
     stats = {}
     for k in keys:
         vals = [fe["f"][k] for _, fe in per_chunk if k in fe["f"]]
         stats[k] = {"mean": statistics.fmean(vals), "sd": statistics.pstdev(vals) if len(vals) > 1 else 0.0}
     evidence = {}
-    for ids, fe in per_chunk:
+    for owners, fe in per_chunk:
         for k, sents in fe["ev"].items():
             slot = evidence.setdefault(k, [])
             for s in sents:
                 if len(slot) < 5 and s not in [x["quote"] for x in slot]:
-                    slot.append({"quote": s[:240], "samples": sorted(ids)[:3]})
+                    sid = next((o for o, p in owners if s in p), owners[0][0])
+                    slot.append({"quote": s[:240], "samples": [sid]})
     firsts = {}
     for _, fe in per_chunk:
         for w, c in fe["f"]["_first_words"]:
@@ -439,6 +443,133 @@ def render(result: dict, path: str = "") -> str:
     return "\n".join(lines)
 
 
+# --- prose from numbers (roadmap item 23) -------------------------------------
+# The prose profile is a view of the fingerprint. Every claim carries the
+# number it rests on and, where the feature keeps evidence, one quoted
+# sentence with its sample id. Nothing here is asserted that was not counted.
+_FW_NAMES = {"i": "I"}
+
+
+def _q(prof: dict, key: str) -> str:
+    ev = (prof.get("evidence") or {}).get(key) or []
+    if not ev:
+        return ""
+    e = ev[0]
+    return f' For example, "{e["quote"].strip()}" ({e["samples"][0]}).'
+
+
+def _pct(x: float) -> str:
+    return f"{100 * x:.0f}%"
+
+
+def _rate(prof: dict, key: str) -> tuple[float, float]:
+    st = prof["features"].get(key) or {"mean": 0.0, "sd": 0.0}
+    return st["mean"], st["sd"]
+
+
+def prose_surface(name: str, prof: dict, reference: dict | None = None) -> str:
+    f = prof["features"]
+    m = lambda k: _rate(prof, k)[0]  # noqa: E731
+    sd = lambda k: _rate(prof, k)[1]  # noqa: E731
+    out = [f"## {name}", "",
+           f"Measured on {prof['words']:,} words in {prof['chunks']} chunks of about {CHUNK_WORDS} words, "
+           f"{prof['sentences']:,} sentences. Every figure below is a mean over those chunks, with the spread in the author's own units.", ""]
+    # sentences
+    out += ["### Sentences", "",
+            f"- A sentence runs {m('sent_mean'):.1f} words on average (spread {sd('sent_mean'):.1f}); the median is {m('sent_median'):.1f} words, "
+            f"the middle half sits between {m('sent_q1'):.0f} and {m('sent_q3'):.0f}.",
+            f"- {_pct(m('sent_short_share'))} of sentences are under eight words.{_q(prof, 'sent_short_share')}",
+            f"- {_pct(m('sent_long_share'))} run past 35 words.{_q(prof, 'sent_long_share')}",
+            f"- A short sentence follows a long one {_pct(m('short_after_long'))} of the time.", ""]
+    out += ["### Paragraphs", "",
+            f"- {m('para_sents'):.1f} sentences per paragraph on average; {_pct(m('para_one_sentence_share'))} of paragraphs are one sentence.",
+            f"- {_pct(m('para_short_closer_share'))} of multi-sentence paragraphs end on a sentence under half the length of the ones before it.", ""]
+    fw = prof.get("first_words") or []
+    fw_txt = ", ".join(f"{_FW_NAMES.get(w, w)} ({_pct(r)})" for w, r in fw[:8] if w)
+    out += ["### Openers", "",
+            f"- Sentences open in the first person {_pct(m('open_first_person'))} of the time, with an article {_pct(m('open_article'))}, "
+            f"with a subordinator (if, when, because) {_pct(m('open_subordinator'))}, with a conjunction {_pct(m('open_conjunction'))}, "
+            f"with a number {_pct(m('open_number'))}.",
+            f"- Most frequent first words: {fw_txt}.", ""]
+    out += ["### Punctuation", "",
+            f"- Per sentence: {m('punct_comma'):.2f} commas, {m('punct_colon'):.2f} colons, {m('punct_semicolon'):.2f} semicolons, "
+            f"{m('punct_paren'):.2f} parentheses, {m('punct_quote'):.2f} quotation marks, {m('punct_dash'):.3f} dashes."
+            + _q(prof, 'punct_colon'),
+            f"- Contractions: {m('con_contraction'):.1f} per 1,000 words.{_q(prof, 'con_contraction')}",
+            f"- Questions: {m('question_rate'):.1f} per 1,000 words.{_q(prof, 'question_rate')}", ""]
+    cons = [("con_contrast_frame", "contrast frames (not X but Y; X, not Y; rather than)"), ("con_hedge", "hedges (perhaps, maybe, I think)"),
+            ("con_intensifier", "intensifiers (very, really, extremely)"), ("con_initial_conjunction", "sentences opening on And, But, or So"),
+            ("con_passive", "passive-shaped verb phrases"), ("con_candour", "candour announcements (honestly, to be fair)"),
+            ("con_pointer", "pointers (that is the part that)")]
+    out += ["### Constructions, per 1,000 words", ""]
+    absent = []
+    for k, label in cons:
+        if m(k) == 0 and sd(k) == 0:
+            absent.append(label)
+            continue
+        out.append(f"- {label}: {m(k):.1f} (spread {sd(k):.1f}).{_q(prof, k)}")
+    if absent:
+        out.append(f"- Never in {prof['chunks']} chunks: {'; '.join(absent)}.")
+    out.append("")
+    # function words: the signature, against the reference if given
+    fwk = [k for k in f if k.startswith("fw_")]
+    if reference and reference.get("features"):
+        rows = []
+        for k in fwk:
+            a = f[k]["mean"]
+            r = reference["features"].get(k, {"mean": 0.0, "sd": 0.0})
+            ps = ((f[k]["sd"] ** 2 + r["sd"] ** 2) / 2) ** 0.5 or 1e-9
+            rows.append(((a - r["mean"]) / ps, k[3:], a, r["mean"]))
+        rows.sort()
+        more = [x for x in rows[::-1] if x[0] > 0.5][:8]
+        less = [x for x in rows if x[0] < -0.5][:8]
+        out += [f"### Function words, against {reference.get('name', 'the reference')}", ""]
+        if more:
+            out.append("- Used more than the reference: " + ", ".join(f"{w} ({a:.1f} against {r:.1f} per 1,000)" for _, w, a, r in more) + ".")
+        if less:
+            out.append("- Used less than the reference: " + ", ".join(f"{w} ({a:.1f} against {r:.1f} per 1,000)" for _, w, a, r in less) + ".")
+        out.append("")
+    else:
+        top = sorted(fwk, key=lambda k: -f[k]["mean"])[:12]
+        out += ["### Function words", "",
+                "- Most frequent, per 1,000 words: " + ", ".join(f"{k[3:]} ({f[k]['mean']:.0f})" for k in top) + ".", ""]
+    out += ["### Vocabulary", "",
+            f"- Mean word length {m('word_len'):.2f} letters; type-token ratio {m('type_token'):.2f} on a {CHUNK_WORDS}-word chunk.", ""]
+    return "\n".join(out)
+
+
+def prose(fp: dict, surfaces: list[str] | None = None, reference: dict | None = None) -> str:
+    names = surfaces or list(fp["surfaces"]) or ["pooled"]
+    parts = ["# Measured voice profile", "",
+             f"Rendered from `fingerprint.py` {fp['version']}, built {fp['built']} from {len(fp['samples'])} samples "
+             f"({fp['pooled']['words']:,} words; provenance {', '.join(fp['provenance'])}). A view of the numbers: every claim "
+             "below is a count over the author's own samples, and a quoted sentence is one the count was made on. "
+             "Nothing here was written from an impression.", ""]
+    for name in names:
+        prof = fp["surfaces"].get(name) if name != "pooled" else fp["pooled"]
+        if not prof:
+            sys.exit(f"fingerprint: no surface '{name}' in the fingerprint (have {', '.join(fp['surfaces'])})")
+        parts.append(prose_surface(name, prof, reference))
+    return "\n".join(parts)
+
+
+def cmd_prose(args) -> int:
+    with open(args.fingerprint, encoding="utf-8") as fh:
+        fp = json.load(fh)
+    ref = None
+    if args.reference:
+        with open(args.reference, encoding="utf-8") as fh:
+            ref = json.load(fh)
+    text = prose(fp, [s.strip() for s in args.surface.split(",")] if args.surface else None, ref)
+    if args.out:
+        with open(args.out, "w", encoding="utf-8") as fh:
+            fh.write(text + "\n")
+        print(f"fingerprint: prose profile written to {args.out}")
+    else:
+        print(text)
+    return 0
+
+
 # --- CLI ----------------------------------------------------------------------
 def cmd_build(args) -> int:
     fp = build(args.samples, tuple(p.strip() for p in args.provenance.split(",") if p.strip()), args.surface,
@@ -530,6 +661,12 @@ def main(argv=None) -> int:
     s = sub.add_parser("show")
     s.add_argument("fingerprint")
     s.set_defaults(fn=cmd_show)
+    pr = sub.add_parser("prose", help="render the prose profile from the numbers, every claim with its count and a quoted sample")
+    pr.add_argument("fingerprint")
+    pr.add_argument("--surface", help="comma-separated surfaces to render (default: all)")
+    pr.add_argument("--reference", help="a build-reference profile; adds the function-word contrast")
+    pr.add_argument("--out")
+    pr.set_defaults(fn=cmd_prose)
     args = ap.parse_args(argv)
     return args.fn(args)
 
