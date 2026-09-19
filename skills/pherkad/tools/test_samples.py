@@ -85,6 +85,14 @@ class Mail(unittest.TestCase):
         self.assertFalse(samples.machine_generated("Hi all,\n\nTwo things before Friday.\n"))
         self.assertEqual(samples.strip_reply("See the form<https://forms.office.com/x> and reply.\n"), "See the form and reply.")
 
+    def test_html_only_bodies_are_read_down_to_text(self):
+        from email.message import EmailMessage
+        msg = EmailMessage()
+        msg["From"] = "me@example.org"
+        msg.set_content("<div>Hi Larry,</div><div><br></div><div>Two &amp; three.</div>", subtype="html")
+        self.assertEqual(samples._body_text(msg).strip().split("\n"), ["Hi Larry,", "", "Two & three."])
+        self.assertEqual(samples.html_to_text("<p>a</p><p>b</p>").split(), ["a", "b"])
+
     def test_strip_reply_keeps_only_the_authors_lines(self):
         body = ("Hi all,\n\nTwo things before Friday.\n\nBrian\n\n-- \nBrian Moriarty\n"
                 "On Mon, Sep 1, 2026 at 9:00 AM Someone <s@x.org> wrote:\n> the quoted thread\n")
