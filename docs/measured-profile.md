@@ -46,6 +46,10 @@ Two channels, both already partly built. New samples: `samples.py add` records t
 
 Builds a packet: the surface, the measured constraints written as instructions (a sentence-length band, the opener and closer habits, the contraction rate, what never appears), the nearest exemplars from the samples for that surface, the notes to write from, and the output schema. A runner writes; `compare` and `check` score the result; the loop repeats within a bound until the draft sits inside the author's own band. Model-agnostic through the runners; nothing here rewrites his prose without the harness having said the packet produces text closer to him than a bare prompt does (the authoring experiment, `study.py plan --task author`).
 
+## What the authoring pilot showed (2026-09-18)
+
+Eight held-out work emails, facts extracted as notes by the runner, one draft from a bare prompt and one from the packet. The packet's draft sat nearer the author on 5 of 8 by the discriminant (mean +0.06 against +0.03; the real emails +0.08) and carried no mechanical errors where the bare prompt's carried eight. A small measured edge and a clean sheet; whether the author reads the packet's drafts as his is the pending question, and the answer is the pairs sheet in `eval/data/runs/author-mail/`.
+
 ## Order
 
 1. Samples folder, manifest, provenance rules, the CAPTURED.md importer, the mailbox importer.

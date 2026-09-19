@@ -55,6 +55,9 @@ jobs:
       - name: Run the fingerprint tests
         run: python3 skills/pherkad/tools/test_fingerprint.py
 
+      - name: Run the author tests
+        run: python3 skills/pherkad/tools/test_author.py
+
       - name: Run the eval scorer tests
         run: python3 eval/test_study.py
 

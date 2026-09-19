@@ -14,6 +14,7 @@ and prints one format.
     pherkad.py surfaces [--surfaces MAP] [--json]    # every surface, with speaker and register
     pherkad.py review-pack --surface X FILE          # the quick-mode judgment packet: prompt, or --format json, or --out DIR
     pherkad.py review-import TABLE --file FILE --decisions D   # record a table's ruled rows; the next packet lists them
+    pherkad.py author NOTES --surface X --fingerprint F [--reference R --samples DIR --runner CMD --out FILE]   # write from notes in the measured voice
     pherkad.py check --format json FILE              # voicelint's envelope, plus provenance
     pherkad.py check --format sarif FILE             # SARIF 2.1.0 for editors and CI
     pherkad.py check --advisory structure. FILE      # report, never count, rule ids under a prefix
@@ -618,7 +619,7 @@ MANIFEST_SCHEMA = 1
 # The five a gate needs are required wherever the bundle is vendored; the rest
 # are listed so their hashes travel, but a vendored copy may leave them out.
 REQUIRED_FILES = ("pherkad.py", "voicelint.py", "structlint.py", "mdmask.py", "voice_config.json")
-BUNDLE_FILES = REQUIRED_FILES + ("replycheck.py", "replycheck-hook.py", "corpusscan.py", "corrections.py", "samples.py", "fingerprint.py")
+BUNDLE_FILES = REQUIRED_FILES + ("replycheck.py", "replycheck-hook.py", "corpusscan.py", "corrections.py", "samples.py", "fingerprint.py", "author.py")
 
 
 def _file_sha(path: str) -> str:
@@ -1107,6 +1108,60 @@ def cmd_review_import(args) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------------
+# author: the authoring packet and loop (roadmap item 25; author.py)
+# ---------------------------------------------------------------------------
+def cmd_author(args) -> int:
+    import author as au
+    try:
+        notes = read_source(args.notes)
+        with open(args.fingerprint, encoding="utf-8") as fh:
+            fp = json.load(fh)
+        ref = None
+        if args.reference:
+            with open(args.reference, encoding="utf-8") as fh:
+                ref = json.load(fh)
+    except (OSError, ValueError) as exc:
+        sys.stderr.write(f"pherkad: {exc}\n")
+        return 2
+    cfg, info = load_layers(args.surface, args.config, args.surfaces)
+    samples_list = []
+    if args.samples:
+        import fingerprint as fpm
+        samples_list = fpm.load_samples(args.samples, ("hand",), None)
+    archetype = ""
+    pdir = _profile_dir(args.profile_dir)
+    if pdir and os.path.exists(os.path.join(pdir, "Voice_Profile.md")):
+        archetype = open(os.path.join(pdir, "Voice_Profile.md"), encoding="utf-8", errors="replace").read()
+    packet = au.build_packet(notes, args.surface, fp, ref, samples_list, args.exemplars, archetype,
+                             {"speaker": info["speaker"], "guidance": info["guidance"]} if info else None)
+    if not args.runner:
+        if args.format == "json":
+            print(json.dumps(packet, indent=2, ensure_ascii=False))
+        else:
+            print(au.render(packet), end="")
+        return 0
+    result = au.author_loop(packet, args.runner, args.rounds, fp, args.surface, ref, cfg, args.timeout)
+    if "error" in result:
+        sys.stderr.write(f"pherkad: author: {result['error']}\n")
+        return 1
+    if args.out:
+        with open(args.out, "w", encoding="utf-8") as fh:
+            fh.write(result["draft"].rstrip() + "\n")
+        with open(args.out + ".author.json", "w", encoding="utf-8") as fh:
+            json.dump({"packet": {k: v for k, v in packet.items() if k != "exemplars"} | {"exemplars": [e["id"] for e in packet["exemplars"]]},
+                       "score": result["score"], "history": [{k: v for k, v in h.items() if k != "draft"} for h in result["history"]]},
+                      fh, indent=2, ensure_ascii=False)
+        print(f"pherkad: author: draft written to {args.out} ({result['score']['words']} words) after {result['rounds']} revision(s); "
+              f"errors {result['score']['errors']}, warnings {result['score']['warnings']}, discriminant "
+              f"{result['score']['discriminant'] if result['score']['discriminant'] is not None else 'n/a'}; record beside it in .author.json")
+    else:
+        print(result["draft"])
+        sys.stderr.write(f"pherkad: author: {result['rounds']} revision(s); errors {result['score']['errors']}, warnings {result['score']['warnings']}, "
+                         f"discriminant {result['score']['discriminant']}\n")
+    return 0
+
+
 def _parse_location(loc: str):
     """path:line or path:line:rule_id."""
     parts = loc.rsplit(":", 2)
@@ -1326,6 +1381,22 @@ def main(argv=None) -> int:
     prp.add_argument("--format", choices=["prompt", "json"], default="prompt")
     prp.add_argument("--out", help="write pack.json and prompt.md into this directory instead of printing")
     prp.set_defaults(fn=cmd_review_pack)
+    pau = sub.add_parser("author", help="write from notes in the author's measured voice: the packet, or a drafted and scored text with --runner")
+    pau.add_argument("notes", help="the facts to write from, or - for stdin")
+    pau.add_argument("--surface", required=True)
+    pau.add_argument("--surfaces")
+    pau.add_argument("--config")
+    pau.add_argument("--fingerprint", required=True, help="fingerprint.py build")
+    pau.add_argument("--reference", help="fingerprint.py build-reference; adds the discriminant and the function-word contrast")
+    pau.add_argument("--samples", help="the private samples folder; the nearest hand-written exemplars come from it")
+    pau.add_argument("--exemplars", type=int, default=3)
+    pau.add_argument("--profile-dir", help="where Voice_Profile.md lives (the archetype)")
+    pau.add_argument("--runner", help="a command that reads a prompt on stdin and prints the draft; without it, the packet is printed")
+    pau.add_argument("--rounds", type=int, default=2, help="revision rounds after the first draft")
+    pau.add_argument("--timeout", type=int, default=600)
+    pau.add_argument("--out", help="write the draft here and the record beside it as <out>.author.json")
+    pau.add_argument("--format", choices=["prompt", "json"], default="prompt")
+    pau.set_defaults(fn=cmd_author)
     pri = sub.add_parser("review-import", help="record the ruled rows of a quick-mode table as decisions")
     pri.add_argument("table", help="the table: a Markdown file with the quick-mode rows, or a JSON list, or - for stdin")
     pri.add_argument("--file", required=True, help="the draft the table was about")

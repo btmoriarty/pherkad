@@ -1,6 +1,6 @@
 {
   "tool": "pherkad",
-  "version": "0.5.32",
+  "version": "0.5.33",
   "schema": 1,
   "generated": "2026-09-18",
   "required": [
@@ -11,7 +11,7 @@
     "voice_config.json"
   ],
   "files": {
-    "pherkad.py": "1c73c26d22b6b7a5a73fa6a7f09058081cbd02174af8d6c2484def86b62a4a1b",
+    "pherkad.py": "c3ba53da9db2e7491879706dcbe6f5ebd04a2aac49ee99f1067a6cf016cfca42",
     "voicelint.py": "1268e6557034204df99179b02c10dca80063270b61760c9faa5d3e0f2d80053f",
     "structlint.py": "b7f782422a9fb294bed9399fd03fa8f2345eb8f60168158d43d22886b7dbc950",
     "mdmask.py": "a6bc483a2bccc0559d8bbfd408c471b14d45b345fc47aad91ca9cdec250bfe41",
@@ -22,6 +22,7 @@
     "corrections.py": "63977f7db53509e63e0c73b9d7c876904ba26be0490b08b59c403b40dd444251",
     "samples.py": "a9d5a91c3992a18e30ea3b3d01181b43dc175d2cfffd00762fdc59edc826eecc",
     "fingerprint.py": "139413f21b663431585f072f2e2f163ab6d537b079df6d94472c94917665bba6",
+    "author.py": "71812b511ebcaa5994860fc670c2268335b50d294679d7ad32e888c483b9f65d",
     "surfaces/assistant-chat.json": "ca9d9721df2513a8d40a2f4351f1f7c7713fdff8da6c8c1ecca1813858a72224",
     "surfaces/email.json": "25d23c7f262a00f698377edde3da75008cc9016797227baab431e886d8cd6cac",
     "surfaces/fiction.json": "840bbb461154163b7c11be5762d430050a218dff2b206c51e571b42da372d36a",

@@ -1,6 +1,6 @@
 # Roadmap (2026-09-15)
 
-Status, end of 2026-09-16: all nineteen items shipped, 0.5.3 through 0.5.24. What remains is not code: the saga's six prose errors, the README's two warnings, the NeurIPS and Week 4 edits, and running the two experiments on real data.
+Status, end of 2026-09-18: all twenty-five items shipped, 0.5.3 through 0.5.33. What remains is the author's: the blind ratings (40 revise drafts, 14 detect pairs, 8 authoring pairs), the NeurIPS camera-ready, and a reference of other writers' mail for writer-against-writer separation.
 
 One ordered list, drawn from `docs/priority-fixes.md` (what is still wrong) and `docs/feature-review-comparison-2026-09-15.md` (what to build, and which of two reviews' designs to take). Ordered by dependency first, then by value per day. Each item names what it unblocks and how it is judged done. Effort is developer days, author review time excluded.
 
@@ -66,7 +66,7 @@ The pilot found the prose profile adds nothing the judge does not get from polis
 | 22 | Done, 0.5.29. **Fingerprint condition** in the detect harness: a verdict from distance alone; the pilot corpus rerun with it beside the model judge. | 21, 13 | A number for whether the measured profile beats +0.26 / +0.83. | 0.5 |
 | 23 | Done, 0.5.31. **Prose from numbers**: `fingerprint.py prose` renders the profile with a count and a quoted sample per claim; `Voice_Profile.md` becomes a view. | 21 | No claim in the prose profile lacks a number behind it. | 1 |
 | 24 | Done, 0.5.32. **Edits as evidence**: `corrections.py add --from-diff draft edited` mines the author's changes into ledger candidates. | 10 | An edit session yields candidates without hand transcription; promotion still needs the count and his say. | 1 |
-| 25 | **Authoring on demand**: `pherkad.py author --surface X --fingerprint F notes.md` builds the packet (constraints from the numbers, nearest exemplars, notes), a runner writes, `compare` and `check` score, bounded loop; the authoring experiment scores it against a bare prompt. | 21, 23, 16 | The packet produces text measurably closer to the author than a bare prompt, or the feature is dropped. | 2 |
+| 25 | Done, 0.5.33; blind reading pending. **Authoring on demand**: `pherkad.py author --surface X --fingerprint F notes.md` builds the packet (constraints from the numbers, nearest exemplars, notes), a runner writes, `compare` and `check` score, bounded loop; the authoring experiment scores it against a bare prompt. | 21, 23, 16 | The packet produces text measurably closer to the author than a bare prompt, or the feature is dropped. | 2 |
 
 ## Deferred, with the reason
 
