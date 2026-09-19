@@ -210,3 +210,52 @@ class Ledger(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Mine(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.ledger = os.path.join(self.tmp.name, "ledger.jsonl")
+        self.draft = os.path.join(self.tmp.name, "draft.md")
+        self.edited = os.path.join(self.tmp.name, "edited.md")
+        open(self.draft, "w").write("Hi all,\n\nThe honest answer is that the deck is a game-changer for the cohort. "
+                                    "We will leverage the platform on Tuesday, March 3. Three of us went.\n\n"
+                                    "This sentence is entirely rewritten by the author into something else.\n")
+        open(self.edited, "w").write("Hi all,\n\nThe deck is a big step for the cohort. "
+                                     "We will use the platform on Tuesday, March 4. Three of us went.\n\n"
+                                     "Nothing of that sentence survives here.\n")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_mine_pairs_finds_phrases_cuts_and_rewrites(self):
+        cands = corrections.mine_pairs(open(self.draft).read(), open(self.edited).read())
+        pairs = {(c["before"], c["after"]) for c in cands}
+        self.assertIn(("The honest answer is that", ""), pairs)
+        self.assertIn(("game-changer", "big step"), pairs)
+        self.assertIn(("leverage", "use"), pairs)
+        self.assertNotIn(("3", "4"), pairs, "a number swap is not a phrase")
+        rewrites = [c for c in cands if c["kind"] == "judgment"]
+        self.assertEqual(len(rewrites), 1)
+        self.assertTrue(rewrites[0]["before"].startswith("This sentence is entirely"))
+        self.assertTrue(all(c["context"] for c in cands))
+
+    def test_mine_adds_pending_records_and_skips_duplicates(self):
+        code, out, err = run("mine", self.draft, self.edited, "--ledger", self.ledger, "--surface", "email", "--dry-run")
+        self.assertEqual(code, 0, err)
+        self.assertIn("dry run", out)
+        self.assertFalse(os.path.exists(self.ledger))
+        code, out, err = run("mine", self.draft, self.edited, "--ledger", self.ledger, "--surface", "email", "--source", "email to the cohort")
+        self.assertEqual(code, 0, err)
+        recs = corrections.load_ledger(self.ledger)
+        self.assertEqual(len(recs), 4)
+        self.assertTrue(all(r["status"] == "pending" and r["surface"] == "email" and r["source"] == "email to the cohort" for r in recs))
+        lit = next(r for r in recs if r["before"] == "game-changer")
+        self.assertEqual((lit["kind"], lit["after"], lit["field"]), ("literal", "big step", "soft_phrases"))
+        self.assertIn("game-changer", lit["fires"][0])
+        self.assertIn("big step", lit["clean"][0])
+        self.assertEqual(next(r for r in recs if r["kind"] == "judgment")["rationale"], "")
+        # a second mining of the same edit adds nothing
+        code, out, err = run("mine", self.draft, self.edited, "--ledger", self.ledger)
+        self.assertIn("already in the ledger", out)
+        self.assertEqual(len(corrections.load_ledger(self.ledger)), 4)

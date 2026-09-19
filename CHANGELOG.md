@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.5.32 (2026-09-18)
+
+Roadmap item 24: the author's edits as evidence.
+
+- **`corrections.py mine DRAFT EDITED --ledger F [--source ...] [--surface S] [--dry-run]`** reads the diff between what a model drafted and what the author sent. Sentences are aligned; inside a changed sentence, each changed run of words up to eight long becomes a ledger candidate, `X -> Y` with the draft sentence as context, and a run the author cut becomes `X -> ""`. A sentence more than six tenths rewritten becomes a judgment record (no regex). Case-only and punctuation-only changes and bare number swaps are not candidates. Every record enters pending with an empty rationale; a phrase already in the ledger is reported and not added twice; `trial` and `promote` still need the count and the author's say, and a factual change still never becomes a rule.
+- Two tests.
+- `VERSION` 0.5.32.
+
 ## v0.5.31 (2026-09-18)
 
 Roadmap item 23: prose from numbers.
