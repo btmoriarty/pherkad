@@ -224,16 +224,42 @@ def strip_reply(body: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", text)
 
 
+_TAG = re.compile(r"<[^>]+>")
+_BLOCK_TAG = re.compile(r"</?(?:div|p|br|tr|li|h[1-6]|blockquote)\b[^>]*>", re.I)
+
+
+def html_to_text(html: str) -> str:
+    """A plain reading of an HTML-only body: block tags become line breaks,
+    other tags go, entities are decoded."""
+    import html as htmlmod
+    text = re.sub(r"(?is)<(script|style).*?</\1>", "", html)
+    text = _BLOCK_TAG.sub("\n", text)
+    text = _TAG.sub("", text)
+    text = htmlmod.unescape(text).replace("\xa0", " ")
+    return re.sub(r"\n{3,}", "\n\n", text)
+
+
+def _decoded(part) -> str:
+    payload = part.get_payload(decode=True)
+    return payload.decode(part.get_content_charset() or "utf-8", errors="replace") if payload else ""
+
+
 def _body_text(msg) -> str:
-    if msg.is_multipart():
-        for part in msg.walk():
-            if part.get_content_type() == "text/plain" and not part.get("Content-Disposition", "").startswith("attachment"):
-                payload = part.get_payload(decode=True)
-                if payload:
-                    return payload.decode(part.get_content_charset() or "utf-8", errors="replace")
-        return ""
-    payload = msg.get_payload(decode=True)
-    return payload.decode(msg.get_content_charset() or "utf-8", errors="replace") if payload else ""
+    """The message body as text: the text/plain part when there is one, else
+    the text/html part read down to text."""
+    parts = msg.walk() if msg.is_multipart() else [msg]
+    plain, html = "", ""
+    for part in parts:
+        if part.get("Content-Disposition", "").startswith("attachment"):
+            continue
+        ctype = part.get_content_type()
+        if ctype == "text/plain" and not plain:
+            plain = _decoded(part)
+        elif ctype == "text/html" and not html:
+            html = _decoded(part)
+    if plain.strip():
+        return plain
+    return html_to_text(html) if html else ""
 
 
 def cmd_import_mbox(args) -> int:
