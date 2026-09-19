@@ -784,6 +784,7 @@ def cmd_check_overlay(args) -> int:
 # the judgment-only rules that apply to this surface, the instructions, the
 # output schema, and a hash of every input.
 PROFILE_FILES = ("Voice_Profile.md", "voice-rules.md", "voice-authoring.md")
+OPTIONAL_PROFILE_FILES = ("Voice_Profile.measured.md",)  # the numbers view, fingerprint.py prose; carried when present
 
 JUDGMENT_RULES = {
     "always": [
@@ -859,7 +860,7 @@ def _profile_dir(explicit: str | None) -> str | None:
 
 def build_pack(path: str, surface: str, config: str | None, decisions_path: str | None,
                root: str | None, profile_dir: str | None, surfaces_map: str | None,
-               inline_profile: bool = True, structure: bool = True) -> dict:
+               inline_profile: bool = True, structure: bool = True, measured: str | None = None) -> dict:
     cfg, info = load_layers(surface, config, surfaces_map)
     text = read_source(path)
     findings, suppressed = run_text(text, cfg, structure=structure, density=False)
@@ -877,9 +878,13 @@ def build_pack(path: str, surface: str, config: str | None, decisions_path: str 
         findings.append(d)
     pdir = _profile_dir(profile_dir)
     profile = {"dir": pdir or "", "files": {}}
-    for name in PROFILE_FILES:
+    for name in PROFILE_FILES + OPTIONAL_PROFILE_FILES:
         p = os.path.join(pdir, name) if pdir else ""
+        if name in OPTIONAL_PROFILE_FILES and measured:
+            p = measured  # the numbers view can live elsewhere (a private folder) and be named explicitly
         entry = {"path": p, "present": bool(p and os.path.exists(p))}
+        if name in OPTIONAL_PROFILE_FILES and not entry["present"]:
+            continue
         if entry["present"]:
             body = open(p, encoding="utf-8", errors="replace").read()
             entry["sha256"] = _hash(body)
@@ -957,7 +962,8 @@ def render_prompt(pack: dict) -> str:
 
 def cmd_review_pack(args) -> int:
     pack = build_pack(args.file, args.surface, args.config, args.decisions, args.root, args.profile_dir,
-                      args.surfaces, inline_profile=not args.no_profile_text, structure=not args.no_structure)
+                      args.surfaces, inline_profile=not args.no_profile_text, structure=not args.no_structure,
+                      measured=args.measured)
     if args.out:
         os.makedirs(args.out, exist_ok=True)
         with open(os.path.join(args.out, "pack.json"), "w", encoding="utf-8") as fh:
@@ -1314,6 +1320,7 @@ def main(argv=None) -> int:
     prp.add_argument("--decisions")
     prp.add_argument("--root")
     prp.add_argument("--profile-dir", help="where Voice_Profile.md and its companions live (default: PHERKAD_PROFILE, the repo root, or the working directory)")
+    prp.add_argument("--measured", metavar="FILE", help="the measured profile view (fingerprint.py prose --out), carried in the packet as Voice_Profile.measured.md")
     prp.add_argument("--no-profile-text", action="store_true", help="reference the profile files by path and hash only")
     prp.add_argument("--no-structure", action="store_true")
     prp.add_argument("--format", choices=["prompt", "json"], default="prompt")
