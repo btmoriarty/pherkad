@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.5.33 (2026-09-18)
+
+Roadmap item 25: authoring on demand from the numbers.
+
+- **`pherkad.py author NOTES --surface S --fingerprint F [--reference R] [--samples DIR] [--profile-dir D] [--runner CMD] [--rounds N] [--out FILE]`** (`author.py`). The packet: the surface and its guidance; the fingerprint's numbers for that surface written as instructions (sentence length band and median, short and long shares, paragraph size, opener rates and common first words, punctuation per sentence with dashes and semicolons named absent where they are, contraction and question rates, the constructions the author rarely or never uses, the function words used more and less than the reference); the archetype from `Voice_Profile.md`; the three hand-written samples nearest the notes in subject (content-word cosine, 80 to 450 words); the notes. Without a runner it prints the packet. With one, the runner drafts, the draft is scored (mechanical check, discriminant, deviating features), the findings go back as revision instructions up to `--rounds` times, and the best draft is kept (no errors first, then the discriminant, then fewer warnings) with its record in `<out>.author.json`.
+- **`eval/author_pilot.py`**: the test the feature has to pass. For each held-out piece, the runner extracts the facts as terse notes, writes one draft from a bare prompt and one from the packet, and both are scored against the real piece; a blind pairs sheet asks the author which reads as his. First run on the eight held-out work emails (claude-sonnet-5, one revision round): the packet's drafts sat nearer the author than the bare prompt's on 5 of 8 (mean discriminant +0.06 against +0.03; the real emails +0.08), and carried 0 mechanical errors against the bare prompt's 8. The blind reading is pending; the feature stays while it wins there.
+- Four tests (`test_author.py`).
+- `VERSION` 0.5.33.
+
 ## v0.5.32 (2026-09-18)
 
 Roadmap item 24: the author's edits as evidence.
