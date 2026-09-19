@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.5.30 (2026-09-18)
+
+From importing two Gmail accounts (1,339 and 6,252 sent messages) into the author's private samples folder.
+
+- **`samples.py import-mbox` reads HTML-only bodies down to text** (block tags to line breaks, other tags dropped, entities decoded) instead of taking the raw markup; 99 of the older account's messages had come through with `<div>` tags in them and were re-imported clean. One test.
+- Two findings recorded in the private provenance rule, both measured on the held-out 2025 to 2026 work mail: personal mail pooled with work mail lowered the check from 16 of 16 to 14 of 16, and mail from before 2015 lowered it to 13 of 16, so each is its own surface (`email-personal`, `email-early`) and `email` is work mail from 2015 on. A register is a surface; the numbers say where the lines are.
+- `VERSION` 0.5.30.
+
 ## v0.5.29 (2026-09-17)
 
 Roadmap item 22 and the first measured result. Brian's sent mail (an Apple Mail export of the Stevens account) went into the private samples folder: 231 messages, 34,969 hand-written words, after `import-mbox` learned to drop calendar invitations and auto-replies, Outlook's angle-bracket link targets, and bodies over 800 words (pasted documents, not typed mail).

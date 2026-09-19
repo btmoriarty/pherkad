@@ -1,8 +1,8 @@
 {
   "tool": "pherkad",
-  "version": "0.5.29",
+  "version": "0.5.30",
   "schema": 1,
-  "generated": "2026-09-17",
+  "generated": "2026-09-18",
   "required": [
     "pherkad.py",
     "voicelint.py",
@@ -20,7 +20,7 @@
     "replycheck-hook.py": "74af116bb1a487db85633ba78b7067ec9f79446afcaf074d1f89cb65a4b99c45",
     "corpusscan.py": "18dc0f3264b0f08e19b93ef3b05e70c891a9c0ee4a6ee0644b24713b639af6c3",
     "corrections.py": "a3ed804826a3f9a0901e65182ecff958fe4c31f982066f40d7841d5810aee6a0",
-    "samples.py": "1e03a3a98a14f194df1fb2951f7180fce38ddab161c3fb8665187460993ed014",
+    "samples.py": "a9d5a91c3992a18e30ea3b3d01181b43dc175d2cfffd00762fdc59edc826eecc",
     "fingerprint.py": "b963ca1c8a41c26a8395fb5519fa91ff01604bb9bdf978dbc66b96442417b5ea",
     "surfaces/assistant-chat.json": "ca9d9721df2513a8d40a2f4351f1f7c7713fdff8da6c8c1ecca1813858a72224",
     "surfaces/email.json": "25d23c7f262a00f698377edde3da75008cc9016797227baab431e886d8cd6cac",
