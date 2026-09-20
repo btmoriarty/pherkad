@@ -92,14 +92,14 @@
     },
     {
       "id": "banned.markdown-link",
-      "pattern": "re:\\[[^\\]\\n]+\\]\\([^)\\n]+\\)",
-      "since": "2026-09-15",
-      "rationale": "no markdown links in chat; print the full absolute path",
+      "pattern": "re:\\[[^\\]\\n]+\\]\\((?:https?://|/Users/|~/)[^)\\n]+\\)",
+      "since": "2026-09-20",
+      "rationale": "in the desktop app a link is what Brian wants (2026-09-20: 'need link'); it must be relative to the working directory, so an absolute-path, ~ or http link in the target is the miss. Terminal sessions print the absolute path instead.",
       "fires": [
-        "Edit [the config](tools/voice_config.json) first."
+        "Edit [the config](/Users/moriarty/Documents/kochab/pherkad/skills/pherkad/tools/voice_config.json) first."
       ],
       "clean": [
-        "Edit /Users/moriarty/Documents/kochab/pherkad/skills/pherkad/tools/voice_config.json first."
+        "Edit [the config](Documents/kochab/pherkad/skills/pherkad/tools/voice_config.json) first."
       ]
     },
     {
