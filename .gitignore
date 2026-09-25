@@ -10,8 +10,10 @@ eval/data/
 # Local working junk; never commit these (added 2026-08-21 after a git add -A
 # swept 140 of them into a push).
 _to_delete/
-*.bak
-*.bak[0-9]
+# Any backup, however it is suffixed. The narrower *.bak and *.bak[0-9] let
+# voice-rules.md.bak_2026-09-01_pre-rubberstamp and voice_config.json.bak-20260904
+# reach a public repo; both are removed as of 2026-09-25.
+*.bak*
 pherkad.rebuilt.skill
 voicelint-land-heuristic.json
 skills/pherkad/tools/sample.md
