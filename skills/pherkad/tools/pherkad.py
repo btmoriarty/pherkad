@@ -206,18 +206,27 @@ def resolve_surface(name: str, map_path: str | None = None) -> dict:
             "guidance": guidance, "excerpts": excerpts, "from_map": bool(entry)}
 
 
+def project_overlay(config: str | None) -> str | None:
+    """The project or personal overlay: ``--config`` when given, otherwise the
+    one voicelint finds on its own (``./voice_config.json``, then the one beside
+    the profile in ``PHERKAD_PROFILE``). Naming a surface does not turn the
+    lookup off."""
+    return config or voicelint.implicit_overlay()
+
+
 def load_layers(surface: str | None, config: str | None, map_path: str | None = None) -> tuple[dict, dict | None]:
     """The effective config: shipped base, then the surface's overlay, then the
-    project overlay, in that order. Returns (cfg, surface info or None)."""
+    project overlay (:func:`project_overlay`), in that order. Returns (cfg,
+    surface info or None)."""
     info = resolve_surface(surface, map_path) if surface else None
-    cfg = voicelint.load_config(info["overlay"] if info and info["overlay"] else None)
-    if config:
-        if info and info["overlay"] and os.path.exists(config) and os.path.samefile(config, info["overlay"]):
-            return cfg, info
-        ov = voicelint._read_json(config, "config")
+    surface_ov = info["overlay"] if info and info["overlay"] else None
+    project = project_overlay(config)
+    if not surface_ov:
+        return voicelint.load_config(project), info
+    cfg = voicelint.load_config(surface_ov)
+    if project and not (os.path.exists(project) and os.path.samefile(project, surface_ov)):
+        ov = voicelint._read_json(project, "config")
         cfg = voicelint._apply_list_ops(voicelint._deep_merge(cfg, ov))
-    elif not info:
-        cfg = voicelint.load_config(None)
     return cfg, info
 
 
@@ -523,7 +532,7 @@ def cmd_check(args) -> int:
         except (OSError, ValueError) as exc:
             sys.stderr.write(f"pherkad: fingerprint: {exc}\n")
             return 2
-    overlay = args.config or (surface["overlay"] if surface else None)
+    overlay = project_overlay(args.config) or (surface["overlay"] if surface else None)
     advisory = args.advisory or []
     seen = set()
     files = [f for f in args.files if not (f in seen or seen.add(f))]
@@ -913,7 +922,7 @@ def build_pack(path: str, surface: str, config: str | None, decisions_path: str 
         "surface": {"name": info["name"] if info else "", "speaker": speaker, "positive_register": register,
                     "guidance": info["guidance"] if info else "", "overlay": info["overlay"] if info else "",
                     "excerpts": excerpts},
-        "project_overlay": config or "", "config_sha256": config_sha256(cfg),
+        "project_overlay": project_overlay(config) or "", "config_sha256": config_sha256(cfg),
         "profile": profile,
         "source": {"path": path, "sha256": _hash(text), "words": len(re.findall(r"\w+", text)), "text": text},
         "mechanical": {"findings": findings, "suppressed": suppressed,

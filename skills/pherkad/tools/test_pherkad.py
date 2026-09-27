@@ -13,6 +13,8 @@ import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+# A personal overlay beside the tester's own profile must not leak into the suite.
+os.environ.pop("PHERKAD_PROFILE", None)
 
 import pherkad  # noqa: E402
 import voicelint  # noqa: E402
@@ -529,6 +531,22 @@ class Surfaces(unittest.TestCase):
         code, out, _ = run(["check", "--surface", "technical", "--config", ov, self.clean])
         self.assertEqual(code, 1, "the project ban applies on top of the surface")
         self.assertIn("0 warning(s)", out, "and the surface's filler removals still hold")
+
+    def test_surface_keeps_the_implicit_overlay(self):
+        # Naming a surface must not drop the personal overlay found on its own,
+        # in the working directory or beside the profile in PHERKAD_PROFILE.
+        prof = os.path.join(self.d, "profile")
+        os.makedirs(prof)
+        json.dump({"add_banned_phrases": ["robust result"]}, open(os.path.join(prof, "voice_config.json"), "w"))
+        for cwd, env in ((prof, {}), (self.d, {"PHERKAD_PROFILE": prof})):
+            with self.subTest(cwd=cwd, env=env):
+                proc = subprocess.run([sys.executable, SCRIPT, "check", "--surface", "technical",
+                                       "--format", "json", self.clean],
+                                      cwd=cwd, env=dict(os.environ, **env), capture_output=True, text=True)
+                self.assertEqual(proc.returncode, 1, "the personal ban applies on top of the surface")
+                report = json.loads(proc.stdout)
+                self.assertEqual(os.path.realpath(report["overlay"]),
+                                 os.path.realpath(os.path.join(prof, "voice_config.json")))
 
     def test_slides_threshold_comes_from_the_surface(self):
         heads = "\n\n".join(["# D"] + [f"## What thing {i} does" for i in range(2)] + [f"## Section {i}" for i in range(7)])
