@@ -7,7 +7,8 @@ The personal overlay is found where the profile builder saves it, and a surface 
 - **`voicelint.implicit_overlay()`**: without `--config`, the overlay is `./voice_config.json`, else `voice_config.json` in the folder `PHERKAD_PROFILE` names. The profile builder saves the personal config beside `Voice_Profile.md`; before this, it was read only when the run happened to start in that folder.
 - **`pherkad.py` keeps the implicit overlay under `--surface`.** `load_layers` applied the working-directory overlay only when no surface was named, so `check --surface post`, the command Quick mode runs, silently used the shipped rules alone. The order is now base, surface overlay, then the project overlay (`--config`, else the implicit one). With no surface and `--config` given, the working-directory overlay is no longer merged underneath it, matching `voicelint.py`. `check --format json` and `review-pack` record the overlay actually used.
 - No rule changed, so no corpus count. The test suites drop `PHERKAD_PROFILE` from their environment so a tester's own overlay cannot leak in. Two tests.
-- `VERSION` 0.5.34; manifest hashes for `pherkad.py` and `voicelint.py`.
+- **The tests follow the 2026-09-20 change to `banned.markdown-link`** (chat links relative to the working directory are wanted; only absolute, `~` or http targets fire). Three tests still asserted the old any-link ban and failed on `main`; they now check an absolute and an http target fire and a relative one does not. `docs/reply-preflight.md` describes the rule as it is.
+- `VERSION` 0.5.34; manifest hashes for `pherkad.py`, `voicelint.py`, and `surfaces/assistant-chat.json` (the last had not been refreshed after the 2026-09-20 change, so `manifest --verify` failed on `main`).
 
 ## v0.5.33 (2026-09-18)
 
