@@ -20,7 +20,7 @@ patterns=(
   '(^|/)pack\.json$'
   '(^|/)prompt\.md$'
   '\.author\.json$'
-  '^eval/data/'
+  '^eval/data(/|$)'
   '^_to_delete/'
   '\.bak'
 )

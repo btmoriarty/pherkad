@@ -5,7 +5,7 @@ voice-authoring.md
 voice-intake.md
 
 # Voice-eval study data (real writers samples/profiles stay local)
-eval/data/
+eval/data
 
 # Local working junk; never commit these (added 2026-08-21 after a git add -A
 # swept 140 of them into a push).
