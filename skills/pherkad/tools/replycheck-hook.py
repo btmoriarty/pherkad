@@ -12,6 +12,13 @@ Bounded repair: Claude Code sets ``stop_hook_active`` when the assistant is
 already continuing because of a stop hook. That run is allowed through, so a
 reply gets exactly one enforced revision and can never loop.
 
+Headless runs are skipped. A `claude -p` call from a script inherits the user
+settings and so this hook; blocking it makes the model rewrite output a program
+will parse (2026-09-17 to 09-20 it rewrote verbatim evidence quotes in 90
+course-kg extractions). Such a turn is opened by a user row whose
+``turnOrigin`` is ``sdk``; a person's turn in the desktop app or terminal is
+``human``, and task notifications and peer messages are still checked.
+
 Errors block. Warnings are printed with the block when there is one and are
 otherwise silent, unless REPLYCHECK_STRICT=1, in which case they block too.
 Structural findings never block from here. A hook that cannot read the
@@ -40,6 +47,13 @@ def last_reply_text(transcript_path: str) -> str:
     """The text blocks of the assistant turn that just ended: every assistant
     text block after the last real user message (a user entry whose content is
     not only tool results), in order."""
+    return last_turn(transcript_path)[0]
+
+
+def last_turn(transcript_path: str) -> tuple[str, str | None]:
+    """The reply text of the turn that just ended, and the ``turnOrigin`` of
+    the user message that opened it (``human``, ``sdk``, ... or None when the
+    transcript does not record one)."""
     rows = []
     with open(transcript_path, encoding="utf-8", errors="replace") as fh:
         for line in fh:
@@ -51,6 +65,7 @@ def last_reply_text(transcript_path: str) -> str:
             except json.JSONDecodeError:
                 continue
     texts: list[str] = []
+    origin = None
     for d in reversed(rows):
         t = d.get("type")
         if t not in ("user", "assistant") or d.get("isSidechain"):
@@ -60,6 +75,7 @@ def last_reply_text(transcript_path: str) -> str:
             if isinstance(content, list) and content and all(
                     isinstance(b, dict) and b.get("type") == "tool_result" for b in content):
                 continue  # a tool result, not the human
+            origin = d.get("turnOrigin")
             break
         if isinstance(content, str):
             texts.append(content)
@@ -68,7 +84,7 @@ def last_reply_text(transcript_path: str) -> str:
                 if isinstance(b, dict) and b.get("type") == "text" and b.get("text"):
                     texts.append(b["text"])
     texts.reverse()
-    return "\n\n".join(texts)
+    return "\n\n".join(texts), origin
 
 
 def main() -> int:
@@ -84,10 +100,12 @@ def main() -> int:
         sys.stderr.write("replycheck-hook: no transcript; not checked\n")
         return 0
     try:
-        text = last_reply_text(path)
+        text, origin = last_turn(path)
     except OSError as exc:
         sys.stderr.write(f"replycheck-hook: cannot read transcript ({exc}); not checked\n")
         return 0
+    if origin == "sdk":
+        return 0  # a headless `claude -p` run: its output feeds a program, not a reader
     if not text.strip():
         return 0
 

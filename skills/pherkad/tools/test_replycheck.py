@@ -166,6 +166,24 @@ class StopHook(unittest.TestCase):
         p = self.transcript(self.user("go"), self.assistant({"type": "text", "text": "Done, committed as abc123."}))
         self.assertEqual(hook({"transcript_path": p, "stop_hook_active": False})[0], 0)
 
+    def test_skips_a_headless_run(self):
+        # A `claude -p` call from a script opens its turn with turnOrigin "sdk";
+        # its output feeds a program, so the hook must not make it rewrite.
+        row = dict(self.user("extract"), turnOrigin="sdk")
+        p = self.transcript(row, self.assistant({"type": "text", "text": "That is the part that matters."}))
+        self.assertEqual(hook({"transcript_path": p, "stop_hook_active": False})[0], 0)
+
+    def test_still_checks_a_human_turn_after_a_headless_one(self):
+        rows = (dict(self.user("extract"), turnOrigin="sdk"), self.assistant({"type": "text", "text": "{}"}),
+                dict(self.user("go"), turnOrigin="human"),
+                self.assistant({"type": "text", "text": "That is the part that matters."}))
+        self.assertEqual(hook({"transcript_path": self.transcript(*rows), "stop_hook_active": False})[0], 2)
+
+    def test_still_checks_a_task_notification_turn(self):
+        row = dict(self.user("<task-notification>done</task-notification>"), turnOrigin="task_notification")
+        p = self.transcript(row, self.assistant({"type": "text", "text": "That is the part that matters."}))
+        self.assertEqual(hook({"transcript_path": p, "stop_hook_active": False})[0], 2)
+
     def test_one_enforced_revision_only(self):
         p = self.transcript(self.user("go"), self.assistant({"type": "text", "text": "That is the part that matters."}))
         self.assertEqual(hook({"transcript_path": p, "stop_hook_active": True})[0], 0)
