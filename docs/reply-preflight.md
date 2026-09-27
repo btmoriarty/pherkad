@@ -12,7 +12,7 @@ reads a drafted reply on stdin (or a file path), runs voicelint under the `assis
 
 ```
 3:1 [error] honest-framing: 'the honest X' performs candour instead of exercising it; cut it and say the thing  ->  'The honest answer'
-3:51 [error] banned.markdown-link: canned phrase: 'no markdown links in chat; print the full absolute path'  ->  '[the diff](docs/x.md)'
+3:51 [error] banned.markdown-link: canned phrase: 'in the desktop app a link is what Brian wants (...); it must be relative to the working directory, ...'  ->  '[the diff](/Users/moriarty/x.md)'
 1 [advisory] structure.staccato: 3 short sentences in a row; merge them  ->  'Done. Tests pass. Committed.'
 replycheck: FIX (2 error(s), 0 warning(s), 1 structural advisory; surface assistant-chat)
 ```
@@ -28,7 +28,7 @@ replycheck: FIX (2 error(s), 0 warning(s), 1 structural advisory; surface assist
 | `banned.pointer-*` | the demonstrative pointer: `that is the part that`, `that's the thing that`, `that is the detail that` |
 | `banned.worth-noting`, `banned.worth-saying` | announcing instead of delivering |
 | `banned.question-praise-*` | `great question`, `good question`, `fair question` |
-| `banned.markdown-link` | any `[text](target)`; chat prints full absolute paths |
+| `banned.markdown-link` | a `[text](target)` whose target is absolute, `~` or http; links relative to the working directory are wanted in the desktop app |
 | `banned.tilde-path` | `~/...`; full absolute paths, never a tilde |
 | `banned.section-sign` | the symbol; write `section 5` |
 | `soft.plainly-tag` | `to put it plainly`, `state it plainly` |
