@@ -123,16 +123,20 @@ SPEAKERS = ("assistant", "author")
 REGISTERS = ("no", "profile", "frame", "yes", "own-voice-document")
 
 
-def _user_map_path(explicit: str | None) -> str | None:
-    for cand in (explicit, os.environ.get("PHERKAD_SURFACES"), os.path.join(os.getcwd(), "surfaces.json")):
+def _user_map_path(explicit: str | None, cwd: bool = True) -> str | None:
+    """The user surface map: --surfaces, then PHERKAD_SURFACES, then (unless
+    cwd is False) ./surfaces.json. The Stop hook passes cwd=False, so a file in
+    whatever folder a session runs in cannot redirect or disable its check."""
+    for cand in (explicit, os.environ.get("PHERKAD_SURFACES"),
+                 os.path.join(os.getcwd(), "surfaces.json") if cwd else None):
         if cand and os.path.exists(cand):
             return cand
     return None
 
 
-def load_surface_map(explicit: str | None = None) -> tuple[dict, str | None]:
+def load_surface_map(explicit: str | None = None, cwd: bool = True) -> tuple[dict, str | None]:
     """The user's surface map (name -> entry) and where it came from."""
-    path = _user_map_path(explicit)
+    path = _user_map_path(explicit, cwd)
     if not path:
         return {}, None
     try:
@@ -153,14 +157,15 @@ def shipped_surfaces() -> list[str]:
     return sorted(f[:-5] for f in os.listdir(SURFACES) if f.endswith(".json"))
 
 
-def resolve_surface(name: str, map_path: str | None = None) -> dict:
+def resolve_surface(name: str, map_path: str | None = None, cwd: bool = True) -> dict:
     """A surface's overlay path, speaker, register, guidance, and excerpts.
     A path (or something ending in .json) is taken as an overlay file with
-    its own optional _surface block."""
-    user_map, map_file = load_surface_map(map_path)
+    its own optional _surface block, and no user map is read for it."""
+    is_path = os.path.sep in name or name.endswith(".json")
+    user_map, map_file = ({}, None) if is_path else load_surface_map(map_path, cwd)
     base_dir = os.path.dirname(os.path.abspath(map_file)) if map_file else os.getcwd()
     entry = {}
-    if os.path.sep in name or name.endswith(".json"):
+    if is_path:
         overlay = name
         if not os.path.exists(overlay):
             sys.stderr.write(f"pherkad: no surface file at {overlay}\n")
@@ -206,10 +211,11 @@ def resolve_surface(name: str, map_path: str | None = None) -> dict:
             "guidance": guidance, "excerpts": excerpts, "from_map": bool(entry)}
 
 
-def load_layers(surface: str | None, config: str | None, map_path: str | None = None) -> tuple[dict, dict | None]:
+def load_layers(surface: str | None, config: str | None, map_path: str | None = None,
+                cwd: bool = True) -> tuple[dict, dict | None]:
     """The effective config: shipped base, then the surface's overlay, then the
     project overlay, in that order. Returns (cfg, surface info or None)."""
-    info = resolve_surface(surface, map_path) if surface else None
+    info = resolve_surface(surface, map_path, cwd) if surface else None
     cfg = voicelint.load_config(info["overlay"] if info and info["overlay"] else None)
     if config:
         if info and info["overlay"] and os.path.exists(config) and os.path.samefile(config, info["overlay"]):

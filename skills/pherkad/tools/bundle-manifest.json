@@ -1,6 +1,6 @@
 {
   "tool": "pherkad",
-  "version": "0.5.34",
+  "version": "0.5.35",
   "schema": 1,
   "generated": "2026-09-27",
   "required": [
@@ -11,13 +11,13 @@
     "voice_config.json"
   ],
   "files": {
-    "pherkad.py": "bbacd5dfcc80dfa13499cd1abe7717687d34ce72e31fedbf9e690887f99de64f",
+    "pherkad.py": "16e9aed215204e279f1eb9b1c5a0f610356182ea2fc46c20ad592bf8057fb8da",
     "voicelint.py": "1268e6557034204df99179b02c10dca80063270b61760c9faa5d3e0f2d80053f",
     "structlint.py": "b7f782422a9fb294bed9399fd03fa8f2345eb8f60168158d43d22886b7dbc950",
     "mdmask.py": "a6bc483a2bccc0559d8bbfd408c471b14d45b345fc47aad91ca9cdec250bfe41",
     "voice_config.json": "2c9c8f13e0d98748a29d4a9230879294646171883361b4629486f61d549ce507",
-    "replycheck.py": "d60dd1fc2fb43a4588fdf84bccf9bcca645e32ef21b3d1dd4204ef1d80463bb6",
-    "replycheck-hook.py": "9934187d9d95d46eb00851bba3bac6790e86ffac17483d28c7b36eeaead1bc47",
+    "replycheck.py": "f07add361a6e4b01fd5fe70caf7fecd8ebaa9e1ebe518607ef341b7f5a8f082c",
+    "replycheck-hook.py": "e43bb0ee0d066f3b5e8b1bd5c79498aa3f1255a2a0f8d8ee2a23c582e4fa94d3",
     "corpusscan.py": "18dc0f3264b0f08e19b93ef3b05e70c891a9c0ee4a6ee0644b24713b639af6c3",
     "corrections.py": "63977f7db53509e63e0c73b9d7c876904ba26be0490b08b59c403b40dd444251",
     "samples.py": "3cca260abed915ef1811c8eed1532181c238b9df6e2785463f7487ac4c254541",

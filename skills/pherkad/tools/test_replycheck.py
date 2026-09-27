@@ -214,9 +214,88 @@ class StopHook(unittest.TestCase):
         self.assertEqual(hook({"transcript_path": p, "stop_hook_active": False}, {"REPLYCHECK_STRICT": "1"})[0], 2)
 
     def test_never_wedges_on_a_bad_payload(self):
-        self.assertEqual(hook({"transcript_path": "/no/such/file"})[0], 0)
         proc = subprocess.run([sys.executable, HOOK], input="not json", capture_output=True, text=True)
         self.assertEqual(proc.returncode, 0)
+
+    # Wave 1 (2026-09-27): the hook never passes a reply in silence.
+    BAD = "That is the part that matters."
+
+    def run_hook(self, payload, env=None, cwd=None, hook_path=HOOK):
+        e = dict(os.environ)
+        e.update(env or {})
+        return subprocess.run([sys.executable, hook_path], input=json.dumps(payload),
+                              capture_output=True, text=True, env=e, cwd=cwd)
+
+    def test_missing_transcript_blocks_once_as_unchecked(self):
+        p = self.run_hook({"transcript_path": "/no/such/file", "stop_hook_active": False})
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("did not run", p.stderr)
+        p = self.run_hook({"transcript_path": "/no/such/file", "stop_hook_active": True})
+        self.assertEqual(p.returncode, 0, "never a second block")
+        self.assertIn("did not run", json.loads(p.stdout)["systemMessage"])
+
+    def test_broken_overlay_blocks_once_as_unchecked(self):
+        bad = os.path.join(self.tmp.name, "broken.json")
+        open(bad, "w").write("{ not json")
+        t = self.transcript(self.user("go"), self.assistant({"type": "text", "text": self.BAD}))
+        p = self.run_hook({"transcript_path": t, "stop_hook_active": False}, {"REPLYCHECK_SURFACE": bad})
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("did not run", p.stderr)
+
+    def test_missing_sibling_blocks_once_as_unchecked(self):
+        alone = os.path.join(self.tmp.name, "alone")
+        os.makedirs(alone)
+        import shutil
+        lone = shutil.copy(HOOK, alone)
+        t = self.transcript(self.user("go"), self.assistant({"type": "text", "text": "Done."}))
+        p = self.run_hook({"transcript_path": t, "stop_hook_active": False}, hook_path=lone)
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("cannot load replycheck", p.stderr)
+
+    def test_the_revision_is_still_checked(self):
+        t = self.transcript(self.user("go"), self.assistant({"type": "text", "text": self.BAD}))
+        p = self.run_hook({"transcript_path": t, "stop_hook_active": True})
+        self.assertEqual(p.returncode, 0, "the one enforced revision never blocks again")
+        self.assertIn("banned.pointer-that-is-the-part-that", json.loads(p.stdout)["systemMessage"])
+
+    def test_a_meta_row_is_not_the_turn_boundary(self):
+        meta = dict(self.user("[Image: 800x600]"), isMeta=True)
+        t = self.transcript(self.user("go"), self.assistant({"type": "text", "text": self.BAD}),
+                            meta, self.assistant({"type": "text", "text": "Done."}))
+        self.assertEqual(self.run_hook({"transcript_path": t, "stop_hook_active": False}).returncode, 2)
+
+    def test_checks_the_last_message_not_yet_in_the_transcript(self):
+        t = self.transcript(self.user("go"), self.assistant({"type": "text", "text": "Done."}))
+        p = self.run_hook({"transcript_path": t, "stop_hook_active": False, "last_assistant_message": self.BAD})
+        self.assertEqual(p.returncode, 2)
+
+    def test_a_surfaces_map_in_the_working_folder_is_ignored(self):
+        work = os.path.join(self.tmp.name, "project")
+        os.makedirs(work)
+        relaxed = os.path.join(work, "relaxed.json")
+        json.dump({"_surface": {"speaker": "assistant"}, "banned_phrases": []}, open(relaxed, "w"))
+        json.dump({"assistant-chat": {"overlay": relaxed}}, open(os.path.join(work, "surfaces.json"), "w"))
+        t = self.transcript(self.user("go"), self.assistant({"type": "text", "text": self.BAD}))
+        env = {k: "" for k in ("PHERKAD_SURFACES",)}
+        p = self.run_hook({"transcript_path": t, "stop_hook_active": False}, env, cwd=work)
+        self.assertEqual(p.returncode, 2, "a project folder cannot relax the chat check")
+        open(os.path.join(work, "surfaces.json"), "w").write("{ broken")
+        p = self.run_hook({"transcript_path": t, "stop_hook_active": False}, env, cwd=work)
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("banned.pointer-that-is-the-part-that", p.stderr, "nor switch it off")
+
+    def test_a_reply_cannot_exempt_itself(self):
+        for text in (self.BAD + " <!-- voicelint: ignore-line -->", "> " + self.BAD):
+            with self.subTest(text=text):
+                t = self.transcript(self.user("go"), self.assistant({"type": "text", "text": text}))
+                self.assertEqual(self.run_hook({"transcript_path": t, "stop_hook_active": False}).returncode, 2)
+
+    def test_a_directive_named_in_code_is_not_one(self):
+        # naming the syntax in backticks is the safe way to mention it
+        for text in ("Every directive begins `<!-- voicelint`.", "```\n<!-- voicelint: ignore-line -->\n```"):
+            with self.subTest(text=text):
+                t = self.transcript(self.user("go"), self.assistant({"type": "text", "text": text}))
+                self.assertEqual(self.run_hook({"transcript_path": t, "stop_hook_active": False}).returncode, 0)
 
 
 if __name__ == "__main__":

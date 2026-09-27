@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -39,6 +40,7 @@ sys.path.insert(0, HERE)
 
 import voicelint  # noqa: E402
 import pherkad  # noqa: E402
+import mdmask  # noqa: E402
 
 SURFACES = os.path.join(HERE, "surfaces")
 DEFAULT_SURFACE = "assistant-chat"
@@ -54,15 +56,42 @@ def surface_path(name: str) -> str:
     return info["overlay"]
 
 
-def check_reply(text: str, surface: str = DEFAULT_SURFACE, structure: bool = True) -> dict:
+_DIRECTIVE = re.compile(r"<!--(\s*)(voicelint|structlint)", re.IGNORECASE)
+_BLOCKQUOTE = re.compile(r"(?m)^([ \t]{0,3})>[ \t]?")
+
+
+def unshield(text: str) -> tuple[str, list[dict]]:
+    """A reply the assistant wrote cannot exempt itself. Its voicelint and
+    structlint directives are made inert and each is reported as an error,
+    and its blockquote markers are dropped so quoted lines are linted like any
+    other. To mention a banned phrase, a reply quotes it in backticks, which
+    stay masked, so a directive named in a code span or fence is not one."""
+    findings = []
+    live = list(_DIRECTIVE.finditer(mdmask.mask(text, ("code",))))  # same offsets, code blanked
+    for m in live:
+        line = text.count("\n", 0, m.start()) + 1
+        findings.append({"line": line, "col": m.start() - (text.rfind("\n", 0, m.start()) + 1) + 1,
+                         "severity": "error", "rule": "directive", "rule_id": "directive.in-reply",
+                         "match": m.group(0), "engine": "voice",
+                         "message": "a reply cannot carry a linter directive; it would exempt itself"})
+    for m in reversed(live):
+        text = text[:m.start()] + "<!--" + m.group(1) + "inert-" + m.group(2) + text[m.end():]
+    return _BLOCKQUOTE.sub(r"\1", text), findings
+
+
+def check_reply(text: str, surface: str = DEFAULT_SURFACE, structure: bool = True, cwd: bool = True) -> dict:
     """Run both scanners over ``text`` and return the result as a dict:
-    surface, verdict, errors, warnings, findings (voicelint), structure (structlint)."""
-    cfg, _info = pherkad.load_layers(surface, None)
+    surface, verdict, errors, warnings, findings (voicelint), structure (structlint).
+    cwd=False ignores a surfaces.json in the working directory (the Stop hook)."""
+    cfg, info = pherkad.load_layers(surface, None, cwd=cwd)
+    shield_findings = []
+    if (info or {}).get("speaker") == "assistant":
+        text, shield_findings = unshield(text)
     # One run of both engines (pherkad.run_text), then split by engine: the
     # voice findings decide the verdict, the structural ones are advisory.
     # A reply is short, so the combined density never applies and is dropped.
     all_findings, suppressed = pherkad.run_text(text, cfg, structure=structure)
-    findings = [f for f in all_findings if f["engine"] == "voice"]
+    findings = shield_findings + [f for f in all_findings if f["engine"] == "voice"]
     structural = [f for f in all_findings if f["engine"] == "structure"]
     errors = sum(f["severity"] == "error" for f in findings)
     warnings = sum(f["severity"] == "warning" for f in findings)
