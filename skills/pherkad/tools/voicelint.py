@@ -359,6 +359,23 @@ def _read_json(path: str, what: str) -> dict:
     return cfg
 
 
+def implicit_overlay() -> str | None:
+    """The personal overlay used when no ``--config`` is given.
+
+    ``./voice_config.json`` in the working directory first, then
+    ``voice_config.json`` in the folder ``PHERKAD_PROFILE`` names, which is
+    where the profile builder saves the personal config beside
+    ``Voice_Profile.md``. The shipped base is never its own overlay."""
+    dirs = [os.getcwd()]
+    if os.environ.get("PHERKAD_PROFILE"):
+        dirs.append(os.environ["PHERKAD_PROFILE"])
+    for d in dirs:
+        cand = os.path.join(d, "voice_config.json")
+        if os.path.exists(cand) and not os.path.samefile(cand, DEFAULTS_PATH):
+            return cand
+    return None
+
+
 def load_config(path: str | None, base: str | None = None) -> dict:
     """Load the effective rule set: the shipped defaults, then one user overlay.
 
@@ -366,7 +383,8 @@ def load_config(path: str | None, base: str | None = None) -> dict:
     missing the run stops with exit 2; a linter that quietly runs with fewer
     rules is worse than one that refuses to run. The overlay is ``--config``
     when given, otherwise ``./voice_config.json`` in the working directory when
-    that is a different file from the base. The overlay is deep-merged onto the
+    that is a different file from the base, otherwise the one beside the voice
+    profile named by ``PHERKAD_PROFILE`` (see :func:`implicit_overlay`). The overlay is deep-merged onto the
     base: unlisted top-level fields and unlisted nested keys inherit, listed
     objects merge key by key, listed arrays replace, and add_/remove_ keys amend
     a shipped list without restating it. ``--print-config`` shows the result.
@@ -384,11 +402,7 @@ def load_config(path: str | None, base: str | None = None) -> dict:
               "voice_config.json must sit beside voicelint.py")
     base_cfg = _apply_list_ops(_read_json(base_path, "shipped rule set"))
 
-    overlay = path
-    if not overlay:
-        cwd_cfg = os.path.join(os.getcwd(), "voice_config.json")
-        if os.path.exists(cwd_cfg) and not os.path.samefile(cwd_cfg, DEFAULTS_PATH):
-            overlay = cwd_cfg
+    overlay = path or implicit_overlay()
     if not overlay or (os.path.exists(overlay) and os.path.samefile(overlay, base_path)):
         return base_cfg
     merged = _deep_merge(base_cfg, _read_json(overlay, "config"))

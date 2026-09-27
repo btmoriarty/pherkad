@@ -56,7 +56,7 @@ Record the results in the profile as a dated "Holdout check." **A failed holdout
 
 ## Step 5: Offer a personal linter config
 
-Offer to generate a personal `voice_config.json` for the mechanical layer (`tools/voicelint.py`) from the profile: the dash stance from Dimension 4 (keep the default hard ban, or relax to the density cap if the profile shows deliberate dash use), personal crutch words as `watch_words` soft caps, and any extra banned phrases the user names. Save it next to their profile. The shipped defaults reflect tells observed across many documents; relaxations and additions live in the user's copy, and any relaxation should match an evidence-backed override in the profile so both layers agree.
+Offer to generate a personal `voice_config.json` for the mechanical layer (`tools/voicelint.py`) from the profile: the dash stance from Dimension 4 (keep the default hard ban, or relax to the density cap if the profile shows deliberate dash use), personal crutch words as `watch_words` soft caps, and any extra banned phrases the user names. Save it next to their profile. The linter picks it up from the working directory, or from anywhere when `PHERKAD_PROFILE` names that folder; `--config` still overrides both. The shipped defaults reflect tells observed across many documents; relaxations and additions live in the user's copy, and any relaxation should match an evidence-backed override in the profile so both layers agree.
 
 ## Step 6: Maintain
 

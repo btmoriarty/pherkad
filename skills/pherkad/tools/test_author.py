@@ -10,6 +10,8 @@ import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+# A personal overlay beside the tester's own profile must not leak into the suite.
+os.environ.pop("PHERKAD_PROFILE", None)
 
 import author  # noqa: E402
 import fingerprint  # noqa: E402

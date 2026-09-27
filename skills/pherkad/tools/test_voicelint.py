@@ -23,6 +23,8 @@ import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+# A personal overlay beside the tester's own profile must not leak into the suite.
+os.environ.pop("PHERKAD_PROFILE", None)
 
 import voicelint  # noqa: E402
 
@@ -269,6 +271,27 @@ class ConfigLayering(unittest.TestCase):
         found = {f["rule"] + ":" + f["match"].lower() for f in json.loads(proc.stdout)["files"]["t.md"]}
         self.assertIn("banned-phrase:circle back", found, "cwd overlay applied")
         self.assertIn("banned-phrase:that's the news", found, "shipped rules kept")
+
+    def test_profile_folder_config_is_the_overlay_when_no_cwd_one(self):
+        prof = os.path.join(self.d, "profile")
+        work = os.path.join(self.d, "work")
+        os.makedirs(prof)
+        os.makedirs(work)
+        write(prof, "voice_config.json", json.dumps({"add_banned_phrases": ["circle back"]}))
+        write(work, "t.md", "We should circle back.\n")
+        env = dict(os.environ, PHERKAD_PROFILE=prof)
+        proc = subprocess.run([sys.executable, SCRIPT, "--json", "t.md"],
+                              cwd=work, env=env, capture_output=True, text=True)
+        found = {f["rule"] + ":" + f["match"].lower() for f in json.loads(proc.stdout)["files"]["t.md"]}
+        self.assertIn("banned-phrase:circle back", found, "overlay beside the profile applied")
+        # A working-directory overlay still wins over the profile folder's.
+        write(work, "voice_config.json", json.dumps({"add_banned_phrases": ["at scale"]}))
+        write(work, "t.md", "We should circle back at scale.\n")
+        proc = subprocess.run([sys.executable, SCRIPT, "--json", "t.md"],
+                              cwd=work, env=env, capture_output=True, text=True)
+        found = {f["rule"] + ":" + f["match"].lower() for f in json.loads(proc.stdout)["files"]["t.md"]}
+        self.assertIn("banned-phrase:at scale", found)
+        self.assertNotIn("banned-phrase:circle back", found)
 
     def test_print_config_shows_the_effective_set(self):
         p = write(self.d, "c.json", json.dumps({"no_dashes": False}))
