@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Versioned pre-commit hook: the smoke test and every suite, against this checkout.
-# Enable once per clone with
+# Versioned pre-commit hook: refuse private material, then the smoke test and
+# every suite, against this checkout. Enable once per clone with
 #   git config core.hooksPath .githooks
-exec bash "$(git rev-parse --show-toplevel)/tests/run-all.sh"
+root="$(git rev-parse --show-toplevel)"
+bash "$root/tests/guard-private.sh" || exit 1
+exec bash "$root/tests/run-all.sh"

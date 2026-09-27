@@ -563,6 +563,33 @@ class Surfaces(unittest.TestCase):
         self.assertEqual(code, 1, "the project ban applies on top of the surface")
         self.assertIn("0 warning(s)", out, "and the surface's filler removals still hold")
 
+    def run_in(self, cwd, args, env=None):
+        e = dict(os.environ)
+        e.pop("PHERKAD_SURFACES", None)
+        e.update(env or {})
+        proc = subprocess.run([sys.executable, SCRIPT, *args], cwd=cwd, env=e, capture_output=True, text=True)
+        return proc.returncode, proc.stdout, proc.stderr
+
+    def test_config_alone_is_the_one_overlay(self):
+        # I128: under --config, a ./voice_config.json in the working folder was merged in unannounced
+        work = os.path.join(self.d, "work")
+        os.makedirs(work)
+        json.dump({"add_banned_phrases": ["robust result"]}, open(os.path.join(work, "voice_config.json"), "w"))
+        ov = os.path.join(self.d, "mine.json")
+        json.dump({}, open(ov, "w"))
+        self.assertEqual(self.run_in(work, ["check", self.clean])[0], 1, "with no --config the folder's overlay applies")
+        self.assertEqual(self.run_in(work, ["check", "--config", ov, self.clean])[0], 0, "with --config it does not")
+        self.assertEqual(self.run_in(work, ["check", "--surface", "technical", self.clean])[0], 0, "nor under a surface")
+
+    def test_a_named_surface_map_must_exist(self):
+        # I150: a typo in --surfaces or PHERKAD_SURFACES used to fall back to another rule set
+        missing = os.path.join(self.d, "nope.json")
+        code, _, err = self.run_in(self.d, ["check", "--surface", "technical", "--surfaces", missing, self.clean])
+        self.assertEqual(code, 2)
+        self.assertIn("does not exist", err)
+        code, _, err = self.run_in(self.d, ["check", "--surface", "technical", self.clean], {"PHERKAD_SURFACES": missing})
+        self.assertEqual(code, 2)
+
     def test_slides_threshold_comes_from_the_surface(self):
         heads = "\n\n".join(["# D"] + [f"## What thing {i} does" for i in range(2)] + [f"## Section {i}" for i in range(7)])
         p = os.path.join(self.d, "deck.md")

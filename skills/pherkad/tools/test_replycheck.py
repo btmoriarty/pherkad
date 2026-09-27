@@ -284,6 +284,16 @@ class StopHook(unittest.TestCase):
         self.assertEqual(p.returncode, 2)
         self.assertIn("banned.pointer-that-is-the-part-that", p.stderr, "nor switch it off")
 
+    def test_a_voice_config_in_the_working_folder_cannot_relax_the_hook(self):
+        # I075: PR #3 merged ./voice_config.json onto the chat surface; the hook must never read it
+        work = os.path.join(self.tmp.name, "relaxed")
+        os.makedirs(work)
+        json.dump({"remove_banned_phrases": ["pointer-that-is-the-part-that"], "banned_phrases": []},
+                  open(os.path.join(work, "voice_config.json"), "w"))
+        t = self.transcript(self.user("go"), self.assistant({"type": "text", "text": self.BAD}))
+        p = self.run_hook({"transcript_path": t, "stop_hook_active": False}, {"PHERKAD_SURFACES": ""}, cwd=work)
+        self.assertEqual(p.returncode, 2)
+
     def test_a_reply_cannot_exempt_itself(self):
         for text in (self.BAD + " <!-- voicelint: ignore-line -->", "> " + self.BAD):
             with self.subTest(text=text):

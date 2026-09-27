@@ -6,7 +6,7 @@ The harness for the voice-authoring study. It measures **correct-profile lift**:
 
 ## Before you start
 
-- **Consent and privacy.** You are collecting real people's writing. Get their permission, tell them how it is used, and keep it local. Everything under `eval/data/` is gitignored and never leaves your machine; the harness code and this protocol are the only shareable parts.
+- **Consent and privacy.** You are collecting real people's writing. Get their permission, tell them how it is used, and tell them which model providers will receive it. Everything under `eval/data/` is gitignored, so it stays out of the repository, but it does not stay on your machine once you run the study. `study.py run` hands each prompt to a runner, and the prompts carry the writers' samples, profiles, held-out pieces, and drafts. `runners/claude.sh` sends them to Anthropic through the Claude CLI, and `runners/codex.sh` sends them to OpenAI through the Codex CLI. Mail keeps its addresses, phone numbers, and links unless you strip them before it goes into `eval/data/`; the harness does not redact anything yet. An earlier version of this line said the data never left your machine, which stopped being true when the runners arrived. The harness code and this protocol are the only parts meant to be shared.
 - **Build the profiles first.** Each writer needs a Pherkad voice profile built from their samples with `references/profile_builder.md`, holding one sample back (into `holdout/`) *before* marker extraction, per Step 4b. The profile is the thing under test; if it is sloppy, the result is about the profile, not the tool.
 
 ## The three steps, wired up

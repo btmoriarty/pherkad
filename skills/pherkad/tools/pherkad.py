@@ -128,11 +128,17 @@ def _user_map_path(explicit: str | None, cwd: bool = True) -> str | None:
     """The user surface map: --surfaces, then PHERKAD_SURFACES, then (unless
     cwd is False) ./surfaces.json. The Stop hook passes cwd=False, so a file in
     whatever folder a session runs in cannot redirect or disable its check."""
-    for cand in (explicit, os.environ.get("PHERKAD_SURFACES"),
-                 os.path.join(os.getcwd(), "surfaces.json") if cwd else None):
-        if cand and os.path.exists(cand):
+    # a map the caller named (--surfaces or PHERKAD_SURFACES) must exist: a
+    # typo must not silently fall back to another rule set (I150); only the
+    # implicit ./surfaces.json may be absent
+    for cand, how in ((explicit, "--surfaces"), (os.environ.get("PHERKAD_SURFACES"), "PHERKAD_SURFACES")):
+        if cand:
+            if not os.path.exists(cand):
+                sys.stderr.write(f"pherkad: surface map {cand} ({how}) does not exist\n")
+                sys.exit(2)
             return cand
-    return None
+    implicit = os.path.join(os.getcwd(), "surfaces.json") if cwd else None
+    return implicit if implicit and os.path.exists(implicit) else None
 
 
 def load_surface_map(explicit: str | None = None, cwd: bool = True) -> tuple[dict, str | None]:
@@ -217,14 +223,18 @@ def load_layers(surface: str | None, config: str | None, map_path: str | None = 
     """The effective config: shipped base, then the surface's overlay, then the
     project overlay, in that order. Returns (cfg, surface info or None)."""
     info = resolve_surface(surface, map_path, cwd) if surface else None
-    cfg = voicelint.load_config(info["overlay"] if info and info["overlay"] else None)
+    if not info:
+        # no surface: --config is the one overlay; only with neither does the
+        # linter's own ./voice_config.json default apply (I128: it used to be
+        # merged in under --config too, unannounced)
+        return voicelint.load_config(config if config else (None if cwd else voicelint.DEFAULTS_PATH)), None
+    # a surface: its overlay, never ./voice_config.json, then --config on top
+    cfg = voicelint.load_config(info["overlay"] or voicelint.DEFAULTS_PATH)
     if config:
-        if info and info["overlay"] and os.path.exists(config) and os.path.samefile(config, info["overlay"]):
+        if info["overlay"] and os.path.exists(config) and os.path.samefile(config, info["overlay"]):
             return cfg, info
         ov = voicelint._read_json(config, "config")
         cfg = voicelint._apply_list_ops(voicelint._deep_merge(cfg, ov))
-    elif not info:
-        cfg = voicelint.load_config(None)
     return cfg, info
 
 

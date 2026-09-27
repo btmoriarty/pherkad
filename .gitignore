@@ -1,4 +1,4 @@
-Voice_Profile.md
+Voice_Profile*.md
 __pycache__/
 voice-rules.md
 voice-authoring.md
@@ -25,3 +25,13 @@ corrections.jsonl
 # statefile lock sidecars (one load-change-save at a time)
 *.jsonl.lock
 *.json.lock
+
+# Private artifacts the tools write where they run (I007). tests/guard-private.sh
+# refuses these at commit time too, so a branch without this file cannot leak them.
+/voice_config.json
+fingerprint*.json
+reference*.json
+holdout*.json
+pack.json
+prompt.md
+*.author.json

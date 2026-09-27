@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.5.36 (2026-09-27)
+
+Exposure and the supply chain: the mechanical half of Wave 0 of the 2026-09-27 review. The history purge waits on the author.
+
+- **One overlay, named.** Under `--config` with no surface, a `./voice_config.json` in the working folder was merged in without a word. `--config` is now the only overlay, and a surface never reads the folder's file (I128). A `--surfaces` or `PHERKAD_SURFACES` path that does not exist exits 2 and no longer falls back to another rule set (I150). A hook test runs from a folder holding a relaxing `voice_config.json`, which is what open PR #3 would have let through (I075).
+- **Private material cannot be committed.** `tests/guard-private.sh` runs first in the pre-commit hook. It refuses any staged voice file, correction ledger, fingerprint, reference, held-out id list, review packet, authoring record, root `voice_config.json`, `eval/data/`, `_to_delete/`, or backup, even when `git add -f` forced it past `.gitignore` or the branch has no `.gitignore` at all. `.gitignore` gains the same artifacts (I007, I009).
+- **Build with no push token near third-party code** (I013). `build.yml` is two jobs. `build` has a read-only token and installs the PDF renderer from the hash-pinned `.github/ci-requirements.txt` (weasyprint 70.0 and 12 dependencies). `publish` has the write token and runs only git. Every action in both workflows is pinned to a commit SHA, checkout keeps no credentials, and Test runs with a read-only token.
+- **The eval README tells the truth about where data goes** (I018). It used to say `eval/data/` never leaves the machine. The runners send samples, profiles, held-out pieces, and drafts to Anthropic (`claude.sh`) or OpenAI (`codex.sh`), and nothing redacts mail yet.
+- Four tests, each failing on 0.5.35. No rule in `voice_config.json` changed. `VERSION` 0.5.36.
+
 ## v0.5.35 (2026-09-27)
 
 The gate never passes in silence, and the state files cannot be cut or lost. Wave 1 of the 2026-09-27 review.
