@@ -330,14 +330,43 @@ class Decisions(unittest.TestCase):
         text = "None of them wrong. None of them ours.\n"
         p = os.path.join(self.root, "th.md")
         open(p, "w").write(text)
-        run(["decide", "--decisions", self.dec, "--reason", "refrain", p + ":1:structure.two-beat"])
-        self.assertIn("1 decided", run(["check", "--decisions", self.dec, p])[1])
         ov = os.path.join(self.root, "ov.json")
+        json.dump({}, open(ov, "w"))
+        run(["decide", "--decisions", self.dec, "--config", ov, "--reason", "refrain", p + ":1:structure.two-beat"])
+        self.assertIn("1 decided", run(["check", "--decisions", self.dec, "--config", ov, p])[1])
         json.dump({"structure": {"two_beat_diff": 20}}, open(ov, "w"))
         code, out, _ = run(["check", "--decisions", self.dec, "--config", ov, p])
         self.assertNotIn("decided", out, "a changed threshold is a changed rule")
         code, out, _ = run(["decisions", "--decisions", self.dec, "--config", ov, p])
         self.assertIn("rule changed", out)
+
+    def test_prune_under_another_rule_set_keeps_the_decision(self):
+        # I126: a decision made under one surface or overlay is not stale under another
+        text = "None of them wrong. None of them ours.\n"
+        p = os.path.join(self.root, "rs.md")
+        open(p, "w").write(text)
+        run(["decide", "--decisions", self.dec, "--reason", "refrain", p + ":1:structure.two-beat"])
+        ov = os.path.join(self.root, "other.json")
+        json.dump({"structure": {"two_beat_diff": 20}}, open(ov, "w"))
+        code, out, _ = run(["decisions", "--decisions", self.dec, "--config", ov, "--prune", p])
+        self.assertIn("made under another rule set", out)
+        self.assertNotIn("pruned", out)
+        self.assertEqual(len(json.load(open(self.dec))), 1)
+
+    def test_prune_never_drops_decisions_on_an_unreadable_file(self):
+        # I125: a file that could not be read is not a checked file
+        text = "None of them wrong. None of them ours.\n"
+        p = os.path.join(self.root, "gone.md")
+        open(p, "w").write(text)
+        run(["decide", "--decisions", self.dec, "--reason", "refrain", p + ":1:structure.two-beat"])
+        os.chmod(p, 0)
+        try:
+            code, out, err = run(["decisions", "--decisions", self.dec, "--prune", p])
+        finally:
+            os.chmod(p, 0o644)
+        self.assertEqual(code, 2)
+        self.assertNotIn("pruned", out)
+        self.assertEqual(len(json.load(open(self.dec))), 1)
 
     def test_frame_finding_is_document_scoped_and_outside_density(self):
         titles = ["A choice, not a default"] * 5 + [f"Section {i}" for i in range(10)]

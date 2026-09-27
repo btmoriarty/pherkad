@@ -30,6 +30,9 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import statefile  # noqa: E402
+
 PROVENANCE = ("hand", "captured", "approved")
 MANIFEST = "samples.json"
 SCHEMA = 1
@@ -52,9 +55,7 @@ def load(dir_: str) -> dict:
 
 def save(dir_: str, m: dict) -> None:
     os.makedirs(dir_, exist_ok=True)
-    with open(os.path.join(dir_, MANIFEST), "w", encoding="utf-8") as fh:
-        json.dump(m, fh, indent=2, sort_keys=True)
-        fh.write("\n")
+    statefile.write_json(os.path.join(dir_, MANIFEST), m, indent=2, sort_keys=True, ensure_ascii=True)
 
 
 def _record(m: dict, dir_: str, text: str, provenance: str, surface: str, date: str, source: str, note: str) -> dict | None:
@@ -67,8 +68,7 @@ def _record(m: dict, dir_: str, text: str, provenance: str, surface: str, date: 
     sub = os.path.join(dir_, provenance, surface)
     os.makedirs(sub, exist_ok=True)
     rel = os.path.join(provenance, surface, sid + ".md")
-    with open(os.path.join(dir_, rel), "w", encoding="utf-8") as fh:
-        fh.write(text)
+    statefile.write_text(os.path.join(dir_, rel), text)
     rec = {"id": sid, "file": rel, "provenance": provenance, "surface": surface, "date": date or "",
            "words": len(text.split()), "sha256": sha, "source": source or "", "note": note or "",
            "added": datetime.date.today().isoformat()}
@@ -343,6 +343,9 @@ def main(argv=None) -> int:
     im.add_argument("--max-words", type=int, default=800, help="longer bodies are pasted documents, not typed mail")
     im.set_defaults(fn=cmd_import_mbox)
     args = ap.parse_args(argv)
+    if args.fn in (cmd_add, cmd_import_captured, cmd_import_mbox):
+        with statefile.locked(os.path.join(args.dir, MANIFEST)):  # one load-change-save at a time
+            return args.fn(args)
     return args.fn(args)
 
 

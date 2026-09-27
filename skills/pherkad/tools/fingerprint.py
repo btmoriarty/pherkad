@@ -45,6 +45,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import mdmask  # noqa: E402
+import statefile  # noqa: E402
 
 VERSION_PATH = os.path.join(HERE, "..", "VERSION")
 CHUNK_WORDS = 200
@@ -567,8 +568,7 @@ def cmd_prose(args) -> int:
             ref = json.load(fh)
     text = prose(fp, [s.strip() for s in args.surface.split(",")] if args.surface else None, ref)
     if args.out:
-        with open(args.out, "w", encoding="utf-8") as fh:
-            fh.write(text + "\n")
+        statefile.write_text(args.out, text + "\n")
         print(f"fingerprint: prose profile written to {args.out}")
     else:
         print(text)
@@ -579,9 +579,7 @@ def cmd_prose(args) -> int:
 def cmd_build(args) -> int:
     fp = build(args.samples, tuple(p.strip() for p in args.provenance.split(",") if p.strip()), args.surface,
                tuple(x.strip() for x in (args.exclude or "").split(",") if x.strip()))
-    with open(args.out, "w", encoding="utf-8") as fh:
-        json.dump(fp, fh, indent=1, sort_keys=True)
-        fh.write("\n")
+    statefile.write_json(args.out, fp, indent=1, sort_keys=True, ensure_ascii=True)
     p = fp["pooled"]
     print(f"fingerprint: built from {len(fp['samples'])} sample(s), {p['words']} words in {p['chunks']} chunk(s) of "
           f"about {CHUNK_WORDS}; surfaces with their own profile: {', '.join(fp['surfaces']) or 'none'}; "
@@ -597,9 +595,7 @@ def cmd_build_reference(args) -> int:
         else:
             paths.append(p)
     ref = build_reference(paths, args.name)
-    with open(args.out, "w", encoding="utf-8") as fh:
-        json.dump(ref, fh, indent=1, sort_keys=True)
-        fh.write("\n")
+    statefile.write_json(args.out, ref, indent=1, sort_keys=True, ensure_ascii=True)
     print(f"fingerprint: reference '{args.name}' from {len(paths)} file(s), {ref['words']} words in {ref['chunks']} chunk(s) -> {args.out}")
     return 0
 

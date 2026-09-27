@@ -1,6 +1,6 @@
 # Pherkad
 
-The voice tools live in `skills/pherkad/tools/`. Run the suites with `python3 <abs path>/test_voicelint.py`, `test_mdmask.py`, `test_structlint.py`, `test_pherkad.py`, `test_replycheck.py`, `test_corpusscan.py`, `test_corrections.py`, `test_samples.py`, `test_fingerprint.py`, `test_author.py`, and `eval/test_study.py`; all eleven are unittest modules and pytest collects them too. `bash /Users/moriarty/Documents/kochab/pherkad/tests/run-all.sh` runs the smoke test and all eleven in one go (the pre-commit hook runs it); `PYTHON=/usr/bin/python3` checks the 3.8 floor.
+The voice tools live in `skills/pherkad/tools/`. Run the suites with `python3 <abs path>/test_voicelint.py`, `test_mdmask.py`, `test_structlint.py`, `test_pherkad.py`, `test_replycheck.py`, `test_corpusscan.py`, `test_corrections.py`, `test_samples.py`, `test_fingerprint.py`, `test_author.py`, `test_statefile.py`, and `eval/test_study.py`; all twelve are unittest modules and pytest collects them too. `bash /Users/moriarty/Documents/kochab/pherkad/tests/run-all.sh` runs the smoke test and all twelve in one go (the pre-commit hook runs it); `PYTHON=/usr/bin/python3` checks the 3.8 floor.
 
 ## Reply preflight
 

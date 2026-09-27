@@ -65,6 +65,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 import voicelint  # noqa: E402
+import statefile  # noqa: E402
 import corpusscan  # noqa: E402
 
 KINDS = ("literal", "templated", "structural", "judgment", "preference", "factual", "exception")
@@ -102,9 +103,7 @@ def load_ledger(path: str) -> list[dict]:
 
 
 def save_ledger(path: str, records: list[dict]) -> None:
-    with open(path, "w", encoding="utf-8") as fh:
-        for r in records:
-            fh.write(json.dumps(r, ensure_ascii=False) + "\n")
+    statefile.write_text(path, "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records))
 
 
 def find(records: list[dict], rid: str) -> dict:
@@ -300,8 +299,16 @@ def cmd_trial(args) -> int:
 def _append_prose(prose_path: str, source: str, line: str) -> None:
     """Append a bullet under a '## Mined corrections (<date>, <source>)' heading,
     creating the heading at the end when today's is not there."""
+    statefile.write_text(prose_path, _prose_with(prose_path, source, line))
+
+
+def _prose_with(prose_path: str, source: str, line: str) -> str:
+    """The prose file's text with the bullet added, built in memory."""
     heading = f"## Mined corrections ({_today()}, {source})" if source else f"## Mined corrections ({_today()})"
-    text = open(prose_path, encoding="utf-8").read() if os.path.exists(prose_path) else ""
+    try:
+        text = open(prose_path, encoding="utf-8").read() if os.path.exists(prose_path) else ""
+    except (OSError, UnicodeDecodeError) as exc:
+        _fail(f"cannot read the prose file {prose_path}: {exc}")
     if heading in text:
         head, tail = text.split(heading, 1)
         # insert after the heading's section: find the next '## ' or the end
@@ -313,8 +320,7 @@ def _append_prose(prose_path: str, source: str, line: str) -> None:
             text = head + heading + tail.rstrip("\n") + "\n" + line + "\n"
     else:
         text = text.rstrip("\n") + ("\n\n" if text else "") + heading + "\n\n" + line + "\n"
-    with open(prose_path, "w", encoding="utf-8") as fh:
-        fh.write(text)
+    return text
 
 
 def prose_line(r: dict) -> str:
@@ -356,39 +362,60 @@ def cmd_promote(args) -> int:
         save_ledger(args.ledger, records)
         print(f"{r['id']}: {r['status']}; no rule written" + (f"; prose line appended to {args.prose}" if args.prose else ""))
         return 0
-    if r["status"] != "trialled":
+    if r["status"] not in ("trialled", "promoting"):
         _fail(f"{r['id']} has not been trialled; run corrections.py trial first (nothing becomes a rule uncounted)")
     if r.get("trial", {}).get("example_problems"):
         _fail(f"{r['id']} has example problems from its trial; fix the matcher or the examples, trial again")
     if not args.overlay:
         _fail("--overlay is required to promote a rule")
-    # write the overlay entry
-    ov = json.load(open(args.overlay, encoding="utf-8")) if os.path.exists(args.overlay) else {}
+    # Everything is checked and built in memory before the first write, then
+    # the ledger records "promoting", then the overlay, the prose, and the
+    # ledger's "promoted" are each swapped in atomically. An interruption
+    # leaves every file whole, and a rerun finishes the promotion.
+    try:
+        ov = json.load(open(args.overlay, encoding="utf-8")) if os.path.exists(args.overlay) else {}
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        _fail(f"cannot read the overlay {args.overlay}: {exc}")
     # Into an overlay the entry goes under add_<field>; into the shipped base
     # (the maintainer promoting his own correction) it joins the list itself.
     into_base = os.path.exists(args.overlay) and os.path.samefile(args.overlay, voicelint.DEFAULTS_PATH)
     key = r["field"] if into_base else "add_" + r["field"]
     entry = rule_entry(r)
-    existing = [e for e in ov.get(key, []) if (e if isinstance(e, str) else e.get("id")) == entry["id"]
-                or (e if isinstance(e, str) else e.get("pattern")) == entry["pattern"]]
-    if existing:
-        _fail(f"{args.overlay} already carries {entry['id']} / {entry['pattern']!r}")
-    ov.setdefault(key, []).append(entry)
+    same = lambda e: not isinstance(e, str) and e.get("id") == entry["id"] and e.get("pattern") == entry["pattern"]
+    clash = lambda e: ((e if isinstance(e, str) else e.get("id")) == entry["id"]
+                       or (e if isinstance(e, str) else e.get("pattern")) == entry["pattern"])
+    resuming = r["status"] == "promoting" and any(same(e) for e in ov.get(key, []))
+    if not resuming:
+        if any(clash(e) for e in ov.get(key, [])):
+            _fail(f"{args.overlay} already carries {entry['id']} / {entry['pattern']!r}")
+        ov.setdefault(key, []).append(entry)
     voicelint._validate(ov)
-    with open(args.overlay, "w", encoding="utf-8") as fh:
-        json.dump(ov, fh, indent=2, ensure_ascii=False)
-        fh.write("\n")
-    # confirm the effective config still loads and the examples hold under it
-    cfg = voicelint.load_config(args.overlay)  # must load and validate with the new entry in it
+    # the effective config must load with the new entry in it before anything is written
+    probe = os.path.join(os.path.dirname(os.path.abspath(args.overlay)), f".{os.path.basename(args.overlay)}.probe.json")
+    statefile.write_json(probe, ov)
+    try:
+        cfg = voicelint.load_config(probe)
+    finally:
+        os.unlink(probe)
+    prose_text = None
+    done = dict(r, rule_id=entry["id"], status="promoted")
+    if args.prose:
+        prose_text = _prose_with(args.prose, source, prose_line(done))
     covered = covering_rules(cfg, r)
     if covered:
         print(f"  note: overlaps shipped rule(s) {', '.join(covered)}; on a shared span the collapse keeps one finding")
+    r["status"] = "promoting"
+    save_ledger(args.ledger, records)
+    if not resuming:
+        statefile.write_json(args.overlay, ov)
+    if prose_text is not None:
+        already = os.path.exists(args.prose) and prose_line(done) in open(args.prose, encoding="utf-8").read()
+        if not already:  # a resumed promotion does not add the line twice
+            statefile.write_text(args.prose, prose_text)
     r["rule_id"] = entry["id"]
     r["status"] = "promoted"
     r["promoted"] = {"date": _today(), "overlay": os.path.abspath(args.overlay)}
     _note(r, f"promoted to {args.overlay} as {entry['id']}")
-    if args.prose:
-        _append_prose(args.prose, source, prose_line(r))
     save_ledger(args.ledger, records)
     print(f"promoted {r['id']} -> {key} {entry['id']} in {args.overlay}")
     if into_base:
@@ -599,7 +626,11 @@ def main(argv=None) -> int:
     pr.set_defaults(fn=cmd_retire)
 
     args = ap.parse_args(argv)
-    return args.fn(args)
+    ledger = getattr(args, "ledger", None)
+    if not ledger or getattr(args, "dry_run", False):
+        return args.fn(args)
+    with statefile.locked(ledger):  # one load-change-save at a time
+        return args.fn(args)
 
 
 if __name__ == "__main__":

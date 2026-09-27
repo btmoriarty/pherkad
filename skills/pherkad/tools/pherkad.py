@@ -90,6 +90,7 @@ sys.path.insert(0, HERE)
 
 import voicelint  # noqa: E402
 import structlint  # noqa: E402
+import statefile  # noqa: E402
 
 SURFACES = os.path.join(HERE, "surfaces")
 
@@ -237,6 +238,14 @@ def resolve_config(surface: str | None, config: str | None) -> str | None:
     return config
 
 
+def ruleset_id(args) -> str:
+    """Which rule set a decision was made under: the surface and the overlay
+    named, not their contents, so a release that edits a rule still lets
+    --prune find the decision stale while another surface never can."""
+    cfg = getattr(args, "config", None)
+    return f"{getattr(args, 'surface', None) or '-'}|{os.path.abspath(cfg) if cfg else '-'}"
+
+
 def config_sha256(cfg: dict) -> str:
     return hashlib.sha256(json.dumps(cfg, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
 
@@ -246,7 +255,8 @@ def config_sha256(cfg: dict) -> str:
 # ---------------------------------------------------------------------------
 DISPOSITIONS = ("accepted", "intentional", "deferred")
 _DECISION_KEYS = frozenset({"rule_id", "path", "context_hash", "rule_hash", "count",
-                            "disposition", "reason", "decided", "line", "match", "note", "scope", "quote"})
+                            "disposition", "reason", "decided", "line", "match", "note", "scope", "quote",
+                            "ruleset"})
 JUDGMENT_PREFIX = "judgment."
 JUDGMENT_HASH = "judgment"  # a judgment record has no pattern to hash; the reference itself is the rule
 
@@ -337,9 +347,7 @@ def load_decisions(path: str | None) -> list[dict]:
 
 def save_decisions(path: str, decisions: list[dict]) -> None:
     decisions = sorted(decisions, key=lambda d: (d["path"], d["rule_id"], d["context_hash"]))
-    with open(path, "w", encoding="utf-8") as fh:
-        json.dump(decisions, fh, indent=2, ensure_ascii=False)
-        fh.write("\n")
+    statefile.write_json(path, decisions)
 
 
 def rel_path(path: str, root: str) -> str:
@@ -624,7 +632,7 @@ MANIFEST = os.path.join(HERE, "bundle-manifest.json")
 MANIFEST_SCHEMA = 1
 # The five a gate needs are required wherever the bundle is vendored; the rest
 # are listed so their hashes travel, but a vendored copy may leave them out.
-REQUIRED_FILES = ("pherkad.py", "voicelint.py", "structlint.py", "mdmask.py", "voice_config.json")
+REQUIRED_FILES = ("pherkad.py", "voicelint.py", "structlint.py", "mdmask.py", "statefile.py", "voice_config.json")
 BUNDLE_FILES = REQUIRED_FILES + ("replycheck.py", "replycheck-hook.py", "corpusscan.py", "corrections.py", "samples.py", "fingerprint.py", "author.py")
 
 
@@ -1114,6 +1122,7 @@ def cmd_review_import(args) -> int:
             n = sum(1 for g in findings if g["rule_id"] == ref and g["line"]
                     and (_document_context(g) or context_hash(text, g["line"], _scope(g))) == ctx)
             rec = {"rule_id": ref, "path": rel, "context_hash": ctx, "rule_hash": hashes[ref], "count": n,
+                   "ruleset": ruleset_id(args),
                    "disposition": _ROW_DISPOSITION[dec], "reason": reason, "decided": today,
                    "line": f["line"], "match": f["match"],
                    "scope": "document" if _document_context(f) else ("paragraph" if _scope(f) else "line")}
@@ -1243,10 +1252,11 @@ def cmd_decide(args) -> int:
             existing = next((d for d in decisions if d["path"] == rel and d["rule_id"] == rid
                              and d["context_hash"] == ctx), None)
             if existing:
-                existing.update(count=n, rule_hash=hashes[rid], disposition=args.disposition,
+                existing.update(count=n, rule_hash=hashes[rid], ruleset=ruleset_id(args), disposition=args.disposition,
                                 reason=args.reason, decided=today, line=line, match=fs[0]["match"])
             else:
                 decisions.append({"rule_id": rid, "path": rel, "context_hash": ctx, "rule_hash": hashes[rid],
+                                  "ruleset": ruleset_id(args),
                                   "count": n, "disposition": args.disposition, "reason": args.reason,
                                   "decided": today, "line": line, "match": fs[0]["match"],
                                   "scope": "document" if _document_context(fs[0]) else ("paragraph" if para else "line")})
@@ -1265,24 +1275,23 @@ def cmd_decisions(args) -> int:
     hashes = rule_hashes(cfg)
     decisions = load_decisions(args.decisions)
     root = args.root or os.path.dirname(os.path.abspath(args.decisions))
-    live = set()
+    live, texts, unreadable = set(), {}, []
     for path in args.files:
         try:
             text = read_source(path)
         except OSError as exc:
             sys.stderr.write(f"pherkad: {exc}\n")
+            unreadable.append(path)
             continue
+        texts[rel_path(path, root)] = text
         findings, _ = run_text(text, cfg, structure=not args.no_structure)
         for d in apply_decisions(findings, text, rel_path(path, root), decisions, hashes):
             live.add(id(d))
-    checked = {rel_path(p, root) for p in args.files}
-    texts = {}
-    for path in args.files:
-        try:
-            texts[rel_path(path, root)] = read_source(path)
-        except OSError:
-            pass
-    stale, kept, unchecked = [], [], []
+    # only a file that was actually read counts as checked; a read failure
+    # must never turn every decision on that file into a prunable stale one
+    checked = set(texts)
+    here = ruleset_id(args)
+    stale, kept, unchecked, other_rules = [], [], [], []
     for d in decisions:
         if id(d) in live:
             kept.append(d)
@@ -1294,14 +1303,27 @@ def cmd_decisions(args) -> int:
                 kept.append(d)
             else:
                 stale.append((d, "quote gone"))
+        elif d.get("ruleset", here) != here:
+            other_rules.append(d)  # decided under another surface or overlay; this run cannot judge it
+        elif d["rule_id"] not in hashes:
+            # the rule is not in this run's rule set: gone for good only when the
+            # record says it was made under this same surface and overlay
+            if d.get("ruleset") == here:
+                stale.append((d, "rule gone"))
+            else:
+                other_rules.append(d)
+        elif d["rule_hash"] != hashes[d["rule_id"]]:
+            stale.append((d, "rule changed"))
         else:
-            why = ("rule changed" if d["rule_hash"] != hashes.get(d["rule_id"], "")
-                   else "rule gone" if d["rule_id"] not in hashes else "line changed or finding gone")
-            stale.append((d, why))
+            stale.append((d, "line changed or finding gone"))
     for d, why in stale:
         print(f"stale ({why}): {d['path']}:{d.get('line', '?')} {d['rule_id']}  ->  {d.get('match', '')!r}  [{d['disposition']}: {d['reason']}]")
     print(f"pherkad: {len(kept)} decision(s) live, {len(stale)} stale, {len(unchecked)} on files not checked, "
-          f"of {len(decisions)} in {args.decisions}")
+          + (f"{len(other_rules)} made under another rule set (not evaluated), " if other_rules else "")
+          + f"of {len(decisions)} in {args.decisions}")
+    if unreadable:
+        sys.stderr.write(f"pherkad: {len(unreadable)} file(s) could not be read; nothing pruned\n")
+        return 2
     if args.prune and stale:
         drop = {id(d) for d, _ in stale}
         save_decisions(args.decisions, [d for d in decisions if id(d) not in drop])
@@ -1444,6 +1466,9 @@ def main(argv=None) -> int:
     pr.add_argument("--json", action="store_true")
     pr.set_defaults(fn=cmd_rules)
     args = ap.parse_args(argv)
+    if args.fn in (cmd_decide, cmd_review_import, cmd_decisions) and getattr(args, "decisions", None):
+        with statefile.locked(args.decisions):  # one load-change-save of the decision store at a time
+            return args.fn(args)
     return args.fn(args)
 
 

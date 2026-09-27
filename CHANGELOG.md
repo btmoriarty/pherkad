@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.5.35 (2026-09-27)
+
+The gate never passes in silence, and the state files cannot be cut or lost. Wave 1 of the 2026-09-27 review.
+
+**The Stop hook** (`replycheck-hook.py`):
+- A check that cannot run now blocks once with `voice check did not run: <reason>`, and the assistant tells the person the reply is unchecked. This covers a sibling module that will not import, a broken overlay, an unknown surface, an unreadable transcript, and a crash. Before, the hook exited 0, and a broken hook passed everything (I045, I092, I117). `stop_hook_active` keeps it to one block per turn.
+- The enforced revision is checked too. A revision that still fails reaches the person as a `systemMessage` and never blocks a second time (I139).
+- Meta rows (a skill body, an image note) are not the turn boundary (I138). `last_assistant_message` is checked when the transcript has not caught up (I048).
+- The hook reads no `surfaces.json` from the session's working folder, so a project cannot redirect or disable the chat check (I127). `resolve_surface` and `load_layers` take `cwd=False`, and a surface given as a path reads no user map at all.
+- On a surface the assistant speaks, a reply cannot exempt itself (I140). A voicelint or structlint directive outside code is made inert and reported as `directive.in-reply`, an error, and blockquoted lines are linted. Naming a directive or a banned phrase in backticks still works.
+
+**State files** (`statefile.py`, new):
+- Every state write goes through a temporary file and `os.replace`, so an interruption leaves the old file whole. That covers the ledger, the samples manifest and sample files, the decision store, the promoted overlay and the prose, fingerprints and references, and label exports (I117, I118). A symlink is followed, so the voice files that link into session-hygiene stay links.
+- Each load-change-save of the ledger, the samples manifest, or the decision store holds an exclusive lock on a `.lock` sidecar. Eight concurrent `corrections.py add` runs lost one to three records under 0.5.34 and lose none now (I118).
+- `corrections.py promote` checks and builds everything in memory first: it reads the overlay and prose, validates, and loads the effective config from a probe file. Only then does it write, recording `promoting` in the ledger before the overlay and prose. A rerun resumes and adds nothing twice (I116).
+- `pherkad.py decisions --prune` counts only files it actually read, exits 2 and prunes nothing when a read fails (I125). A decision now records the `ruleset` it was made under (surface and overlay path). A run under another rule set reports it as not evaluated and never prunes it. The `rule gone` branch is now reachable (I126).
+- `corpusscan.py review` will not overwrite an existing label file without `--force`. The export records its row count, and `score-review` rejects a file that no longer holds them, rejects a hit label other than TP or FP, and exits 1 when nothing is labelled (I115).
+
+Tests: ten hook tests (eight fail on 0.5.34), five `test_statefile.py` tests (the concurrency one fails on 0.5.34), and two prune tests. The threshold test now decides and re-checks under the same overlay. No rule in `voice_config.json` changed. `VERSION` 0.5.35.
+
 ## v0.5.34 (2026-09-27)
 
 Main green again, and kept green. Main's Test run had been red since 0.5.33: Python 3.8 and 3.9 crashed on two modules, four tests had lagged the 0b8b7b4 link rule, and the manifest was stale. Wave 2 of the 2026-09-27 review.

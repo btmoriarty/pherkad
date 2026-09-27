@@ -50,6 +50,7 @@ sys.path.insert(0, HERE)
 
 import voicelint  # noqa: E402
 import pherkad  # noqa: E402
+import statefile  # noqa: E402
 
 DEFAULT_EXTS = (".md", ".txt", ".html", ".htm")
 
@@ -335,6 +336,7 @@ def export_review(files: list[str], cfg: dict, roots: list[str], surface: str, p
     if clean_paras:
         out.extend(sorted(clean_paras if len(clean_paras) <= unflagged else rng.sample(clean_paras, unflagged),
                           key=lambda r: (r["path"], r["line"])))
+    out[0]["rows"] = len(out) - 1  # score-review checks the file still holds them all
     return out
 
 
@@ -344,7 +346,9 @@ def score_review(paths: list[str]) -> dict:
     clean = collections.Counter()
     unlabelled = collections.Counter()
     words = collections.Counter()
+    bad = []
     for p in paths:
+        expected, seen = None, 0
         with open(p, encoding="utf-8") as fh:
             for n, line in enumerate(fh, 1):
                 line = line.strip()
@@ -357,8 +361,12 @@ def score_review(paths: list[str]) -> dict:
                     sys.exit(2)
                 if r.get("type") == "meta":
                     words[r.get("surface", "")] += int(r.get("words", 0))
+                    expected = r.get("rows")
                     continue
+                seen += 1
                 lab = (r.get("label") or "").strip()
+                if r.get("type") == "hit" and lab and lab.upper() not in ("TP", "FP"):
+                    bad.append(f"{p}:{n}: label {lab!r} on a hit is neither TP nor FP")
                 surf = r.get("surface", "")
                 if r.get("type") == "hit":
                     if lab.upper() == "TP":
@@ -374,6 +382,12 @@ def score_review(paths: list[str]) -> dict:
                         misses[(surf, lab)] += 1
                     else:
                         unlabelled["unflagged"] += 1
+        if expected is not None and seen != expected:
+            bad.append(f"{p}: holds {seen} of the {expected} row(s) it was exported with; the file is cut or edited")
+    if bad:
+        for b in bad:
+            sys.stderr.write(f"corpusscan: {b}\n")
+        sys.exit(2)
     rows = []
     for (surf, rid), (tp, fp) in sorted(per.items(), key=lambda kv: (kv[0][0], -(kv[1][1]), kv[0][1])):
         rows.append({"surface": surf, "rule_id": rid, "tp": tp, "fp": fp,
@@ -468,6 +482,7 @@ def main(argv=None) -> int:
     pr.add_argument("--per-rule", type=int, default=10, help="hits sampled per rule")
     pr.add_argument("--unflagged", type=int, default=20, help="unflagged paragraphs sampled")
     pr.add_argument("--out", required=True, help="the JSONL file for the reader to label")
+    pr.add_argument("--force", action="store_true", help="overwrite --out when it exists (it may hold labels)")
     psr = sub.add_parser("score-review", help="precision per rule per surface from labelled JSONL")
     psr.add_argument("labels", nargs="+")
     psr.add_argument("--json", action="store_true")
@@ -480,6 +495,9 @@ def main(argv=None) -> int:
     if args.cmd == "score-review":
         sc = score_review(args.labels)
         print(json.dumps(sc, indent=2, ensure_ascii=False) if args.json else render_review_score(sc))
+        if not sc["rules"] and not sc["misses"] and not sc["clean_units"]:
+            sys.stderr.write("corpusscan: nothing is labelled yet\n")
+            return 1
         return 0
     exts = tuple(e if e.startswith(".") else "." + e for e in args.ext) or DEFAULT_EXTS
     files = collect_files(args.paths, exts, args.exclude)
@@ -494,9 +512,10 @@ def main(argv=None) -> int:
         cfg = _layered(args.surface, args.config)
         rows = export_review(files, cfg, args.paths, args.surface or "", args.per_rule, args.unflagged,
                              args.seed, set(args.rule) or None)
-        with open(args.out, "w", encoding="utf-8") as fh:
-            for r in rows:
-                fh.write(json.dumps(r, ensure_ascii=False) + "\n")
+        if os.path.exists(args.out) and not args.force:
+            sys.stderr.write(f"corpusscan: {args.out} exists and may hold labels; pass --force to overwrite it\n")
+            return 2
+        statefile.write_text(args.out, "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
         n_hits = sum(1 for r in rows if r["type"] == "hit")
         n_un = sum(1 for r in rows if r["type"] == "unflagged")
         print(f"corpusscan: wrote {args.out}: {n_hits} hit(s) across {len({r['rule_id'] for r in rows if r['type'] == 'hit'})} rule(s) "
