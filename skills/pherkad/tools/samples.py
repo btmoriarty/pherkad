@@ -21,6 +21,7 @@ Usage:
 
 Stdlib only.
 """
+from __future__ import annotations
 import argparse
 import datetime
 import hashlib

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
-# Versioned pre-commit hook: run the smoke test. Enable once per clone with
+# Versioned pre-commit hook: the smoke test and every suite, against this checkout.
+# Enable once per clone with
 #   git config core.hooksPath .githooks
-exec bash "$(git rev-parse --show-toplevel)/tests/smoke.sh"
+exec bash "$(git rev-parse --show-toplevel)/tests/run-all.sh"

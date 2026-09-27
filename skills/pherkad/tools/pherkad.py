@@ -661,6 +661,12 @@ def verify_manifest(manifest_path: str = MANIFEST) -> list[str]:
     in_repo = os.path.exists(version_file)
     if in_repo and m.get("version") != _version():
         problems.append(f"manifest version {m.get('version')} is not VERSION {_version()}")
+    plugin = _plugin_json(here)
+    if in_repo and os.path.exists(plugin):
+        with open(plugin, encoding="utf-8") as fh:
+            pv = json.load(fh).get("version")
+        if pv != _version():
+            problems.append(f"plugin.json version {pv} is not VERSION {_version()}")
     required = set(m.get("required") or REQUIRED_FILES)
     for name, sha in (m.get("files") or {}).items():
         p = os.path.join(here, name)
@@ -683,12 +689,27 @@ def verify_manifest(manifest_path: str = MANIFEST) -> list[str]:
     return problems
 
 
+def _plugin_json(tools_dir: str) -> str:
+    """The repo's .claude-plugin/plugin.json, three levels above the tools."""
+    return os.path.join(tools_dir, "..", "..", "..", ".claude-plugin", "plugin.json")
+
+
 def cmd_manifest(args) -> int:
     if args.write:
         m = build_manifest()
         with open(MANIFEST, "w", encoding="utf-8") as fh:
             json.dump(m, fh, indent=2, ensure_ascii=False)
             fh.write("\n")
+        plugin = _plugin_json(os.path.dirname(os.path.abspath(MANIFEST)))
+        if os.path.exists(plugin):
+            # stamp the version in place so the file's own formatting is kept
+            with open(plugin, encoding="utf-8") as fh:
+                raw = fh.read()
+            new = re.sub(r'("version"\s*:\s*")[^"]*(")', lambda mo: mo.group(1) + m["version"] + mo.group(2), raw, count=1)
+            if new != raw:
+                with open(plugin, "w", encoding="utf-8") as fh:
+                    fh.write(new)
+                print(f"pherkad: plugin.json version -> {m['version']}")
         print(f"pherkad: wrote {MANIFEST} ({len(m['files'])} file(s), {len(m['rule_ids'])} rule id(s), version {m['version']})")
         return 0
     if args.verify:
@@ -1149,7 +1170,7 @@ def cmd_author(args) -> int:
         with open(args.out, "w", encoding="utf-8") as fh:
             fh.write(result["draft"].rstrip() + "\n")
         with open(args.out + ".author.json", "w", encoding="utf-8") as fh:
-            json.dump({"packet": {k: v for k, v in packet.items() if k != "exemplars"} | {"exemplars": [e["id"] for e in packet["exemplars"]]},
+            json.dump({"packet": {**{k: v for k, v in packet.items() if k != "exemplars"}, "exemplars": [e["id"] for e in packet["exemplars"]]},
                        "score": result["score"], "history": [{k: v for k, v in h.items() if k != "draft"} for h in result["history"]]},
                       fh, indent=2, ensure_ascii=False)
         print(f"pherkad: author: draft written to {args.out} ({result['score']['words']} words) after {result['rounds']} revision(s); "

@@ -66,7 +66,11 @@ class ChatRules(unittest.TestCase):
         return {f["rule_id"] for f in replycheck.check_reply(text, structure=False)["findings"]}
 
     def test_chat_specific_bans(self):
-        self.assertIn("banned.markdown-link", self.ids("See [the file](docs/x.md)."))
+        # Since 0b8b7b4 a relative link is what the desktop app wants; only an
+        # absolute, ~ or http target is the miss.
+        self.assertIn("banned.markdown-link", self.ids("See [the file](/Users/moriarty/docs/x.md)."))
+        self.assertIn("banned.markdown-link", self.ids("See [the file](https://example.com/x)."))
+        self.assertNotIn("banned.markdown-link", self.ids("See [the file](docs/x.md)."))
         self.assertIn("banned.tilde-path", self.ids("Open ~/Documents now."))
         self.assertIn("banned.section-sign", self.ids("See § 5."))
         self.assertIn("banned.pointer-that-is-the-part-that", self.ids("That is the part that matters."))
@@ -199,7 +203,7 @@ class StopHook(unittest.TestCase):
         p = self.transcript(
             self.user("go"), self.assistant({"type": "text", "text": "Starting."}),
             self.assistant({"type": "tool_use", "name": "Bash", "input": {}}), self.tool_result(),
-            self.assistant({"type": "text", "text": "See [it](x.md)."}))
+            self.assistant({"type": "text", "text": "See [it](/Users/moriarty/x.md)."}))
         code, err = hook({"transcript_path": p, "stop_hook_active": False})
         self.assertEqual(code, 2)
         self.assertIn("banned.markdown-link", err)

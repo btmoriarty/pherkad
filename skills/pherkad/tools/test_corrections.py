@@ -208,8 +208,6 @@ class Ledger(unittest.TestCase):
         self.assertEqual(code, 0, out)
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class Mine(unittest.TestCase):
@@ -259,3 +257,7 @@ class Mine(unittest.TestCase):
         code, out, err = run("mine", self.draft, self.edited, "--ledger", self.ledger)
         self.assertIn("already in the ledger", out)
         self.assertEqual(len(corrections.load_ledger(self.ledger)), 4)
+
+
+if __name__ == "__main__":
+    unittest.main()

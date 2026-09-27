@@ -152,9 +152,13 @@ class Cli(unittest.TestCase):
 
     def test_surface_applies(self):
         with open(self.clean, "w") as fh:
-            fh.write("See [the file](docs/x.md).\n")
+            fh.write("See [the file](/Users/moriarty/docs/x.md).\n")
         self.assertEqual(run(["check", self.clean])[0], 0)
         self.assertEqual(run(["check", "--surface", "assistant-chat", self.clean])[0], 1)
+        with open(self.clean, "w") as fh:
+            fh.write("See [the file](docs/x.md).\n")
+        self.assertEqual(run(["check", "--surface", "assistant-chat", self.clean])[0], 0,
+                         "a relative link is what the desktop app wants")
 
     def test_stdin(self):
         code, out, _ = run(["check", "-"], "This is a game-changer.\n")
@@ -667,8 +671,6 @@ class ReviewPack(unittest.TestCase):
         self.assertEqual(run(["review-pack", "--surface", "memo", self.draft])[0], 2)
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class MeasuredInPack(unittest.TestCase):
@@ -800,3 +802,7 @@ class Fingerprint(unittest.TestCase):
             code, out, err = run(["check", "--fingerprint", fp, draft])
             self.assertIn("[advisory] voice (voice.sent_mean)", out)
             self.assertIn("0 warning(s)", out)
+
+
+if __name__ == "__main__":
+    unittest.main()

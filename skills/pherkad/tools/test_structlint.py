@@ -30,9 +30,13 @@ def run(args, text=None):
 
 
 def rules(text, extra=()):
-    """Return the set of rule names structlint reports for a passage."""
+    """Return the set of rule names structlint reports for a passage. A crash is
+    a failure, never an empty set: structlint exits 0 or 1 with a clean stderr."""
+    proc = run([*extra, "-"], text)
+    if proc.returncode not in (0, 1) or "Traceback" in proc.stderr:
+        raise AssertionError(f"structlint exited {proc.returncode}: {proc.stderr.strip()[-300:]}")
     out = set()
-    for line in run([*extra, "-"], text).stdout.splitlines():
+    for line in proc.stdout.splitlines():
         if "[warning]" in line:
             out.add(line.split("[warning]")[1].split("(")[0].strip())
     return out

@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.5.34 (2026-09-27)
+
+Main green again, and kept green. Main's Test run had been red since 0.5.33: Python 3.8 and 3.9 crashed on two modules, four tests had lagged the 0b8b7b4 link rule, and the manifest was stale. Wave 2 of the 2026-09-27 review.
+
+- **Python 3.8 floor restored.** `fingerprint.py` and `samples.py` carry `from __future__ import annotations`, and `pherkad.py author` no longer merges dicts with `|`. All eleven suites pass under 3.8.2 and 3.9.
+- **The Stop hook skips headless runs** (640f3cb, shipped here): a turn opened with `turnOrigin: "sdk"` is a script's `claude -p` call, and blocking it made the model rewrite output a program parses.
+- **Tests that never ran now run.** `test_pherkad.py` and `test_corrections.py` called `unittest.main()` before their last classes, so six tests had never run as scripts, which is how CI runs them. One of them failed once it ran: a measured `voice.sent_mean` finding quoted the feature name, not the text. Each sentence-length statistic is now quoted by the sentence whose length is nearest it.
+- **Tests match the link rule.** Since 0b8b7b4, a relative Markdown link passes on `assistant-chat`, and an absolute, `~` or http target is the miss. Three tests now say so.
+- **A structlint crash is a failure.** `test_structlint`'s helper used to read a crash as "no findings". It now fails on any exit other than 0 or 1, or on a traceback.
+- **Gates.** The pre-commit hook runs `tests/run-all.sh`, which runs the smoke test and every suite against the checkout it sits in (`smoke.sh` no longer hard-codes a path), and `PYTHON=` picks the interpreter. In CI, every suite step runs even after an earlier one fails. `build.yml` now runs only after Test finishes green on main, so a red suite never publishes a bundle.
+- **One version.** `manifest --write` stamps `.claude-plugin/plugin.json`, which had drifted to 0.5.0, and `--verify` fails when they differ.
+- No rule in `voice_config.json` changed, so there is no corpus count.
+- `VERSION` 0.5.34.
+
 ## v0.5.33 (2026-09-18)
 
 Roadmap item 25: authoring on demand from the numbers.

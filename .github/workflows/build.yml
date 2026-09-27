@@ -7,14 +7,16 @@ name: Build artifacts
 # Save this file as .github/workflows/build.yml in the pherkad repo and
 # commit it from a real terminal (the API token lacks the workflow scope).
 
+#
+# Gated on the Test workflow: it runs only after Test finishes green on main,
+# so a red suite never publishes a bundle (0.5.33 shipped with Test failing).
+# Artifacts are committed only when they actually change.
+
 on:
-  push:
+  workflow_run:
+    workflows: [Test]
+    types: [completed]
     branches: [main]
-    paths:
-      - 'skills/**'
-      - 'docs/CHEATSHEET.html'
-      - 'build.sh'
-      - '.github/workflows/build.yml'
   workflow_dispatch:
 
 permissions:
@@ -22,6 +24,7 @@ permissions:
 
 jobs:
   build:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -31,6 +31,7 @@ Usage:
 
 Stdlib only.
 """
+from __future__ import annotations
 import argparse
 import datetime
 import hashlib
@@ -154,6 +155,10 @@ def features(paras: list[str]) -> dict:
     f["sent_short_share"] = sum(1 for x in lens if x < 8) / n
     f["sent_long_share"] = sum(1 for x in lens if x > 35) / n
     f["short_after_long"] = (sum(1 for a, b in zip(lens, lens[1:]) if a > 20 and b < 8) / max(1, n - 1))
+    # a length statistic is quoted by the sentence whose length is nearest it, so
+    # every flagged number carries a passage of the text it was measured on
+    for k in ("sent_mean", "sent_q1", "sent_median", "sent_q3"):
+        ev[k] = [min(sents, key=lambda s: abs(len(s.split()) - f[k]))]
     ev["sent_long_share"] = [max(sents, key=lambda s: len(s.split()))]
     real_short = [s for s in sents if 3 <= len(s.split()) < 8 and re.search(r"[A-Za-z]{2}", s)]
     ev["sent_short_share"] = [min(real_short, key=lambda s: len(s.split()))] if real_short else []
