@@ -269,6 +269,7 @@ class BuildCompare(unittest.TestCase):
         self.assertIn("(note-", text, "a quoted sentence carries its sample id")
         self.assertIn("Never in", text, "constructions that never occur are named as absent")
         self.assertIn("Most frequent first words", text)
+        self.assertIn("averaged over every 50-word window", text, "the ratio is a moving average, not one chunk's")
         # evidence is credited to the sample that holds the sentence
         for e in p["evidence"]["sent_short_share"]:
             sid = e["samples"][0]

@@ -1118,7 +1118,7 @@ def prose_surface(name: str, prof: dict, reference: dict | None = None) -> str:
         out += ["### Function words", "",
                 "- Most frequent, per 1,000 words: " + ", ".join(f"{k[3:]} ({f[k]['mean']:.0f})" for k in top) + ".", ""]
     out += ["### Vocabulary", "",
-            f"- Mean word length {m('word_len'):.2f} letters; type-token ratio {m('type_token'):.2f} on a {CHUNK_WORDS}-word chunk.", ""]
+            f"- Mean word length {m('word_len'):.2f} letters; share of distinct words {m('type_token'):.2f}, averaged over every {MATTR_WINDOW}-word window.", ""]
     return "\n".join(out)
 
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.5.48 (2026-09-28)
+
+- **`fingerprint.py prose`** describes the vocabulary figure as what it has been since 0.5.39: the share of distinct words averaged over every 50-word window. It still said "type-token ratio on a 200-word chunk", so the rendered profile showed 0.83 where the old measure read 0.62, under the old measure's name. A test holds the wording.
+- No rule in `voice_config.json` changed. `VERSION` 0.5.48.
+
 ## v0.5.47 (2026-09-28)
 
 The docs describe the tool that ships, and the bundle holds only what is tracked. This is Wave 7 of the 2026-09-27 review, part 2: docs and build.
