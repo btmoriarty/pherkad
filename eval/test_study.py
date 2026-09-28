@@ -456,6 +456,16 @@ class DetectTask(ReviseTask):
         open(os.path.join(w, "impostors", "rosa-shed.md"), "w").write("In the long light the shed gave up its water.\n")
         open(os.path.join(w, "override", "rhymes.md"), "w").write("Cat rhymes with hat, he said.\n")
 
+    def test_a_profile_quoting_a_case_is_refused(self):  # I160, the guard in detect.plan
+        self._setup_detect()
+        prof = os.path.join(study.WRITERS, "brian", "profile.md")
+        case = os.path.join(study.WRITERS, "brian", "holdout", "shed.md")
+        open(case, "w").write("The shed leaked on Tuesday and forty bags were wet by the time anyone came.\n")
+        open(prof, "a").write('\n- the moves: "The shed leaked on Tuesday and forty bags were wet by the time"\n')
+        with self.assertRaises(SystemExit) as cm:
+            self._run(["plan", "q1", "--task", "detect", "--writers", "brian", "--repeats", "1"])
+        self.assertIn("shares a run of 8 or more words", str(cm.exception))
+
     def test_fingerprint_condition_writes_floor_verdicts(self):
         import random
         sys.path.insert(0, study.TOOLS)
