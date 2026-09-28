@@ -226,7 +226,7 @@ def rule_entries(cfg: dict, field: str) -> list[dict]:
 def family_severity(cfg, family, default):
     """The severity a config gives a family, falling back to the shipped default.
 
-    soft-cliche ships as an error from 0.5.48. The saga writes several of those
+    soft-cliche ships as an error from 0.5.49. The saga writes several of those
     patterns on purpose in its own register, so its overlay sets the family back to
     warning rather than thinning the shipped list for every other surface.
     """

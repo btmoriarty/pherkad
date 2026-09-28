@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.5.49 (2026-09-28)
+
+Soft phrases are errors, and a project can set a family's severity back.
+
+- **`soft-cliche` ships as an error.** The list is curated rather than heuristic: every entry is a phrase someone decided was not to be written, and leaving it advisory is how `One Honest First Look` reached a course document. The FA550 repository had already promoted the family in its own gate; that override is now redundant.
+- **A config may set severity per family**, with a `severity` object (`{"soft-cliche": "warning"}`). The saga writes several of these patterns on purpose, 31 instances across canon, all in analytical passages rather than in a vignette. So its overlay keeps the family as warnings instead of thinning the shipped list for every other surface.
+- **`review-import`** no longer refuses a `soft-cliche` row. The family is the judgment calls, so raising its severity must not remove the way an author answers it. The refusal still covers a banned phrase or a dash, where there is nothing to rule on.
+- A decision on a soft phrase is keyed on the rule's severity (0.5.45), so a warning accepted before this release is asked about again as an error.
+- **On the saga corpus**, with its own overlay, the count is unchanged at 3 errors and 417 warnings.
+- Tests: three fixtures that used a soft phrase as their stand-in for a warning now use `filler.very`, and the overlay diff test measures what the overlay adds to each side.
+- No rule in `voice_config.json` changed. `VERSION` 0.5.49.
+
 ## v0.5.48 (2026-09-28)
 
 - **`fingerprint.py prose`** describes the vocabulary figure as what it has been since 0.5.39: the share of distinct words averaged over every 50-word window. It still said "type-token ratio on a 200-word chunk", so the rendered profile showed 0.83 where the old measure read 0.62, under the old measure's name. A test holds the wording.

@@ -1275,7 +1275,7 @@ def cmd_review_import(args) -> int:
     cfg, _s = load_layers(args.surface, args.config, args.surfaces)
     hashes = rule_hashes(cfg)
     severity = {r["id"]: r["severity"] for r in all_rules(cfg)}
-    # soft-cliche is error-severity from 0.5.48, and a review table is still how it gets
+    # soft-cliche is error-severity from 0.5.49, and a review table is still how it gets
     # ruled on: the family is the judgment calls, so raising how hard it pushes must not
     # remove the way the author answers it. The refusal below still covers a banned phrase
     # or a dash, where there is nothing to rule.
