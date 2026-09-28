@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.5.51 (2026-09-28)
+
+The detection study's fingerprint floor now scores against both flattened references and uses cutoffs set for the calibrated scale. The cutoffs were preregistered on the development set before the new held-out mail was scored.
+
+- **Several references, one score.** `study.py prompts --reference R` can be given more than once. The fingerprint condition scores each case against every reference and takes the mean calibrated log-odds, so a case flattened by one model meets a reference built from the other as well as one from its own. On the development set the Claude-built reference alone reached an AUC of 0.70 on Codex flattenings, and the mean of the two reached 0.82. Each verdict records its score under every reference, and the manifest records every reference's sha256. Every reference is checked for leakage and for a fitted discriminant before anything is written.
+- **Cutoffs on the calibrated scale.** The floor's verdicts come from `FINGERPRINT_CUTS`: 5 PASS at +1.5 or more, 4 PASS at +1.0, 3 light REVISE at 0, 2 REVISE at -1.0, 1 REWRITE below. The old cutoffs (0.40, 0.15, 0, -0.15) were set on the per-feature ratio that 0.5.39 replaced. On the development set the +1.0 cut passed 69% of the author's held-out mail and stopped 81% of the flattenings. The new run's `prereg.md` template states the cuts and asks which references the run uses.
+- Tests: one in `eval/test_study.py`, which fails on 0.5.50.
+- No rule in `voice_config.json` changed. `VERSION` 0.5.51.
+
 ## v0.5.50 (2026-09-28)
 
 The authoring pilot can no longer grade itself on the measure it optimised. This closes I157 from the 2026-09-27 review.

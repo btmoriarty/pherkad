@@ -528,6 +528,31 @@ class DetectTask(ReviseTask):
         self.assertEqual(code, 0, out)
         self.assertIn("floor: fingerprint margin", open(os.path.join(run_dir, "results.md")).read())
 
+    def test_the_floor_scores_the_mean_over_references(self):  # prereg 2026-09-28
+        sys.path.insert(0, study.TOOLS)
+        import detect
+        import fingerprint
+        by_ref = {}
+
+        def fake(text, fp, surface, reference=None):
+            return {"basis": "email", "discriminant": {"score": by_ref[reference["name"]], "for_author": [],
+                                                       "for_reference": [], "features_used": 3}}
+        real, fingerprint.compare = fingerprint.compare, fake
+        try:
+            refs = [{"name": "claude"}, {"name": "codex"}]
+            for a, b, want in ((2.0, 1.2, (5, "PASS")), (1.4, 0.8, (4, "PASS")), (0.5, -0.4, (3, "light REVISE")),
+                               (-0.2, -1.6, (2, "REVISE")), (-0.5, -2.0, (1, "REWRITE"))):
+                by_ref.update(claude=a, codex=b)
+                v = detect._fingerprint_verdict("text", "email", {}, refs)
+                self.assertEqual((v["rating"], v["verdict"]), want, (a, b))
+                self.assertEqual(v["scores_by_reference"], [a, b])
+                self.assertAlmostEqual(v["score"], (a + b) / 2, places=3)
+            by_ref.update(claude=1.4, codex=None)  # one reference that cannot score stops the case
+            with self.assertRaises(SystemExit):
+                detect._fingerprint_verdict("text", "email", {}, refs)
+        finally:
+            fingerprint.compare = real
+
     def _freeze(self, run):
         # a complete prereg, then frozen: prompts, run, and score need both (I163)
         p = os.path.join(study.RUNS, run, "prereg.md")

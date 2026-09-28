@@ -1158,7 +1158,8 @@ def main(argv):
     s.add_argument("--allow-empty", action="store_true", help="revise task: run mechanical arms on a source with no findings")
     s.add_argument("--model", help="record the model that will run these prompts")
     s.add_argument("--fingerprint", help="detect task: the measured profile for the fingerprint condition (fingerprint.py build)")
-    s.add_argument("--reference", help="detect task: the reference profile for the fingerprint condition (fingerprint.py build-reference)")
+    s.add_argument("--reference", action="append", help="detect task: a reference profile for the fingerprint condition "
+                   "(fingerprint.py build-reference); repeat it to score the mean over several, as the 2026-09-28 prereg does")
     s.set_defaults(fn=prompts)
     s = sub.add_parser("sheet"); s.add_argument("run")
     s.add_argument("--force", action="store_true", help="regenerate even when the reader has filled answers (a timestamped copy is kept)")

@@ -74,6 +74,9 @@ Fill every TODO before a single verdict is collected. score warns while any rema
 - Flattened-pass rate above which the positive-register read is judged unreliable: TODO
 - Verdict swing (severe movement rate) above which the judgment is judged unstable: TODO
 - Smallest lift worth detecting, and the writer count that would power it: TODO
+- Fingerprint floor, when that condition runs: the mean calibrated log-odds over every --reference
+  given; 5 PASS at +1.5 or more, 4 PASS at +1.0, 3 light REVISE at 0, 2 REVISE at -1.0, 1 REWRITE
+  below (FINGERPRINT_CUTS, set 2026-09-28 on the development set). References: TODO (each file).
 - Roles: profile builder TODO; flattening author TODO; judge TODO; operator TODO.
 """
 
@@ -221,32 +224,37 @@ def _linter_verdict(text: str, surface: str) -> dict:
             "errors": errors, "warnings": warnings}
 
 
-def _fingerprint_verdict(text: str, surface: str, fp: dict, ref: dict) -> dict:
+# Preregistered 2026-09-28 on the calibrated log-odds, averaged over the references given
+# (Claude- and Codex-flattened), from the development set: at +1.0 it passed 69% of the
+# author's held-out mail and stopped 81% of the flattenings; at zero it stopped 53%.
+FINGERPRINT_CUTS = ((1.5, 5, "PASS"), (1.0, 4, "PASS"), (0.0, 3, "light REVISE"), (-1.0, 2, "REVISE"))
+
+
+def _fingerprint_verdict(text: str, surface: str, fp: dict, refs: list) -> dict:
     """The measured floor: a verdict from the fingerprint discriminant alone, no
-    model. The mapping is the pilot's, fixed before the run: a score above
-    +0.15 is PASS (5 above +0.40), 0 to +0.15 light REVISE, -0.15 to 0 REVISE,
-    below that REWRITE. Since 0.5.39 the score is a calibrated log-odds, not
-    the old mean per-feature ratio, so these cutoffs wait on the prereg
-    thresholds being set again on the new scale."""
+    model. The score is the mean calibrated log-odds over the references, so a
+    case flattened by either model meets a reference built from the other as
+    well as one from its own; the rating comes from FINGERPRINT_CUTS."""
     sys.path.insert(0, study.TOOLS)
     import fingerprint  # noqa: WPS433
-    res = fingerprint.compare(text, fp, surface, reference=ref)
-    d = res.get("discriminant") or {}
-    if d.get("score") is None:
-        sys.exit(f"detect: the fingerprint condition cannot score this case: {d.get('error') or res.get('error', 'no discriminant')}")
-    sc = d["score"]
-    if sc >= 0.40:
-        rating, verdict = 5, "PASS"
-    elif sc >= 0.15:
-        rating, verdict = 4, "PASS"
-    elif sc >= 0.0:
-        rating, verdict = 3, "light REVISE"
-    elif sc >= -0.15:
-        rating, verdict = 2, "REVISE"
-    else:
-        rating, verdict = 1, "REWRITE"
+    scores, first, res = [], None, {}
+    for ref in refs:
+        res = fingerprint.compare(text, fp, surface, reference=ref)
+        d = res.get("discriminant") or {}
+        if d.get("score") is None:
+            sys.exit(f"detect: the fingerprint condition cannot score this case: {d.get('error') or res.get('error', 'no discriminant')}")
+        scores.append(d["score"])
+        first = first or d
+    d = first
+    sc = sum(scores) / len(scores)
+    rating, verdict = 1, "REWRITE"
+    for cut, r, v in FINGERPRINT_CUTS:
+        if sc >= cut:
+            rating, verdict = r, v
+            break
     return {"rating": rating, "verdict": verdict, "positive_register": None, "markers": d["for_author"],
-            "evidence": d["for_reference"], "fingerprint_only": True, "score": sc,
+            "evidence": d["for_reference"], "fingerprint_only": True, "score": round(sc, 3),
+            "scores_by_reference": [round(x, 3) for x in scores],
             "features_used": d["features_used"], "basis": res.get("basis", "")}
 
 
@@ -255,19 +263,19 @@ def prompts(args, run_dir, manifest):
     if problem:
         sys.exit(f"prompts: {problem}. Nothing is written, floor verdicts included, before the plan is frozen (I163).")
     n = floor = 0
-    fp = ref = None
+    fp, refs = None, []
     if any(it["condition"] == "fingerprint" for it in manifest["items"]):
         if not (getattr(args, "fingerprint", None) and getattr(args, "reference", None)):
             sys.exit("the fingerprint condition needs --fingerprint F and --reference R (fingerprint.py build / build-reference)")
         fp = json.load(open(args.fingerprint))
-        ref = json.load(open(args.reference))
+        refs = [json.load(open(r)) for r in args.reference]
         import fingerprint as fpm  # noqa: WPS433
         cases = sorted({os.path.join(study.DATA, it["text"]) for it in manifest["items"]})
-        leaks = fpm.leakage(cases, fp, ref)
+        leaks = [x for ref in refs for x in fpm.leakage(cases, fp, ref)]
         if leaks:
             sys.exit("prompts: the fingerprint condition would score the cases against themselves (I158):\n  "
                      + "\n  ".join(leaks[:8]) + "\nBuild the reference and the fingerprint from pieces outside this run's cases.")
-        unfit = fpm.fit_discriminant(fp["pooled"], ref).get("error")
+        unfit = next((e for e in (fpm.fit_discriminant(fp["pooled"], ref).get("error") for ref in refs) if e), None)
         if unfit:
             sys.exit(f"prompts: the fingerprint condition has no discriminant to score with: {unfit} (I190)")
         short = []
@@ -286,10 +294,10 @@ def prompts(args, run_dir, manifest):
             floor += 1
             continue
         if it["condition"] == "fingerprint":
-            study._write(os.path.join(run_dir, it["verdict"]), json.dumps(_fingerprint_verdict(text, it["surface"], fp, ref), indent=2))
+            study._write(os.path.join(run_dir, it["verdict"]), json.dumps(_fingerprint_verdict(text, it["surface"], fp, refs), indent=2))
             it["model"] = "none (fingerprint floor)"
             it["fingerprint_sha256"] = study._sha(study._read(args.fingerprint))  # the whole file, not one field (I162)
-            it["reference_sha256"] = study._sha(study._read(args.reference))
+            it["reference_sha256"] = ",".join(study._sha(study._read(r)) for r in args.reference)
             floor += 1
             continue
         if it["profile"] is None:
