@@ -200,14 +200,21 @@ class Decisions(unittest.TestCase):
     def test_undecided_baseline(self):
         code, out = self.check()
         self.assertEqual(code, 1)
-        self.assertIn("1 error(s), 4 warning(s)", out)
+        # One honest-framing and three soft-cliche, all errors since 0.5.48; the
+        # remaining warning is structlint's staccato on line 1.
+        self.assertIn("4 error(s), 1 warning(s)", out)
 
     def test_decide_hides_and_stops_counting(self):
         self.assertEqual(self.decide("canon/a.md:3", "literal", "intentional")[0], 0)
         code, out = self.check()
-        self.assertEqual(code, 0, "a decided error no longer counts")
-        self.assertNotIn("honest-framing", out)
+        self.assertNotIn("honest-framing", out, "a decided error no longer counts")
         self.assertIn("1 decided (1 intentional)", out)
+        # The three soft-cliche hits are errors too, so the file only clears once
+        # they are ruled on as well.
+        self.decide("canon/a.md:1:soft.is-the-whole", "literal", "intentional")
+        self.decide("canon/a.md:5:soft.is-the-whole", "literal", "intentional")
+        code, out = self.check()
+        self.assertEqual(code, 0, "a decided error no longer counts")
         code, out = self.check("--show-decided")
         self.assertIn("[decided:intentional] honest-framing", out)
 
@@ -413,9 +420,12 @@ class Decisions(unittest.TestCase):
 
     def test_deferred_counts_separately(self):
         self.decide("canon/a.md:3", "fix next pass", "deferred")
+        self.decide("canon/a.md:1:soft.is-the-whole", "fix next pass", "deferred")
+        self.decide("canon/a.md:5:soft.is-the-whole", "fix next pass", "deferred")
         code, out = self.check()
         self.assertEqual(code, 0)
-        self.assertIn("1 decided (1 deferred)", out)
+        # Line 5 carries two hits, so the line records count 2 and the total is four.
+        self.assertIn("4 decided (4 deferred)", out)
 
 
 class Manifest(unittest.TestCase):

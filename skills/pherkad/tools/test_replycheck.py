@@ -108,7 +108,7 @@ class Verdict(unittest.TestCase):
         self.assertIn("replycheck: PASS", out)
 
     def test_warning_is_pass_unless_strict(self):
-        text = "Frankly, it passed.\n"
+        text = "It was a very small change.\n"
         self.assertEqual(run(["-"], text)[0], 0)
         self.assertEqual(run(["--strict", "-"], text)[0], 1)
 
@@ -209,7 +209,7 @@ class StopHook(unittest.TestCase):
         self.assertIn("banned.markdown-link", err)
 
     def test_warnings_block_only_under_strict(self):
-        p = self.transcript(self.user("go"), self.assistant({"type": "text", "text": "Frankly, it passed."}))
+        p = self.transcript(self.user("go"), self.assistant({"type": "text", "text": "It was a very small change."}))
         self.assertEqual(hook({"transcript_path": p, "stop_hook_active": False})[0], 0)
         self.assertEqual(hook({"transcript_path": p, "stop_hook_active": False}, {"REPLYCHECK_STRICT": "1"})[0], 2)
 

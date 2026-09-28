@@ -12,8 +12,8 @@
     "voice_config.json"
   ],
   "files": {
-    "pherkad.py": "c6b39d21ddf55b9a42ac44685e2ac7ce32ed343e6a47b19f4755be5d97038354",
-    "voicelint.py": "8954f4536d8f578d776626569cf600b85dac69f64d7eb4a158bfdcc877c6b985",
+    "pherkad.py": "447b0a81fb65762b0606f0f24766633f55a53022b2c408d6603aff5a508f7fef",
+    "voicelint.py": "5c3d03eccc1911a6e157f59e1de5fb80f4a6b349dcb37f04ba0bb498f646f321",
     "structlint.py": "3564c2b5aa53f07fc71c1f5c28523ac03e77228c6f8c444e6da777a3ee5d37bd",
     "mdmask.py": "f758cefab26619844f9c53d6deb1832c5bff477b83e8d90b707269390501248e",
     "statefile.py": "6c29e6ae71269ebece6679b7096d4f80e08a3dc57640e1b95684b8c8e1891d9a",

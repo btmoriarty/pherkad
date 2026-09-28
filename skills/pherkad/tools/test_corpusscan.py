@@ -120,10 +120,18 @@ class Corpus(unittest.TestCase):
         self.assertEqual(d["vanished"], 1)
 
     def test_diff_with_overlay(self):
+        # Measured as the lift the overlay adds to each side, rather than as equal
+        # totals. The two bases differ by one soft rule on purpose, so their totals
+        # were only equal while soft-cliche was warning-level (2026-09-28).
         ov = self.w("ov.json", json.dumps({"add_banned_phrases": ["weather"]}))
-        code, out, _ = run(["diff", self.d, "--ext", ".md", "--old", self.old, "--new", self.new, "--config", ov, "--json"])
+        args = ["diff", self.d, "--ext", ".md", "--old", self.old, "--new", self.new, "--json"]
+        base = json.loads(run(args)[1])
+        code, out, _ = run(args[:-1] + ["--config", ov, "--json"])
         d = json.loads(out)
-        self.assertEqual(d["old"]["errors"], d["new"]["errors"], "the overlay applies to both sides")
+        lift_old = d["old"]["errors"] - base["old"]["errors"]
+        lift_new = d["new"]["errors"] - base["new"]["errors"]
+        self.assertEqual(lift_old, lift_new, "the overlay applies to both sides")
+        self.assertGreaterEqual(lift_old, 1, "the overlay raised errors at all")
         self.assertGreaterEqual(d["old"]["errors"], 2)
 
     def test_text_output_says_raw(self):

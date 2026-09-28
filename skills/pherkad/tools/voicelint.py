@@ -144,7 +144,7 @@ _KNOWN_KEYS = frozenset(
     + tuple("add_" + f for f in _LIST_FIELDS)
     + tuple("remove_" + f for f in _LIST_FIELDS)
     + _BOOL_FIELDS
-    + ("watch_words", "dash_density_cap", "structure")
+    + ("watch_words", "dash_density_cap", "structure", "severity")
 )
 
 
@@ -223,12 +223,24 @@ def rule_entries(cfg: dict, field: str) -> list[dict]:
     return out
 
 
+def family_severity(cfg, family, default):
+    """The severity a config gives a family, falling back to the shipped default.
+
+    soft-cliche ships as an error from 0.5.48. The saga writes several of those
+    patterns on purpose in its own register, so its overlay sets the family back to
+    warning rather than thinning the shipped list for every other surface.
+    """
+    want = (cfg or {}).get("severity", {}).get(family, default)
+    return want if want in ("error", "warning") else default
+
+
 def all_rules(cfg: dict) -> list[dict]:
     """Every rule the effective config would run, list rules and fixed rules alike,
     as {id, family, severity, pattern, rationale}. What ``--list-rules`` prints."""
     fam = {"banned_phrases": ("banned-phrase", "error"), "engagement_bait": ("engagement-bait", "error"),
-           "soft_phrases": ("soft-cliche", "warning"), "filler_words": ("filler", "warning"),
+           "soft_phrases": ("soft-cliche", "error"), "filler_words": ("filler", "warning"),
            "aggregator_domains": ("source", "error")}
+    fam = {k: (family, family_severity(cfg, family, sev)) for k, (family, sev) in fam.items()}
     rows = []
     for field, (family, sev) in fam.items():
         for e in rule_entries(cfg, field):
@@ -932,7 +944,8 @@ def check_counting(text: str, cfg: dict):
         label = e.get("rationale") or phrase
         guard = "" if phrase.startswith("re:") else phrase  # a raw regex says where it ends (I093, I100)
         for m, raw in phrase_hits(_soft_to_regex(phrase), guard, phrase):
-            add(m, "warning", "soft-cliche", f"overused AI phrasing: '{label}'", e["id"], raw=raw)
+            add(m, family_severity(cfg, "soft-cliche", "error"), "soft-cliche",
+                f"overused AI phrasing: '{label}'", e["id"], raw=raw)
 
     if cfg.get("flag_loaded_quietly", True):
         # clause-final: before punctuation, the end of the text, or a paragraph break; a hard

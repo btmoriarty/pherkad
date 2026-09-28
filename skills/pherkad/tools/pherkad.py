@@ -1275,6 +1275,11 @@ def cmd_review_import(args) -> int:
     cfg, _s = load_layers(args.surface, args.config, args.surfaces)
     hashes = rule_hashes(cfg)
     severity = {r["id"]: r["severity"] for r in all_rules(cfg)}
+    # soft-cliche is error-severity from 0.5.48, and a review table is still how it gets
+    # ruled on: the family is the judgment calls, so raising how hard it pushes must not
+    # remove the way the author answers it. The refusal below still covers a banned phrase
+    # or a dash, where there is nothing to rule.
+    rulable = {r["id"] for r in all_rules(cfg) if r.get("family") == "soft-cliche"}
     findings, _ = run_text(text, cfg, density=False)
     import datetime
     today = datetime.date.today().isoformat()
@@ -1306,7 +1311,8 @@ def cmd_review_import(args) -> int:
             print(f"skipped (the density is recomputed on every run and cannot be decided): {ref}")  # I124
             skipped += 1
             continue
-        if ref in hashes and not ref.startswith(JUDGMENT_PREFIX) and severity.get(ref) == "error":
+        if (ref in hashes and not ref.startswith(JUDGMENT_PREFIX)
+                and severity.get(ref) == "error" and ref not in rulable):
             print(f"skipped ({ref} is an error; record it with `decide` if the author means to keep it): {quote[:60]!r}")
             skipped += 1
             continue
