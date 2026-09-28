@@ -95,13 +95,26 @@ DEFAULT_THRESHOLDS = {
 # decision made under the old version. Bump the number when the behaviour of a
 # check changes; leave it when only its thresholds move (those are hashed too).
 STRUCT_REVISION = {
-    "two-beat": 2,               # 2: the syntactic parallel test (0.5.6)
-    "staccato": 2,               # 2: spans masked rather than lines dropped (0.5.6)
-    "header": 2,                 # 2: the real/actual and where-sits patterns tightened (0.5.6)
+    "two-beat": 3,               # 2: the syntactic parallel test (0.5.6); 3: shape, closing pair (0.5.42)
+    "staccato": 3,               # 2: spans masked rather than lines dropped (0.5.6); 3: abbreviations, list units (0.5.42)
+    "header": 3,                 # 2: the real/actual and where-sits patterns tightened (0.5.6); 3: setext, numbering, narrower stance (0.5.42)
     "aphorism": 1,
-    "interrogative-headers": 2,  # 2: document-scoped, all headings quoted (0.5.22)
-    "frame": 1,
-    "density": 1,
+    "interrogative-headers": 3,  # 2: document-scoped, all headings quoted (0.5.22); 3: setext headings (0.5.42)
+    "frame": 2,                  # 2: advisory, medial "not", one unit per heading (0.5.42)
+    "density": 2,                # 2: frames never count (0.5.42)
+}
+
+# The thresholds each check reads. A decision is hashed with these only, so a change to
+# an unrelated threshold, or to a _comment, no longer wakes every structural decision (I134).
+STRUCT_KEYS = {
+    "two-beat": ("short_chars", "two_beat_diff"),
+    "staccato": ("short_chars", "staccato_run"),
+    "header": (),
+    "aphorism": (),
+    "interrogative-headers": ("interrogative_pct", "interrogative_min"),
+    "frame": ("frame_heading_min", "frame_heading_share", "frame_heading_abs", "frame_sentence_min",
+              "frame_sentence_share", "frame_closer_min", "frame_closer_share"),
+    "density": ("density_per_100",),
 }
 
 # A frame is a syntactic template a writer can fall into across a document: no
@@ -299,7 +312,8 @@ class Finding:
     message: str
     rule_id: str = ""
 
-    def __init__(self, line, rule, match, message, col=None, severity="warning", rule_id=None):
+    def __init__(self, line, rule, match, message, col=None, severity="warning", rule_id=None, key=""):
+        self.key = key  # an untruncated identity for a document-level finding's decision (I145)
         self.line = line
         self.col = (1 if line else 0) if col is None else col
         self.severity = severity
@@ -492,11 +506,12 @@ def check_frames(lines: list[str], heads: list[tuple[int, str]], paras: list[tup
             if not fires:
                 continue
             quoted = "; ".join(u.strip()[:70] for _, u in hits[:6]) + (" ..." if n > 6 else "")
+            key = "\n".join(f"{i}:{' '.join(u.split())}" for i, u in hits)
             out.append(Finding(hits[0][0], "frame",
                                f"{n}/{total} {kind}s: {quoted}",
                                f"the '{name}' frame recurs across {n} of {total} {kind}s; "
                                f"no one is wrong, the repetition is the tell",
-                               severity="advisory", rule_id=f"structure.frame.{name}.{kind}"))
+                               severity="advisory", rule_id=f"structure.frame.{name}.{kind}", key=key))
     return out
 
 
@@ -621,7 +636,8 @@ def check_text(raw: str, thresholds: dict | None = None) -> list[Finding]:
             found.append(Finding(q[0][0], "interrogative-headers",
                                  f"{len(q)}/{len(heads)} headings: {listed}",
                                  f"{pct:.0f}% of headings open with a question word; "
-                                 f"name the sections instead"))
+                                 f"name the sections instead",
+                                 key="\n".join(f"{i}:{h}" for i, h in heads)))
 
     frames = check_frames(lines, heads, paras, t)
 

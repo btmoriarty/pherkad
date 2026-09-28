@@ -123,6 +123,20 @@ _STRUCTURE_KEYS = frozenset({"short_chars", "two_beat_diff", "staccato_run",
                              "frame_sentence_min", "frame_sentence_share",
                              "frame_closer_min", "frame_closer_share"})
 
+# The implementation revision of each fixed rule family (the ones with no pattern of
+# their own in the config). A decision is hashed with it, so changing how the family
+# works wakes the decisions made under the old version; bump it when behaviour changes (I132).
+VOICE_REVISION = {
+    "dash": 3,                  # 2: figure and two/three-em dashes (0.5.40); 3: ranges beyond digits (0.5.44)
+    "dash-density": 2,          # 2: the wider dash class (0.5.40)
+    "load-bearing-context": 2,  # 2: "wall of the argument" is figurative (0.5.44)
+    "honest-framing": 2,        # 2: adverbs, commas, "Honest take:"; literal uses spared (0.5.44)
+    "loaded-adverb": 2,         # 2: a hard wrap is not a clause end (0.5.40)
+    "overuse": 1,
+    "invisible": 1,
+    "directive": 1,
+}
+
 _STRUCTURE_AT_LEAST_ONE = frozenset({"interrogative_min", "staccato_run", "frame_heading_min",
                                      "frame_sentence_min", "frame_closer_min", "short_chars"})
 _KNOWN_KEYS = frozenset(
@@ -969,15 +983,19 @@ def check_counting(text: str, cfg: dict):
                     add(m, "error", "source", f"low-trust/aggregator source: {domain}", rule_id, raw=True)
                     break
 
+    # A suppressed finding goes before the overlap collapse, so silencing the finding that
+    # would have won a span lets the other one stand instead of taking it down too (I110).
+    dropped = 0
+    if suppress:
+        keep = [i for i, f in enumerate(out)
+                if not ((names := suppress.get(f.line)) and ("*" in names or f.rule in names or f.rule_id in names))]
+        dropped = len(out) - len(keep)
+        out, spans = [out[i] for i in keep], [spans[i] for i in keep]
     out = _collapse_overlaps(out, spans)
 
-    if suppress or allow:
-        kept, dropped = [], 0
+    if allow:
+        kept = []
         for f in out:
-            names = suppress.get(f.line)
-            if names and ("*" in names or f.rule in names or f.rule_id in names):
-                dropped += 1
-                continue
             # A marker declares the PHRASE ("it is worth") while a rule fires on the
             # realised text ("it is worth nothing"), so equality would never suppress
             # one. Containment either way, on collapsed whitespace and at word
@@ -989,7 +1007,7 @@ def check_counting(text: str, cfg: dict):
                 continue
             kept.append(f)
         return kept, dropped
-    return out, 0
+    return out, dropped
 
 
 # Rules that match a stretch of text and can pile up on one another. Overlapping hits

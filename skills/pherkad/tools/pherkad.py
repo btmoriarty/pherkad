@@ -79,6 +79,7 @@ voice_config.json wherever a downstream gate runs it.
 """
 from __future__ import annotations
 import argparse
+import functools
 import hashlib
 import json
 import os
@@ -91,6 +92,7 @@ sys.path.insert(0, HERE)
 import voicelint  # noqa: E402
 import structlint  # noqa: E402
 import statefile  # noqa: E402
+import mdmask  # noqa: E402
 
 SURFACES = os.path.join(HERE, "surfaces")
 
@@ -277,38 +279,60 @@ def _hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
+def _sha256(text: str) -> str:
+    """A full sha256, for what the review pack says it hashed; _hash is a short key (I129)."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+@functools.lru_cache(maxsize=8)
+def _split(text: str) -> tuple[list[str], list[str]]:
+    """The lines of a text and mdmask's kind for each, once per text: every finding
+    used to split the whole file again (I151)."""
+    return text.split("\n"), mdmask.line_kinds(text)
+
+
 def context_hash(text: str, line: int, paragraph: bool = False) -> str:
     """The hash of what a finding sits on, whitespace collapsed: the line for a
-    phrase finding; for a structural finding, the whole paragraph from that
-    line to the next blank line, because structlint reports a paragraph
+    phrase finding; for a structural finding, the paragraph from that line to
+    where structlint's paragraph ends (a blank line, a heading, a quote, a
+    table, or the next list item), because structlint reports a paragraph
     against its first line and an edit further down would otherwise leave an
-    old decision in force. A finding at line 0 (the density) has no context."""
-    lines = text.split("\n")
+    old decision in force (I131). A finding at line 0 (the density) has no context."""
+    lines, kinds = _split(text)
     if not 1 <= line <= len(lines):
         return ""
     if not paragraph:
         return _hash(" ".join(lines[line - 1].split())) if lines[line - 1].strip() else ""
     block = []
-    for ln in lines[line - 1:]:
-        if not ln.strip():
+    for k in range(line - 1, len(lines)):
+        if not lines[k].strip() or (block and (kinds[k] in ("heading", "blockquote", "table", "code", "comment")
+                                               or mdmask.is_list_item(lines[k]))):
             break
-        block.append(ln)
+        block.append(lines[k])
     # an empty block has nothing to key a decision on; decide refuses it (I083)
     return _hash(" ".join(" ".join(block).split())) if block else ""
 
 
 def _scope(f: dict) -> bool:
-    return f.get("engine") == "structure"
+    """Paragraph scope for a structural finding; a heading finding is its line (I131)."""
+    return f.get("engine") == "structure" and f.get("rule") != "header"
 
 
-DOCUMENT_RULES = ("frame", "interrogative-headers")
+DOCUMENT_RULES = ("frame", "interrogative-headers", "overuse", "dash-density")
 
 
 def _document_context(f: dict) -> str | None:
-    """A document-level finding (the repeated frame, the heading rate) is keyed
-    on the units it quotes, not on any one line: its match lists them all."""
-    if f.get("rule") in DOCUMENT_RULES:
-        return _hash(" ".join(f["match"].split()))
+    """A document-level finding is keyed on what it counts, not on one line.
+    The repeated frame and the heading rate on every unit they quote, in full
+    (the displayed match is cut to six units of 70 characters, I145); overuse
+    and dash density on the count and the cap, so a decision made at three
+    uses does not cover thirty (I130)."""
+    rule = f.get("rule")
+    if rule in ("frame", "interrogative-headers"):
+        return _hash(" ".join((f.get("key") or f["match"]).split()))
+    if rule in ("overuse", "dash-density"):
+        nums = re.findall(r"\d+(?:\.\d+)?", f.get("message", ""))
+        return _hash(f"{f['rule_id']}|{'|'.join(nums[:2] + nums[-1:])}")
     return None
 
 
@@ -316,13 +340,18 @@ def rule_hashes(cfg: dict) -> dict:
     """Rule id -> hash of what would change the rule: the pattern, and for the
     structural rules and the density, the thresholds too, so a decision made
     under one threshold does not survive a change to it."""
-    thresholds = json.dumps(cfg.get("structure") or {}, sort_keys=True)
+    st = cfg.get("structure") or {}
     out = {}
     for r in all_rules(cfg):
-        seed = r.get("pattern", "")
+        # family and severity too: a warning accepted under one severity must not stay
+        # accepted when the rule becomes an error (I133)
+        seed = f"{r.get('family', '')}|{r.get('severity', '')}|{r.get('pattern', '')}"
         if r["id"].startswith("structure.") or r["id"] == "density":
             family = r["id"].split(".")[1] if r["id"].startswith("structure.") else "density"
-            seed += "|" + thresholds + "|rev" + str(structlint.STRUCT_REVISION.get(family, 0))
+            used = {k: st.get(k, structlint.DEFAULT_THRESHOLDS.get(k)) for k in structlint.STRUCT_KEYS.get(family, ())}
+            seed += "|" + json.dumps(used, sort_keys=True) + "|rev" + str(structlint.STRUCT_REVISION.get(family, 0))
+        elif r.get("family") in voicelint.VOICE_REVISION:
+            seed += "|vrev" + str(voicelint.VOICE_REVISION[r["family"]])
         out[r["id"]] = _hash(seed)
     return out
 
@@ -417,6 +446,9 @@ def density_finding(findings: list[dict], text: str, cfg: dict) -> dict | None:
             "rule_id": "density", "engine": "combined"}
 
 
+_PHRASE_FAMILIES = ("banned-phrase", "engagement-bait", "soft-cliche", "honest-framing")
+
+
 def run_text(text: str, cfg: dict, structure: bool = True, density: bool = True) -> tuple[list[dict], int]:
     """Both engines over ``text``: one list of finding dicts in the shared
     schema, sorted by position, plus the number of findings an inline
@@ -434,8 +466,9 @@ def run_text(text: str, cfg: dict, structure: bool = True, density: bool = True)
         for f in shape:
             if f.rule == "density":
                 continue  # recomputed over both engines below
-            if f.rule == "header" and any(v["match"].lower() in f.match.lower() for v in by_line.get(f.line, [])):
-                continue  # the same tell, already named by a voicelint rule
+            if f.rule == "header" and any(v["rule"] in _PHRASE_FAMILIES and v["match"].lower() in f.match.lower()
+                                          for v in by_line.get(f.line, [])):
+                continue  # the same tell, already named by a voicelint phrase rule; a filler or a dash is not it (I135)
             out.append(dict(vars(f), engine="structure"))
     out.sort(key=lambda f: (f["line"], f["col"]))
     if density:
@@ -454,7 +487,7 @@ def all_rules(cfg: dict) -> list[dict]:
                      "pattern": desc, "rationale": ""})
     for name in structlint.FRAMES:
         for kind in ("heading", "sentence", "closer"):
-            rows.append({"id": f"structure.frame.{name}.{kind}", "family": "frame", "severity": "warning",
+            rows.append({"id": f"structure.frame.{name}.{kind}", "family": "frame", "severity": "advisory",
                          "pattern": f"the '{name}' frame recurring across {kind}s", "rationale": ""})
     rows.append({"id": "density", "family": "density", "severity": "warning",
                  "pattern": "flagged constructions per 100 words, both engines", "rationale": ""})
@@ -471,7 +504,24 @@ def _level(f: dict, advisory: list[str]) -> str:
     return f["severity"]
 
 
-def to_sarif(results: list[tuple[str, list[dict]]], cfg: dict, advisory: list[str]) -> dict:
+def _sarif_location(path: str, f: dict, root: str) -> dict:
+    """A SARIF location: the path relative to SRCROOT, percent-encoded, and a
+    region only for a finding on a line; the density (line 0) is the whole file (I136)."""
+    from urllib.parse import quote
+    if path == "-":
+        uri = "stdin"
+    else:
+        rel = os.path.relpath(os.path.abspath(path), os.path.abspath(root))
+        uri = quote(rel.replace(os.sep, "/")) if not rel.startswith("..") else quote(os.path.abspath(path).replace(os.sep, "/"))
+    loc = {"artifactLocation": {"uri": uri, "uriBaseId": "SRCROOT"}}
+    if f["line"]:
+        loc["region"] = {"startLine": f["line"], "startColumn": max(1, f["col"])}
+    return {"physicalLocation": loc}
+
+
+def to_sarif(results: list[tuple[str, list[dict]]], cfg: dict, advisory: list[str], root: str | None = None) -> dict:
+    from pathlib import Path
+    root = root or os.getcwd()
     rules = {r["id"]: r for r in all_rules(cfg)}
     seen = []
     sarif_results = []
@@ -483,9 +533,7 @@ def to_sarif(results: list[tuple[str, list[dict]]], cfg: dict, advisory: list[st
             sarif_results.append({
                 "ruleId": f["rule_id"], "level": level,
                 "message": {"text": f["message"]},
-                "locations": [{"physicalLocation": {
-                    "artifactLocation": {"uri": path},
-                    "region": {"startLine": max(1, f["line"]), "startColumn": max(1, f["col"])}}}],
+                "locations": [_sarif_location(path, f, root)],
                 "properties": {"engine": f["engine"], "family": f["rule"], "match": f["match"]},
             })
     driver_rules = []
@@ -494,6 +542,7 @@ def to_sarif(results: list[tuple[str, list[dict]]], cfg: dict, advisory: list[st
         driver_rules.append({"id": rid, "shortDescription": {"text": r.get("rationale") or r.get("pattern") or rid}})
     return {"$schema": "https://json.schemastore.org/sarif-2.1.0.json", "version": "2.1.0",
             "runs": [{"tool": {"driver": {"name": "pherkad", "version": _version(), "rules": driver_rules}},
+                      "originalUriBaseIds": {"SRCROOT": {"uri": Path(root).resolve().as_uri() + "/"}},
                       "results": sarif_results}]}
 
 
@@ -621,7 +670,7 @@ def cmd_check(args) -> int:
                           "files": {p: fs for p, fs in results}}, indent=2, ensure_ascii=False))
     elif args.format == "sarif":
         undecided = [(p, [f for f in fs if not f["decision"]]) for p, fs in results]
-        print(json.dumps(to_sarif(undecided, cfg, advisory), indent=2, ensure_ascii=False))
+        print(json.dumps(to_sarif(undecided, cfg, advisory, args.root), indent=2, ensure_ascii=False))
     else:
         if not args.quiet:
             for path, findings in results:
@@ -889,6 +938,7 @@ JUDGMENT_RULES = {
 OUTPUT_SCHEMA = {
     "header": "QUICK VOICE CHECK (surface: <name>, <speaker>, register <register>; profile <loaded|missing>; <n> words)",
     "row": {"rule_ref": "a mechanical rule_id, or 'judgment (5c)' etc., or 'positive-register'",
+            "line": "the finding's line from the packet for a mechanical row; the quote's line for a judgment row",
             "quote": "the passage, verbatim, in backticks",
             "decision": "fix | intentional | literal | not applicable | quoted",
             "rationale": "one clause",
@@ -967,7 +1017,7 @@ def build_pack(path: str, surface: str, config: str | None, decisions_path: str 
             continue
         if entry["present"]:
             body = open(p, encoding="utf-8", errors="replace").read()
-            entry["sha256"] = _hash(body)
+            entry["sha256"] = _sha256(body)
             entry["words"] = len(re.findall(r"\w+", body))
             if inline_profile:
                 entry["text"] = body
@@ -977,8 +1027,9 @@ def build_pack(path: str, surface: str, config: str | None, decisions_path: str 
         item = dict(e)
         if e["exists"]:
             item["text"] = open(e["path"], encoding="utf-8", errors="replace").read()
+            item["sha256"] = _sha256(item["text"])
         excerpts.append(item)
-    ruled, _stale = judgment_records_for(decisions, rel_path(path, droot), text) if decisions else ([], [])
+    ruled = judgment_records_for(decisions, rel_path(path, droot), text)[0] if decisions else []
     speaker = info["speaker"] if info else "author"
     register = info["positive_register"] if info else "profile"
     rules = list(JUDGMENT_RULES["always"])
@@ -986,7 +1037,9 @@ def build_pack(path: str, surface: str, config: str | None, decisions_path: str 
         rules += JUDGMENT_RULES["assistant"]
     rules += JUDGMENT_RULES["register"].get(register, [])
     import datetime
-    return {
+    instructions = _quick_instructions()
+    dec_text = open(decisions_path, encoding="utf-8").read() if decisions_path and os.path.exists(decisions_path) else ""
+    pack = {
         "tool": "pherkad", "version": _version(), "generated": datetime.datetime.now().isoformat(timespec="seconds"),
         "depth": "quick",
         "surface": {"name": info["name"] if info else "", "speaker": speaker, "positive_register": register,
@@ -994,16 +1047,20 @@ def build_pack(path: str, surface: str, config: str | None, decisions_path: str 
                     "excerpts": excerpts},
         "project_overlay": config or "", "config_sha256": config_sha256(cfg),
         "profile": profile,
-        "source": {"path": path, "sha256": _hash(text), "words": len(re.findall(r"\w+", text)), "text": text},
+        "source": {"path": path, "sha256": _sha256(text), "words": len(re.findall(r"\w+", text)), "text": text},
         "mechanical": {"findings": findings, "suppressed": suppressed,
                        "decided": sum(1 for f in findings if f["decision"]),
-                       "decisions": decisions_path or ""},
+                       "decisions": decisions_path or "", "decisions_sha256": _sha256(dec_text) if dec_text else ""},
         "already_ruled": [{"rule_id": d["rule_id"], "quote": d.get("quote", d.get("match", "")),
                            "disposition": d["disposition"], "reason": d["reason"]} for d in ruled],
         "judgment_rules": rules,
-        "instructions": _quick_instructions(),
+        "instructions": instructions, "instructions_sha256": _sha256(instructions),
         "output_schema": OUTPUT_SCHEMA,
     }
+    # the prompt a model is shown, hashed with the timestamp left out, so two packs of the
+    # same inputs hash alike (I129)
+    pack["prompt_sha256"] = _sha256(render_prompt(dict(pack, generated="")))
+    return pack
 
 
 def render_prompt(pack: dict) -> str:
@@ -1076,21 +1133,48 @@ def cmd_review_pack(args) -> int:
 _ROW_DISPOSITION = {"intentional": "intentional", "literal": "accepted", "not applicable": "accepted", "quoted": "accepted"}
 
 
+_COLUMNS = ("rule_ref", "line", "quote", "decision", "rationale", "proposed_edit")
+
+
+def _cells(line: str) -> list[str]:
+    """A table row's cells, split on unescaped pipes; an escaped pipe inside a quote
+    stays in the quote (I120)."""
+    body = line.strip()
+    body = body[1:] if body.startswith("|") else body
+    body = body[:-1] if body.endswith("|") and not body.endswith("\\|") else body
+    return [c.strip().replace("\\|", "|") for c in re.split(r"(?<!\\)\|", body)]
+
+
 def parse_review_table(text: str) -> list[dict]:
-    """Rows of a quick-mode table (Markdown), or a JSON list of row objects."""
+    """Rows of a quick-mode table (Markdown), or a JSON list of row objects. The
+    columns are read from the header row when there is one, so a table with a
+    line column, or with the columns in another order, reads right; with no
+    header the old order (rule_ref, quote, decision, rationale, proposed_edit)
+    is assumed. A row the parser cannot read is reported, never dropped
+    silently (I120)."""
     text = text.strip()
     if text.startswith("["):
         return json.loads(text)
-    rows = []
-    for line in text.split("\n"):
+    rows, cols = [], ["rule_ref", "quote", "decision", "rationale", "proposed_edit"]
+    for n, line in enumerate(text.split("\n"), 1):
         if not line.strip().startswith("|"):
             continue
-        cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cells) < 4 or cells[0].lower() in ("rule_ref", "rule") or set(cells[0]) <= {"-", ":"}:
+        cells = _cells(line)
+        names = [c.strip("`* ").lower().replace(" ", "_") for c in cells]
+        if names and names[0] in ("rule_ref", "rule"):
+            cols = [c if c in _COLUMNS else "_" + c for c in names]
             continue
-        rows.append({"rule_ref": cells[0].strip("`"), "quote": cells[1].strip().strip("`\"'"),
-                     "decision": cells[2].lower(), "rationale": cells[3] if len(cells) > 3 else "",
-                     "proposed_edit": cells[4] if len(cells) > 4 else ""})
+        if cells and set(cells[0]) <= {"-", ":", " "}:
+            continue
+        if len(cells) < 4:
+            sys.stderr.write(f"pherkad: table row {n} has {len(cells)} cell(s), not 4 or more; not read: {line.strip()[:80]}\n")
+            continue
+        row = {c: v for c, v in zip(cols, cells)}
+        row["rule_ref"] = row.get("rule_ref", "").strip("`")
+        row["quote"] = row.get("quote", "").strip().strip("`\"'")
+        row["decision"] = re.sub(r"[*_`]", "", row.get("decision", "")).strip().rstrip(".").lower()
+        row["_row"] = n
+        rows.append(row)
     return rows
 
 
@@ -1099,18 +1183,46 @@ def _judgment_id(ref: str) -> str:
     return JUDGMENT_PREFIX + re.sub(r"[^a-z0-9.]+", "-", inner.lower()).strip("-")
 
 
-def judgment_records_for(decisions: list[dict], path_rel: str, text: str) -> tuple[list[dict], list[dict]]:
-    """(live, stale) judgment records for a file: live while the quote is still in the text."""
-    live, stale = [], []
+def _judgment_context(line_text: str, quote: str) -> str:
+    """A judgment record's key: the line it sits on and the quote together, so two
+    rulings on one line are two records (I123)."""
+    return _hash(" ".join(line_text.split()) + "|" + " ".join(quote.split()))
+
+
+def judgment_records_for(decisions: list[dict], path_rel: str, text: str) -> tuple[list[dict], list[dict], list[dict]]:
+    """(live, stale, moved) judgment records for a file. Live while the quote
+    still sits on a line with the record's context; moved when the quote is in
+    the file but on a line that changed, which is not the ruling that was made
+    (I121); stale when the quote is gone."""
+    live, stale, moved = [], [], []
+    lines = text.split("\n")
+    flat = " ".join(text.split())
     for d in decisions:
         if d["path"] != path_rel or not d["rule_id"].startswith(JUDGMENT_PREFIX):
             continue
         q = " ".join((d.get("quote") or "").split())
-        if q and q in " ".join(text.split()):
+        if not q or q not in flat:
+            stale.append(d)
+        elif any(q[:40] in " ".join(ln.split()) and _judgment_context(ln, q) == d["context_hash"] for ln in lines):
             live.append(d)
         else:
-            stale.append(d)
-    return live, stale
+            moved.append(d)
+    return live, stale, moved
+
+
+def _finding_text(text: str, f: dict) -> str:
+    """What a finding sits on: its line, or its paragraph for a structural finding."""
+    lines, kinds = _split(text)
+    if not 1 <= f["line"] <= len(lines):
+        return ""
+    if not _scope(f):
+        return lines[f["line"] - 1]
+    block = []
+    for k in range(f["line"] - 1, len(lines)):
+        if not lines[k].strip():
+            break
+        block.append(lines[k])
+    return " ".join(block)
 
 
 def cmd_review_import(args) -> int:
@@ -1139,7 +1251,9 @@ def cmd_review_import(args) -> int:
     for r in rows:
         dec = r.get("decision", "").strip().lower()
         if dec not in _ROW_DISPOSITION:
-            skipped += 1  # fix rows and anything else are not decisions
+            if dec != "fix":  # a fix row is not a decision; anything else is a row the table got wrong (I120)
+                print(f"skipped (decision {dec!r} is not one of fix, {', '.join(_ROW_DISPOSITION)}): {r.get('rule_ref')}")
+            skipped += 1
             continue
         quote = " ".join((r.get("quote") or "").split())
         reason = (r.get("rationale") or "").strip()
@@ -1151,12 +1265,27 @@ def cmd_review_import(args) -> int:
             print(f"skipped (quote not found in {rel}): {quote[:60]!r}")
             skipped += 1
             continue
-        line_no = next((i for i, ln in enumerate(lines, 1) if quote[:40] in " ".join(ln.split())), 0)
+        given = str(r.get("line") or "").strip()
+        quote_lines = [i for i, ln in enumerate(lines, 1) if quote[:40] in " ".join(ln.split())]
+        line_no = int(given) if given.isdigit() else (quote_lines[0] if quote_lines else 0)
         ref = r.get("rule_ref", "").strip()
+        if ref in ("density",) or (given.isdigit() and int(given) == 0):
+            print(f"skipped (the density is recomputed on every run and cannot be decided): {ref}")  # I124
+            skipped += 1
+            continue
         if ref in hashes and not ref.startswith(JUDGMENT_PREFIX):
-            at = [f for f in findings if f["rule_id"] == ref and f["line"] == line_no]
-            if not at:
-                at = [f for f in findings if f["rule_id"] == ref and quote[:20] in " ".join(lines[f["line"] - 1].split())]
+            # Bind on the row's line when the table gives one; otherwise on the quote, and
+            # only when it sits in exactly one of this rule's findings. Taking the first line
+            # that held the quote bound a ruling to the wrong occurrence (I122).
+            if given.isdigit():
+                at = [f for f in findings if f["rule_id"] == ref and f["line"] == int(given)]
+            else:
+                at = [f for f in findings if f["rule_id"] == ref and f["line"]
+                      and quote[:40] in " ".join(_finding_text(text, f).split())]
+            if len(at) > 1 and not given.isdigit():
+                print(f"skipped ({len(at)} {ref} findings hold the quote; give the row its line): {quote[:60]!r}")
+                skipped += 1
+                continue
             if not at:
                 print(f"skipped (no {ref} finding at the quote): {quote[:60]!r}")
                 skipped += 1
@@ -1172,7 +1301,8 @@ def cmd_review_import(args) -> int:
                    "scope": "document" if _document_context(f) else ("paragraph" if _scope(f) else "line")}
         else:
             rid = ref if ref.startswith(JUDGMENT_PREFIX) else _judgment_id(ref)
-            rec = {"rule_id": rid, "path": rel, "context_hash": _hash(" ".join(lines[line_no - 1].split())) if line_no else _hash(quote),
+            rec = {"rule_id": rid, "path": rel,
+                   "context_hash": _judgment_context(lines[line_no - 1] if 1 <= line_no <= len(lines) else "", quote),
                    "rule_hash": JUDGMENT_HASH, "count": 1, "disposition": _ROW_DISPOSITION[dec], "reason": reason,
                    "decided": today, "line": line_no, "match": quote[:120], "quote": quote, "scope": "quote"}
         existing = next((d for d in decisions if d["path"] == rel and d["rule_id"] == rec["rule_id"]
@@ -1277,6 +1407,10 @@ def cmd_decide(args) -> int:
             sys.stderr.write(f"pherkad: {exc}\n")
             return 2
         findings, _ = run_text(text, cfg, structure=not args.no_structure)
+        if line == 0:
+            sys.stderr.write(f"pherkad: {loc}: a finding at line 0 (the density) is recomputed on every run; "
+                             "it cannot be decided, only reduced\n")
+            return 2
         at = [f for f in findings if f["line"] == line and (rule_id is None or f["rule_id"] == rule_id)]
         if not at:
             sys.stderr.write(f"pherkad: no finding at {loc}; nothing to decide\n")
@@ -1345,11 +1479,11 @@ def cmd_decisions(args) -> int:
         elif d["path"] not in checked:
             unchecked.append(d)
         elif d["rule_id"].startswith(JUDGMENT_PREFIX):
-            lv, _st = judgment_records_for([d], d["path"], texts.get(d["path"], ""))
+            lv, _st, mv = judgment_records_for([d], d["path"], texts.get(d["path"], ""))
             if lv:
                 kept.append(d)
             else:
-                stale.append((d, "quote gone"))
+                stale.append((d, "quote moved to a changed line" if mv else "quote gone"))
         elif d.get("ruleset", here) != here:
             other_rules.append(d)  # decided under another surface or overlay; this run cannot judge it
         elif d["rule_id"] not in hashes:

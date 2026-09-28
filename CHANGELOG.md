@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.5.45 (2026-09-28)
+
+A recorded decision covers what was ruled on, and stops covering it when that changes. This is Wave 6 of the 2026-09-27 review: the decision store.
+
+**What a decision is keyed on** (`pherkad.py`):
+- A rule's hash now includes its family and severity, so a warning accepted as a warning is not still accepted when the rule becomes an error (I133).
+- The fixed families (`dash`, `honest-framing`, `load-bearing-context`, `loaded-adverb`, `overuse`, and the new `invisible` and `directive` checks) carry a revision number, as the structural checks do. The revisions changed in 0.5.40 to 0.5.44 are bumped, and so are the structural checks 0.5.42 changed, so a decision made under the old behaviour wakes up (I132).
+- A structural decision is hashed with the thresholds its check reads, not the whole `structure` block, so a new `_comment` or an unrelated threshold no longer wakes every structural decision (I134).
+- Overuse and dash density are keyed on their count and cap, so a decision made at three uses does not cover thirty (I130).
+- A header decision is its line. A structural paragraph ends where structlint's does, at a heading, a quote, a table or the next list item (I131).
+- A repeated-frame or heading-rate decision is keyed on every unit in full; the displayed match stays cut to six (I145).
+- `decide` refuses the density, which is recomputed on every run and so could never match (I124).
+- The file is split once per text, not once per finding (I151).
+
+**What a decision is applied to:**
+- A suppression directive acts before the overlap collapse, so silencing the finding that would have won a span leaves the other one standing (I110).
+- A structlint header finding is dropped only when a phrase rule names the same words on that heading; a filler word or a dash no longer takes it down (I135).
+
+**`review-import`:**
+- The table's columns are read from its header, so a table with a `line` column, or in another order, reads right. Cells split on unescaped pipes, markup is stripped from the decision, and a row that cannot be read is reported (I120).
+- A mechanical row binds to its finding by the row's line. Without a line, it binds only when the quote sits in exactly one of that rule's findings, and refuses otherwise. It used to take the first line that held the quote (I122).
+- A judgment record is keyed on its line and its quote together, so two rulings on one line are two records (I123). It stays live only while the quote sits on a line with that context; a quote that moved to a changed line is reported as moved (I121).
+- The quick-mode table in `SKILL.md` and the packet's row schema carry the `line`.
+
+**Outputs:**
+- SARIF paths are relative to `--root`, percent-encoded, under `originalUriBaseIds` SRCROOT; stdin is named, and the density is a file-level result with no region (I136).
+- The review pack hashes every input it names in full sha256: the source, the profile files, the excerpts, the decisions file and the instructions. It also hashes the prompt it renders, with the timestamp left out, so two packs of the same inputs hash alike (I129).
+
+**Also:**
+- **On the saga corpus**, the phrase count holds at 309 and the structural count at 112.
+- No live decision file uses the new keys yet. The saga runs its own vendored copy and has no decisions file, so nothing goes stale.
+- Tests: twelve in `test_pherkad.py`, all of which fail on 0.5.44.
+- No rule in `voice_config.json` changed. `VERSION` 0.5.45.
+
 ## v0.5.44 (2026-09-28)
 
 Rules that erred on literal uses now leave them alone, and rules that missed their own family now catch it. This is Wave 5 of the 2026-09-27 review, part 5, the last: false positives in the rules.

@@ -751,6 +751,124 @@ class MeasuredInPack(unittest.TestCase):
             self.assertIn("12.1 words on average", out, "the prompt carries the measured view")
 
 
+class DecisionStore(unittest.TestCase):
+    """Wave 6: a recorded ruling covers what was ruled on, and nothing else."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.d = self.tmp.name
+        self.dec = os.path.join(self.d, "dec.json")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def write(self, name, text):
+        p = os.path.join(self.d, name)
+        open(p, "w").write(text)
+        return p
+
+    def test_severity_family_and_revision_are_in_the_hash(self):  # I133, I132
+        cfg = json.loads(json.dumps(DEFAULT))
+        before = pherkad.rule_hashes(cfg)
+        moved = json.loads(json.dumps(cfg))
+        e = moved["soft_phrases"].pop(moved["soft_phrases"].index("is the point"))
+        moved["banned_phrases"].append(e)
+        after = pherkad.rule_hashes(moved)
+        self.assertNotEqual(before["soft.is-the-point"], after.get("banned.is-the-point", after.get("soft.is-the-point")))
+        saved = dict(pherkad.voicelint.VOICE_REVISION)
+        try:
+            pherkad.voicelint.VOICE_REVISION["dash"] += 1
+            self.assertNotEqual(before["dash"], pherkad.rule_hashes(cfg)["dash"])
+        finally:
+            pherkad.voicelint.VOICE_REVISION.clear()
+            pherkad.voicelint.VOICE_REVISION.update(saved)
+
+    def test_structural_hash_reads_only_its_thresholds(self):  # I134
+        cfg = json.loads(json.dumps(DEFAULT))
+        a = pherkad.rule_hashes(cfg)
+        cfg["structure"]["_comment"] = "changed"
+        cfg["structure"]["interrogative_pct"] = 99.0
+        b = pherkad.rule_hashes(cfg)
+        self.assertEqual(a["structure.staccato"], b["structure.staccato"])
+        self.assertNotEqual(a["structure.interrogative-headers"], b["structure.interrogative-headers"])
+
+    def test_overuse_decision_is_keyed_on_the_count(self):  # I130
+        f3 = {"rule": "overuse", "rule_id": "overuse.quietly", "message": "'quietly' used 3 times (cap 2 for 90 words); vary it"}
+        f9 = dict(f3, message="'quietly' used 9 times (cap 2 for 95 words); vary it")
+        self.assertNotEqual(pherkad._document_context(f3), pherkad._document_context(f9))
+
+    def test_a_header_decision_is_its_line(self):  # I131
+        self.assertFalse(pherkad._scope({"engine": "structure", "rule": "header"}))
+        text = "Para one line.\nPara two line.\n- a list item\nafter\n"
+        self.assertEqual(pherkad.context_hash(text, 1, True), pherkad.context_hash("Para one line.\nPara two line.\n", 1, True))
+
+    def test_density_cannot_be_decided(self):  # I124
+        p = self.write("a.md", "Text.\n")
+        code, _, err = run(["decide", "--decisions", self.dec, "--reason", "x", p + ":0:density"])
+        self.assertEqual(code, 2)
+        self.assertIn("cannot be decided", err)
+
+    def test_a_filler_on_a_posed_heading_keeps_the_header_finding(self):  # I135
+        rules = [f["rule_id"] for f in pherkad.run_text("## The Real Problem Is Very Simple\n\nBody.\n", DEFAULT)[0]]
+        self.assertIn("structure.header", rules)
+
+    def test_suppressing_the_winner_leaves_the_loser(self):  # I110
+        text = "It really lands. <!-- voicelint: ignore-line soft-cliche -->\n"
+        kept, dropped = pherkad.voicelint.check_counting(text, DEFAULT)
+        self.assertEqual(dropped, 1)
+        self.assertEqual([f.rule_id for f in kept], ["filler.really"])
+
+    def test_import_binds_by_line_and_refuses_an_ambiguous_quote(self):  # I120, I122, I123
+        draft = self.write("d.md", "That is the point of it.\n\nAgain that is the point of it.\n")
+        ambiguous = self.write("t1.md", "| rule_ref | quote | decision | rationale |\n|---|---|---|---|\n"
+                                        "| soft.is-the-point | `is the point of it` | intentional | refrain |\n")
+        code, out, _ = run(["review-import", ambiguous, "--file", draft, "--decisions", self.dec])
+        self.assertIn("give the row its line", out)
+        by_line = self.write("t2.md", "| rule_ref | line | quote | decision | rationale |\n|---|---|---|---|---|\n"
+                                      "| soft.is-the-point | 3 | `is the point of it` | **Intentional.** | refrain \\| once |\n"
+                                      "| judgment (5c) | 1 | `That is` | intentional | first |\n"
+                                      "| judgment (5c) | 1 | `the point` | intentional | second |\n"
+                                      "| broken row |\n")
+        code, out, err = run(["review-import", by_line, "--file", draft, "--decisions", self.dec])
+        recs = json.load(open(self.dec))
+        mech = [r for r in recs if r["rule_id"] == "soft.is-the-point"]
+        self.assertEqual([r["line"] for r in mech], [3])
+        self.assertEqual(mech[0]["reason"], "refrain | once")
+        self.assertEqual(len([r for r in recs if r["rule_id"].startswith("judgment.")]), 2, "two rulings on one line")
+        self.assertIn("not read", err)
+
+    def test_a_moved_judgment_quote_is_not_live(self):  # I121
+        d = {"rule_id": "judgment.5c", "path": "d.md", "quote": "a lesson",
+             "context_hash": pherkad._judgment_context("Not a failure, but a lesson.", "a lesson")}
+        live, stale, moved = pherkad.judgment_records_for([d], "d.md", "Not a failure, but a lesson.\n")
+        self.assertEqual((len(live), len(moved)), (1, 0))
+        live, stale, moved = pherkad.judgment_records_for([d], "d.md", "It was, in the end, a lesson.\n")
+        self.assertEqual((len(live), len(moved)), (0, 1))
+
+    def test_frame_key_is_untruncated(self):  # I145
+        titles = "".join(f"## Speed not accuracy number {i}\n\nBody.\n\n" for i in range(9))
+        f = next(x for x in pherkad.run_text(titles, DEFAULT)[0] if x["rule"] == "frame")
+        self.assertIn("number 8", f["key"])
+        self.assertNotIn("number 8", f["match"])
+
+    def test_sarif_paths_are_relative_uris_and_density_is_file_level(self):  # I136
+        p = self.write("a b.md", "text")
+        out = pherkad.to_sarif([(p, [{"rule_id": "density", "rule": "density", "line": 0, "col": 0, "severity": "warning",
+                                      "message": "m", "engine": "combined", "match": ""}])], DEFAULT, [], self.d)
+        loc = out["runs"][0]["results"][0]["locations"][0]["physicalLocation"]
+        self.assertEqual(loc["artifactLocation"]["uri"], "a%20b.md")
+        self.assertNotIn("region", loc)
+        self.assertTrue(out["runs"][0]["originalUriBaseIds"]["SRCROOT"]["uri"].startswith("file://"))
+
+    def test_pack_hashes_everything_it_names(self):  # I129
+        p = self.write("d.md", "Plain text here.\n")
+        pack = pherkad.build_pack(p, "email", None, None, self.d, None, None)
+        self.assertEqual(len(pack["source"]["sha256"]), 64)
+        self.assertEqual(len(pack["instructions_sha256"]), 64)
+        again = pherkad.build_pack(p, "email", None, None, self.d, None, None)
+        self.assertEqual(pack["prompt_sha256"], again["prompt_sha256"], "the timestamp is not hashed")
+
+
 class ReviewImport(unittest.TestCase):
     TABLE = (
         "| rule_ref | quote | decision | rationale | proposed_edit |\n"

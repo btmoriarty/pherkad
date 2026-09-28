@@ -79,18 +79,18 @@ One command, one table, one line of verdict. Nothing is scored and nothing is re
 ```
 QUICK VOICE CHECK  (surface: email; profile loaded; 412 words)
 
-| rule_ref | quote | decision | rationale | proposed_edit |
-|---|---|---|---|---|
-| honest-framing | "The honest answer is that we slipped." | fix | announces candour instead of exercising it | "We slipped." |
-| soft.is-the-point | "That is the point of the audit." | intentional | the sentence is the point, and the writer's own construction | |
-| structure.two-beat | "None of them wrong. None of them ours." | fix | the clipped symmetry is the tell, and the profile's rhythm runs longer | "None of them were wrong, and none of them were ours." |
-| judgment (5c) | "Not a failure, but a lesson." | fix | the antithesis frame | "A lesson." |
-| positive-register | | not applicable | a status email; no invented scene expected | |
+| rule_ref | line | quote | decision | rationale | proposed_edit |
+|---|---|---|---|---|---|
+| honest-framing | 3 | "The honest answer is that we slipped." | fix | announces candour instead of exercising it | "We slipped." |
+| soft.is-the-point | 3 | "That is the point of the audit." | intentional | the sentence is the point, and the writer's own construction | |
+| structure.two-beat | 7 | "None of them wrong. None of them ours." | fix | the clipped symmetry is the tell, and the profile's rhythm runs longer | "None of them were wrong, and none of them were ours." |
+| judgment (5c) | 9 | "Not a failure, but a lesson." | fix | the antithesis frame | "A lesson." |
+| positive-register | | | not applicable | a status email; no invented scene expected | |
 
 VERDICT: REVISE (3 fix). Everything else stands as written.
 ```
 
-A proposed edit changes no fact, name, number, date, source, or emphasis. When the user confirms an `intentional` or `literal` row in a project that keeps a decision file, record it once with `python3 tools/pherkad.py decide --decisions <file> --reason "<the rationale>" <path>:<line>:<rule_id>` so it stays quiet until the line or the rule changes.
+The `line` is the finding's line from the packet, or for a judgment row the line the quote sits on; `review-import` binds a ruling to it, and without it a quote that appears twice is refused. A proposed edit changes no fact, name, number, date, source, or emphasis. When the user confirms an `intentional` or `literal` row in a project that keeps a decision file, record it once with `python3 tools/pherkad.py decide --decisions <file> --reason "<the rationale>" <path>:<line>:<rule_id>` so it stays quiet until the line or the rule changes.
 
 **Positive markers apply by surface.** A draft is not flat for lacking a scene the surface never wanted. This table mirrors the `positive_register` field each shipped surface carries; `pherkad.py surfaces --json` is the authority when a runtime is available.
 
