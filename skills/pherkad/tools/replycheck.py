@@ -135,7 +135,7 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     try:
-        text = sys.stdin.read() if args.file == "-" else open(args.file, encoding="utf-8", errors="replace").read()
+        text = voicelint.read_source(args.file, False)  # the reader the linter uses, HTML included (I102)
     except OSError as exc:
         sys.stderr.write(f"replycheck: {exc}\n")
         return 2

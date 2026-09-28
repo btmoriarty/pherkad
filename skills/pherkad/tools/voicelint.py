@@ -189,8 +189,10 @@ def all_rules(cfg: dict) -> list[dict]:
         for e in rule_entries(cfg, field):
             rows.append({"id": e["id"], "family": family, "severity": sev,
                          "pattern": e["pattern"], "rationale": e.get("rationale", "")})
+    rows.append({"id": "invisible.bidi", "family": "invisible", "severity": "error", "pattern": "U+202A-202E, U+2066-2069",
+                 "rationale": "a bidirectional control can make text display in an order other than the one it is read in"})
     if cfg.get("no_dashes", True):
-        rows.append({"id": "dash", "family": "dash", "severity": "error", "pattern": "[—–―]",
+        rows.append({"id": "dash", "family": "dash", "severity": "error", "pattern": "[‒–—―⸺⸻]",
                      "rationale": "em/en dash; use a comma, colon, or full stop"})
     elif float(cfg.get("dash_density_cap", 0) or 0) > 0:
         rows.append({"id": "dash-density", "family": "dash-density", "severity": "warning",
@@ -408,10 +410,114 @@ def strip_html(text: str) -> str:
     return html.unescape(text)
 
 
+_FOLD = mdmask.FOLD
+
+
 def normalize_quotes(text: str) -> str:
-    """Fold typographic quotes to ASCII so phrase rules match AI/Word output.
-    One-to-one, so character offsets are preserved."""
-    return text.translate({0x2018: "'", 0x2019: "'", 0x201C: '"', 0x201D: '"'})
+    """Fold typographic quotes, spaces and hyphens to ASCII so phrase rules
+    match AI and word-processor output (I096). One-to-one, so offsets are
+    preserved; the table lives in mdmask, shared with structlint."""
+    return mdmask.fold(text)
+
+
+# Latin look-alikes from the Unicode confusables table (Cyrillic and Greek), folded
+# only inside a word that also holds an ASCII letter, so Russian or Greek prose is
+# left alone while "gаme-changer" with a Cyrillic a is read as what it spoofs (I097).
+_CONFUSABLE = str.maketrans({
+    "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "у": "y", "х": "x", "і": "i", "ј": "j", "ѕ": "s",
+    "ԁ": "d", "һ": "h", "ӏ": "l", "ο": "o", "α": "a", "ν": "v", "ρ": "p", "ι": "i", "κ": "k",
+    "А": "A", "В": "B", "Е": "E", "К": "K", "М": "M", "Н": "H", "О": "O", "Р": "P", "С": "C", "Т": "T",
+    "Х": "X", "Ѕ": "S", "І": "I", "Ј": "J", "Α": "A", "Β": "B", "Ε": "E", "Ζ": "Z", "Η": "H", "Ι": "I",
+    "Κ": "K", "Μ": "M", "Ν": "N", "Ο": "O", "Ρ": "P", "Τ": "T", "Υ": "Y", "Χ": "X"})
+_BIDI = frozenset(range(0x202A, 0x202F)) | frozenset(range(0x2066, 0x206A))
+
+
+def _ignorable(ch: str) -> bool:
+    """A default-ignorable code point: invisible, and able to split a banned
+    phrase without changing how it reads (I099). Bidi controls are reported,
+    not dropped."""
+    o = ord(ch)
+    if o in _BIDI:
+        return False
+    return (unicodedata.category(ch) == "Cf" or o == 0x034F or 0xFE00 <= o <= 0xFE0F or 0xE0100 <= o <= 0xE01EF
+            or 0x180B <= o <= 0x180F or o in (0x115F, 0x1160, 0x3164, 0xFFA0, 0x17B4, 0x17B5))
+
+
+_ENTITY = re.compile(r"&(?:#[0-9]+|#[xX][0-9a-fA-F]+|[A-Za-z][A-Za-z0-9]*);")
+_ESCAPE = re.compile(r"\\([!-/:-@\[-`{-~])")
+_INLINE_TAG = re.compile(r"<!--.*?-->|</?[A-Za-z][^>\n]*>", re.S)
+_LINK = re.compile(r"!?\[([^\]\n]*)\](?:\([^)\n]*\)|\[[^\]\n]*\])")
+_EMPH = re.compile(r"\*{1,3}|_{1,3}|~~")
+
+
+def project(text: str) -> tuple[str, list[int], list[int]]:
+    """The prose the phrase rules read, and where each character came from.
+
+    Markdown and typography that change how a phrase is spelled but not how it
+    reads are undone: entities decoded (I102), backslash escapes, inline tags
+    and comments, link brackets and destinations, and emphasis delimiters
+    dropped (I107); default-ignorable characters removed (I099); quotes, spaces
+    and hyphens folded, NFKC applied, and Latin look-alikes folded in words that
+    also hold ASCII letters (I096, I097). Returns the projection, the source
+    offset of every projected character, and the source offsets of any bidi
+    control characters, which are an error of their own."""
+    pairs = [(c, i) for i, c in enumerate(text)]
+
+    def rewrite(rx, repl):
+        s = "".join(c for c, _ in pairs)
+        out, pos = [], 0
+        for m in rx.finditer(s):
+            out.extend(pairs[pos:m.start()])
+            out.extend(repl(m, pairs[m.start():m.end()], s))
+            pos = m.end()
+        out.extend(pairs[pos:])
+        return out
+
+    def entity(m, span, s):
+        dec = html.unescape(m.group(0))
+        return span if dec == m.group(0) else [(c, span[0][1]) for c in dec]
+
+    def link(m, span, s):
+        a = m.group(0).index("[") + 1
+        return span[a:a + len(m.group(1))]  # the link text, at its own offsets
+
+    def emph(m, span, s):
+        before = s[m.start() - 1] if m.start() else " "
+        after = s[m.end()] if m.end() < len(s) else " "
+        if before.isspace() and after.isspace():
+            return span  # "2 * 3" or a list bullet, not emphasis
+        if m.group(0)[0] == "_" and before.isalnum() and after.isalnum():
+            return span  # snake_case is a name, not emphasis
+        return []
+
+    pairs = rewrite(_ENTITY, entity)
+    pairs = rewrite(_ESCAPE, lambda m, span, s: span[1:])
+    pairs = rewrite(_INLINE_TAG, lambda m, span, s: [])
+    pairs = rewrite(_LINK, link)
+    pairs = rewrite(_EMPH, emph)
+    bidi, folded = [], []
+    for c, i in pairs:
+        if ord(c) in _BIDI:
+            bidi.append(i)
+            continue
+        if _ignorable(c):
+            continue
+        c = c.translate(_FOLD)
+        if ord(c) > 127:
+            n = unicodedata.normalize("NFKC", c)
+            if n != c:
+                folded.extend((x, i) for x in n)
+                continue
+        folded.append((c, i))
+    s = "".join(c for c, _ in folded)
+    if any(ord(c) > 127 for c in s):
+        chars = list(s)
+        for m in re.finditer(r"[^\W\d_]+", s):
+            w = m.group(0)
+            if re.search(r"[A-Za-z]", w) and w != w.translate(_CONFUSABLE):
+                chars[m.start():m.end()] = list(w.translate(_CONFUSABLE))
+        s = "".join(chars)
+    return s, [i for _, i in folded], bidi
 
 
 def mask_code(text: str) -> str:
@@ -498,10 +604,21 @@ def _soft_to_regex(phrase: str) -> str:
         elif p == "[det]":
             out.append(_DET)
         elif p == "[adj]":
-            out.append(r"(?:\w+ )?")
+            out.append(r"(?:\w+" + _WS + ")?")
         elif p:
-            out.append(re.escape(p))
+            out.append(_lit(p))
     return "".join(out)
+
+
+# The space in a phrase: any run of spaces or tabs, with at most one line break, so a
+# hard wrap, a double space or a tab inside a banned phrase still matches it, and a
+# paragraph break still ends it (I059). No-break spaces are folded to spaces before this.
+_WS = r"(?:[^\S\n]+\n?[^\S\n]*|\n[^\S\n]*)"
+
+
+def _lit(phrase: str) -> str:
+    """A literal phrase as a regex over the projection: folded like the text, spaces flexible."""
+    return re.escape(normalize_quotes(phrase)).replace("\\ ", _WS)
 
 
 def _allow_phrases(text: str) -> set:
@@ -599,19 +716,35 @@ def check_counting(text: str, cfg: dict):
     # "ignore-line banned.game-changer" names the phrase it silences.
     text = re.sub(r"<!--\s*voicelint(?:-allow)?:.*?-->",
                   lambda m: re.sub(r"[^\n]", " ", m.group(0)), text, flags=re.S)
+    # Every prose rule reads the projection; a finding is placed at the source offset its
+    # first character came from. The source rule reads URLs, which the projection drops
+    # from links, so it reads the masked source.
+    source = text
+    text, where, bidi = project(source)
     out: list[Finding] = []
 
-    spans: list[tuple[int, int]] = []  # parallel to out: character offsets of each match
+    spans: list[tuple[int, int]] = []  # parallel to out: source offsets of each match
 
-    def add(m, severity, rule, message, rule_id=None):
-        line, col = at(m.start())
+    def add(m, severity, rule, message, rule_id=None, raw=False):
+        if raw:
+            s, e = m.start(), m.end()
+        else:  # a zero-width match (a raw regex can make one) sits where its neighbour came from
+            s = where[min(m.start(), len(where) - 1)] if where else 0
+            e = where[m.end() - 1] + 1 if m.end() > m.start() else s
+        line, col = at(s)
         out.append(Finding(line, col, severity, rule, m.group(0).strip(), message, rule_id or rule))
-        spans.append((m.start(), m.end()))
+        spans.append((s, e))
 
-    # em / en / horizontal bar. An en dash between digits is a range (pages 10–12,
-    # 1914–18), which the prose rules allow, so it is not a hit.
-    dash_hits = [m for m in _iter(r"[—–―]", text, flags=0)
-                 if not (m.group(0) == "–" and m.start() > 0 and text[m.start() - 1].isdigit()
+    for i in bidi:
+        line, col = at(i)
+        out.append(Finding(line, col, "error", "invisible", f"U+{ord(source[i]):04X}",
+                           "bidirectional control character; it can reorder how the text displays", "invisible.bidi"))
+        spans.append((i, i + 1))
+
+    # em / en / figure dash / horizontal bar / two- and three-em dash. An en or figure dash
+    # between digits is a range (pages 10–12, 1914–18), which the prose rules allow (I104).
+    dash_hits = [m for m in _iter(r"[‒–—―⸺⸻]", text, flags=0)
+                 if not (m.group(0) in "–‒" and m.start() > 0 and text[m.start() - 1].isdigit()
                          and m.end() < len(text) and text[m.end()].isdigit())]
     if cfg.get("no_dashes", True):
         for m in dash_hits:
@@ -665,29 +798,37 @@ def check_counting(text: str, cfg: dict):
     # rationale when the entry has one, since a regex is not a readable label.
     def literal_or_regex(phrase):
         if phrase.startswith("re:"):
-            return phrase[3:], ""
-        return re.escape(phrase), phrase
+            return normalize_quotes(phrase[3:]), ""
+        return _lit(phrase), phrase
 
-    for e in rule_entries(cfg, "banned_phrases"):
-        pat, guard = literal_or_regex(e["pattern"])
-        label = e.get("rationale") or e["pattern"]
-        for m in _iter_phrase(pat, guard, text):
-            add(m, "error", "banned-phrase", f"canned phrase: '{label}'", e["id"])
+    def phrase_hits(pattern, guard, raw_pattern):
+        """Matches on the projection, and for a raw regex also on the masked source:
+        a regex may be about the markup itself (a Markdown link, a bold run), which
+        the projection removes. Overlapping hits of one rule collapse to one."""
+        for m in _iter_phrase(pattern, guard, text):
+            yield m, False
+        if raw_pattern.startswith("re:"):
+            for m in _iter_phrase(pattern, guard, source):
+                yield m, True
 
-    for e in rule_entries(cfg, "engagement_bait"):
-        pat, guard = literal_or_regex(e["pattern"])
-        label = e.get("rationale") or e["pattern"]
-        for m in _iter_phrase(pat, guard, text):
-            add(m, "error", "engagement-bait", f"manufactured-stance opener: '{label}'", e["id"])
+    for field, sev, rule, what in (("banned_phrases", "error", "banned-phrase", "canned phrase"),
+                                   ("engagement_bait", "error", "engagement-bait", "manufactured-stance opener")):
+        for e in rule_entries(cfg, field):
+            pat, guard = literal_or_regex(e["pattern"])
+            label = e.get("rationale") or e["pattern"]
+            for m, raw in phrase_hits(pat, guard, e["pattern"]):
+                add(m, sev, rule, f"{what}: '{label}'", e["id"], raw=raw)
 
     for e in rule_entries(cfg, "soft_phrases"):
         phrase = e["pattern"]
         label = e.get("rationale") or phrase
-        for m in _iter_phrase(_soft_to_regex(phrase), phrase, text):
-            add(m, "warning", "soft-cliche", f"overused AI phrasing: '{label}'", e["id"])
+        for m, raw in phrase_hits(_soft_to_regex(phrase), phrase, phrase):
+            add(m, "warning", "soft-cliche", f"overused AI phrasing: '{label}'", e["id"], raw=raw)
 
     if cfg.get("flag_loaded_quietly", True):
-        for m in _iter(r"\bquietly\b(?=\s*(?:[.,;:!?)\]]|$))", text, flags=re.IGNORECASE | re.MULTILINE):
+        # clause-final: before punctuation, the end of the text, or a paragraph break; a hard
+        # line wrap is not the end of a clause (I108)
+        for m in _iter(r"\bquietly\b(?=\s*(?:[.,;:!?)\]]|\Z|\n[ \t]*\n))", text, flags=re.IGNORECASE):
             add(m, "warning", "loaded-adverb", "trailing 'quietly'; the insinuating position. Put it before the verb or cut it")
 
     for e in rule_entries(cfg, "filler_words"):
@@ -715,7 +856,7 @@ def check_counting(text: str, cfg: dict):
         # Only scheme-bearing URLs are scanned; a bare "msn.com/x" with no
         # scheme is left to the judgment layer, since a loose host regex would
         # reintroduce path and prose false positives.
-        for m in _iter(r"https?://[^\s)\"'<>]+", text):
+        for m in _iter(r"https?://[^\s)\"'<>]+", source):
             host = (urlsplit(m.group(0)).hostname or "").lower().rstrip(".")
             if not host:
                 continue
@@ -730,7 +871,7 @@ def check_counting(text: str, cfg: dict):
                 else:
                     hit = domain in labels
                 if hit:
-                    add(m, "error", "source", f"low-trust/aggregator source: {domain}", rule_id)
+                    add(m, "error", "source", f"low-trust/aggregator source: {domain}", rule_id, raw=True)
                     break
 
     out = _collapse_overlaps(out, spans)

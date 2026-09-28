@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.5.40 (2026-09-28)
+
+A banned phrase is caught however it is spelled, as long as it reads the same. This is Wave 5 of the 2026-09-27 review, part 1: the normalization pass.
+
+- **One projection** (`voicelint.project`). Every prose rule now reads a copy of the text with the spelling tricks undone, and each finding is placed at the source line and column its first character came from. The projection:
+  - decodes entities (`&mdash;`, `&#45;`) (I102);
+  - drops backslash escapes, inline tags and comments, link brackets and destinations, and emphasis delimiters. Underscore italics no longer defeat a word-edge rule; snake_case and `2 * 3` are left alone (I106, I107);
+  - removes zero-width and other default-ignorable characters (I099);
+  - folds typographic quotes, the modifier apostrophe, no-break and thin spaces, and the Unicode hyphens, then applies NFKC (I096, I097);
+  - folds Cyrillic and Greek look-alikes inside a word that also holds an ASCII letter, so a Russian or Greek word is left as it is (I097).
+- **Bidi controls** (U+202A to U+202E, U+2066 to U+2069) are an error of their own, `invisible.bidi`, because they can make text display in a different order from the one it is read in (I099).
+- **Spaces in a phrase** match any run of spaces or tabs with at most one line break, so a hard wrap or a double space no longer hides a phrase, and a paragraph break still ends one (I059).
+- **Dashes.** The dash rule covers the figure dash and the two- and three-em dashes; a figure dash between digits is a range, like an en dash (I104).
+- **Trailing "quietly"** fires before punctuation, a paragraph break or the end of the text, and no longer at a hard line wrap (I108).
+- **A raw `re:` rule** also runs on the source, because a rule may be about the markup itself, such as the chat surface's Markdown-link ban.
+- The URL source rule reads the source, since the projection drops link destinations.
+- `structlint` reads the same one-for-one fold, now in `mdmask`, and `replycheck` reads files through `voicelint.read_source` (I096, I102).
+- **On the saga corpus** (202 files, the saga's config), findings go from 294 to 309. All 15 new ones are phrases the rules already ban, split across a hard line wrap.
+- Tests: nine in `test_voicelint.py`, eight of which fail on 0.5.39; the ninth pins the source column after an entity.
+- No rule in `voice_config.json` changed. `VERSION` 0.5.40.
+
 ## v0.5.39 (2026-09-27)
 
 The measured profile's flags now mean what they say, and each one says how much it rests on. This is Wave 4 of the 2026-09-27 review. A split-half test on the author's own mail shows the size of the change: the profile was built on one half of his mail by id and compared on the 425 messages of 100 words or more in the other. Under 0.5.38's rule, 373 of the 425 had a shape feature past two standard deviations, and all 425 had a function word past it. Under this release, 5 of 425 have a family flagged.

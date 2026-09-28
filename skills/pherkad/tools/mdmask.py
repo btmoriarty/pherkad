@@ -45,6 +45,18 @@ FIELD_LINE = re.compile(r"^\s*(\*\*[^*]{1,40}:\*\*\s*){2,}")
 LIST_ITEM = re.compile(r"^\s*([-*+]|\d+[.)])\s+")
 INLINE_CODE = re.compile(r"`[^`\n]*`")
 
+# One character for one: typographic quotes and the modifier apostrophe to ASCII
+# quotes, the no-break and thin spaces to a space, the non-breaking and Unicode
+# hyphens to '-'. Offsets are preserved. Shared so voicelint and structlint read
+# the same characters (I096).
+FOLD = {0x2018: "'", 0x2019: "'", 0x201C: '"', 0x201D: '"', 0x02BC: "'",
+        0x00A0: " ", 0x202F: " ", 0x2007: " ", 0x2009: " ", 0x200A: " ", 0x2002: " ", 0x2003: " ",
+        0x2004: " ", 0x2005: " ", 0x2006: " ", 0x2008: " ", 0x2010: "-", 0x2011: "-"}
+
+
+def fold(text: str) -> str:
+    return text.translate(FOLD)
+
 
 def line_kinds(text: str) -> list[str]:
     """One kind per line of ``text`` (split on "\\n", so the count matches

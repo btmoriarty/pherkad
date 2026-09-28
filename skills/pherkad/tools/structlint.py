@@ -448,7 +448,9 @@ def check_text(raw: str, thresholds: dict | None = None) -> list[Finding]:
     t = dict(DEFAULT_THRESHOLDS)
     t.update(thresholds or {})
     SHORT, STACCATO_RUN = int(t["short_chars"]), int(t["staccato_run"])
-    lines = raw.splitlines()
+    # the same one-for-one fold voicelint reads, so a curly quote or a no-break space
+    # does not hide a quoted span or a "here's" header from the checks below (I096)
+    lines = mdmask.fold(raw).splitlines()
     skip = _suppressed(lines)
     lines = _strip_code(lines)
     found: list[Finding] = []

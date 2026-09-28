@@ -425,6 +425,61 @@ class Html(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 6. Inline suppression, whole-file allowances, the rules-file marker
 # ---------------------------------------------------------------------------
+class Evasion(unittest.TestCase):
+    """Wave 5: spellings that read as a banned phrase must be linted as one."""
+
+    def ids(self, text):
+        return {f.rule_id for f in voicelint.check(text, DEFAULT)}
+
+    def test_whitespace_inside_a_phrase(self):  # I059
+        for text in ("At the end\nof the day we left.", "At the end  of the day we left.",
+                     "At the end\tof the day.", "At the end of the day."):
+            self.assertIn("banned.at-the-end-of-the-day", self.ids(text), repr(text))
+        self.assertNotIn("banned.at-the-end-of-the-day", self.ids("At the end\n\nof the day we left."),
+                         "a paragraph break ends a phrase")
+
+    def test_typographic_hyphens_spaces_and_apostrophes(self):  # I096
+        self.assertIn("banned.game-changer", self.ids("It is a game‑changer."))
+        self.assertIn("banned.game-changer", self.ids("It is a game‐changer."))
+        self.assertIn("banned.it-s-worth-noting", self.ids("Itʼs worth noting that."))
+
+    def test_look_alikes_and_compatibility_forms(self):  # I097
+        self.assertIn("banned.game-changer", self.ids("It is a gаme-changer."))  # Cyrillic a
+        self.assertIn("banned.paradigm-shift", self.ids("A ｐaradigm shift."))  # full-width p
+        self.assertEqual(rules("Москва is a city."), set(), "a Russian word is not folded")
+
+    def test_invisible_characters(self):  # I099
+        self.assertIn("banned.game-changer", self.ids("It is a game​-changer."))
+        self.assertIn("banned.paradigm-shift", self.ids("A para­digm shift."))
+        self.assertIn("banned.game-changer", self.ids("It is a gam͏e-changer."))
+        self.assertIn("invisible.bidi", self.ids("Fine text ‮ reversed."))
+
+    def test_entities(self):  # I102
+        self.assertIn("dash", self.ids("We left &mdash; late."))
+        self.assertIn("banned.game-changer", self.ids("It is a game&#45;changer."))
+
+    def test_dash_look_alikes(self):  # I104
+        for d in ("‒", "⸺", "﹘"):
+            self.assertIn("dash", self.ids(f"We left {d} late."), repr(d))
+        self.assertNotIn("dash", self.ids("pages 10‒12"), "a figure dash between digits is a range")
+
+    def test_markdown_inside_a_phrase(self):  # I106, I107
+        self.assertIn("honest-framing", self.ids("Here is _the honest answer_ to it."))
+        for text in ("It is a **game**-changer.", "It is a game-<b>changer</b>.", "It is a [game-changer](http://x).",
+                     "It is a game\\-changer.", "At the end of <!-- x --> the day."):
+            self.assertTrue(self.ids(text) & {"banned.game-changer", "banned.at-the-end-of-the-day"}, text)
+        self.assertEqual(rules("The config_file and 2 * 3 stay put."), set())
+
+    def test_a_finding_points_at_the_source(self):
+        f = voicelint.check("One.\n**It** is a &ldquo;game-changer&rdquo;.", DEFAULT)[0]
+        self.assertEqual((f.line, f.col), (2, 20))  # "game" in the source, after the entity
+
+    def test_quietly_needs_a_clause_end(self):  # I108
+        self.assertNotIn("loaded-adverb", self.ids("He left quietly\nthrough the side door."))
+        self.assertIn("loaded-adverb", self.ids("He left quietly\n\nNext paragraph."))
+        self.assertIn("loaded-adverb", self.ids("He left quietly."))
+
+
 class Suppression(unittest.TestCase):
     def counting(self, text):
         return voicelint.check_counting(text, DEFAULT)
