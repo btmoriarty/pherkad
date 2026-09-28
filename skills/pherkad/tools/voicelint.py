@@ -189,6 +189,8 @@ def all_rules(cfg: dict) -> list[dict]:
         for e in rule_entries(cfg, field):
             rows.append({"id": e["id"], "family": family, "severity": sev,
                          "pattern": e["pattern"], "rationale": e.get("rationale", "")})
+    rows.append({"id": "directive.unclosed", "family": "directive", "severity": "error", "pattern": "<!-- voicelint... with no -->",
+                 "rationale": "an unclosed directive does nothing, and used to hide the prose after it"})
     rows.append({"id": "invisible.bidi", "family": "invisible", "severity": "error", "pattern": "U+202A-202E, U+2066-2069",
                  "rationale": "a bidirectional control can make text display in an order other than the one it is read in"})
     if cfg.get("no_dashes", True):
@@ -403,11 +405,22 @@ def strip_html(text: str) -> str:
     can shift columns slightly within a line but never changes the line."""
     def blank(m):  # keep newlines, blank everything else in the match
         return re.sub(r"[^\n]", " ", m.group(0))
-    text = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", blank, text)
-    # Every tag goes, except a voicelint directive: it is an HTML comment, and
-    # stripping it here would make ignore-line and voicelint-allow dead in HTML.
-    text = re.sub(r"(?s)<(?!!--\s*voicelint)[^>]+>", blank, text)
-    return html.unescape(text)
+    # What is not the author's prose goes whole, contents included: scripts and
+    # styles, code and preformatted text, and quotations (someone else's words,
+    # as a Markdown blockquote is). Before this, a <blockquote> or a <code> in an
+    # HTML file was linted as his prose (I094).
+    text = re.sub(r"(?is)<(script|style|code|pre|kbd|samp|tt|textarea|blockquote)\b[^>]*>.*?</\1\s*>", blank, text)
+    # Every other tag and comment goes, except a voicelint directive: stripping it here
+    # would make ignore-line and voicelint-allow dead in HTML.
+    text = re.sub(r"(?s)<!--(?!\s*voicelint).*?-->|<(?!!--)[^>]+>", blank, text)
+
+    # Entities are decoded one at a time, so a decoded line break cannot move a line,
+    # and what decodes to Markdown syntax cannot become structure the Markdown reader
+    # acts on: a decoded "<!--", ">" or backtick is replaced by a look-alike (I094).
+    def entity(m):
+        dec = html.unescape(m.group(0))
+        return dec.replace("\n", " ").replace("<", "‹").replace(">", "›").replace("`", "ˋ")
+    return re.sub(r"&(?:#[0-9]+|#[xX][0-9a-fA-F]+|[A-Za-z][A-Za-z0-9]*);", entity, text)
 
 
 _FOLD = mdmask.FOLD
@@ -445,7 +458,9 @@ def _ignorable(ch: str) -> bool:
 
 _ENTITY = re.compile(r"&(?:#[0-9]+|#[xX][0-9a-fA-F]+|[A-Za-z][A-Za-z0-9]*);")
 _ESCAPE = re.compile(r"\\([!-/:-@\[-`{-~])")
-_INLINE_TAG = re.compile(r"<!--.*?-->|</?[A-Za-z][^>\n]*>", re.S)
+# a comment may wrap lines but never crosses a paragraph break, so an unclosed one
+# cannot swallow the prose after it (I103)
+_INLINE_TAG = re.compile(r"<!--(?:(?!\n[ \t]*\n).)*?-->|</?[A-Za-z][^>\n]*>", re.S)
 _LINK = re.compile(r"!?\[([^\]\n]*)\](?:\([^)\n]*\)|\[[^\]\n]*\])")
 _EMPH = re.compile(r"\*{1,3}|_{1,3}|~~")
 
@@ -714,8 +729,13 @@ def check_counting(text: str, cfg: dict):
     allow = _allow_phrases(text)
     # Once read, a directive comment is blanked so its own words are not linted:
     # "ignore-line banned.game-changer" names the phrase it silences.
-    text = re.sub(r"<!--\s*voicelint(?:-allow)?:.*?-->",
-                  lambda m: re.sub(r"[^\n]", " ", m.group(0)), text, flags=re.S)
+    # A directive closes within its paragraph (an allow marker's reason may wrap a line). An
+    # unclosed one used to blank every line of prose down to the next --> anywhere in the
+    # file (I103); now it blanks nothing and is reported.
+    directive = r"<!--\s*voicelint(?:-allow)?:(?:(?!\n[ \t]*\n).)*?-->"
+    closed = {m.start() for m in re.finditer(directive, text, re.S)}
+    unclosed = [m.start() for m in re.finditer(r"<!--\s*voicelint(?:-allow)?:", text) if m.start() not in closed]
+    text = re.sub(directive, lambda m: re.sub(r"[^\n]", " ", m.group(0)), text, flags=re.S)
     # Every prose rule reads the projection; a finding is placed at the source offset its
     # first character came from. The source rule reads URLs, which the projection drops
     # from links, so it reads the masked source.
@@ -734,6 +754,13 @@ def check_counting(text: str, cfg: dict):
         line, col = at(s)
         out.append(Finding(line, col, severity, rule, m.group(0).strip(), message, rule_id or rule))
         spans.append((s, e))
+
+    for i in unclosed:
+        line, col = at(i)
+        out.append(Finding(line, col, "error", "directive", "<!-- voicelint",
+                           "a voicelint directive with no --> before the paragraph ends does nothing; close it",
+                           "directive.unclosed"))
+        spans.append((i, i + 1))
 
     for i in bidi:
         line, col = at(i)

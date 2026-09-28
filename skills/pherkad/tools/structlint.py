@@ -369,20 +369,27 @@ def load_thresholds(config_path: str | None) -> dict:
     return t
 
 
-def _suppressed(lines: list[str]) -> set[int]:
-    """1-indexed line numbers the file asks us to skip."""
-    out: set[int] = set()
-    for i, ln in enumerate(lines, 1):
-        if re.search(r"<!--\s*structlint:\s*ignore-line\s*-->", ln):
-            out.add(i)
-        if re.search(r"<!--\s*structlint:\s*ignore-next-line\s*-->", ln):
-            out.add(i + 1)
+def _suppressed(lines: list[str]) -> dict[int, set[str]]:
+    """1-indexed line number -> the rules the file silences there ("*" for all).
+    Read from the code-masked text, so a directive quoted in code silences
+    nothing, and like voicelint's, a directive may name the rules it silences:
+    ``<!-- structlint: ignore-line staccato -->`` (I082)."""
+    out: dict[int, set[str]] = {}
+    masked = mdmask.mask("\n".join(lines), ("code",)).split("\n")
+    for i, ln in enumerate(masked, 1):
+        for m in re.finditer(r"<!--\s*structlint:\s*ignore(-next-line|-line)\b(.*?)-->", ln):
+            target = i + 1 if m.group(1) == "-next-line" else i
+            out.setdefault(target, set()).update(re.findall(r"[A-Za-z][\w.-]*", m.group(2)) or {"*"})
     return out
 
 
 def _strip_code(lines: list[str]) -> list[str]:
-    """Blank fenced and inline code, keeping line numbers intact (mdmask)."""
-    return mdmask.mask("\n".join(lines), ("code",)).split("\n")
+    """Blank fenced and inline code and HTML comments, keeping line numbers
+    intact (mdmask). A comment, a suppression directive included, is not prose
+    and was being counted as a sentence (I082)."""
+    text = mdmask.mask("\n".join(lines), ("code", "comment"))
+    text = re.sub(r"<!--(?:(?!\n[ \t]*\n).)*?-->", lambda m: mdmask.blank(m.group(0)), text, flags=re.S)
+    return text.split("\n")
 
 
 def _sentences(text: str) -> list[str]:
@@ -468,7 +475,7 @@ def check_text(raw: str, thresholds: dict | None = None) -> list[Finding]:
             buf.clear()
 
     for i, ln in enumerate(lines, 1):
-        if (i in skip or not ln.strip() or BLOCKQUOTE.match(ln)
+        if (not ln.strip() or BLOCKQUOTE.match(ln)
                 or HEADER_LINE.match(ln) or FIELD_LINE.match(ln)
                 or TABLE_ROW.match(ln) or BRACKET_PLACEHOLDER.match(ln)
                 or _is_bibliographic(ln)):
@@ -478,7 +485,7 @@ def check_text(raw: str, thresholds: dict | None = None) -> list[Finding]:
                 start = i
             buf.append(_mask_spans(ln))
             continue
-        if i in skip or not ln.strip() or BLOCKQUOTE.match(ln):
+        if not ln.strip() or BLOCKQUOTE.match(ln):
             continue
 
         hm = HEADER_LINE.match(ln)
@@ -558,6 +565,9 @@ def check_text(raw: str, thresholds: dict | None = None) -> list[Finding]:
 
     found.extend(check_frames(lines, heads, paras, t))
 
+    # A suppressed line keeps its place in its paragraph, so the sentences around it read
+    # as written; what it silences is a finding reported on it (I082).
+    found = [f for f in found if not (skip.get(f.line) and ("*" in skip[f.line] or f.rule in skip[f.line]))]
     words = len(re.findall(r"\b\w+\b", "\n".join(lines)))
     cap = float(t["density_per_100"])
     if words >= 100:

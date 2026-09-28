@@ -81,6 +81,45 @@ class Mask(unittest.TestCase):
     def test_fence_lines_themselves_are_masked(self):
         self.assertEqual(mdmask.mask("```py\nx\n```", ("code",)), "     \n \n   ")
 
+    def test_block_structure_cases(self):  # I070
+        k = lambda t: mdmask.line_kinds(t)  # noqa: E731
+        # a fence inside a list item closes when the item does, not at the end of the file
+        self.assertEqual(k("- item\n  ```\n  code\n\nAfter the list."), ["list", "code", "code", "code", "prose"])
+        # indented code after a blank; an indented line inside a paragraph is not code
+        self.assertEqual(k("Para.\n\n    code()\nmore"), ["prose", "blank", "code", "prose"])
+        self.assertEqual(k("Para\n    continued"), ["prose", "prose"])
+        self.assertEqual(k("Para.\n\n\tcode()"), ["prose", "blank", "code"])  # a tab is four columns
+        # a lazy line continues the quote
+        self.assertEqual(k("> quoted\nstill quoted\n\nmine"), ["blockquote", "blockquote", "blank", "prose"])
+        # setext headings
+        self.assertEqual(k("Title\n=====\n\nSub\n---"), ["heading", "heading", "blank", "heading", "heading"])
+        # comment blocks and type-1 HTML blocks, with no fence read inside them
+        self.assertEqual(k("<!--\n```\n-->\nprose"), ["comment", "comment", "comment", "prose"])
+        self.assertEqual(k("<pre>\nx > y\n</pre>\nprose"), ["code", "code", "code", "prose"])
+        # four spaces before ">" is not a quote
+        self.assertEqual(k("Para.\n\n    > not a quote"), ["prose", "blank", "code"])
+
+    def test_heading_regex_is_linear_and_keeps_hash_words(self):  # I071
+        import time
+        t0 = time.time()
+        mdmask.heading_text("#" + " " * 100000 + "x")
+        mdmask.heading_text("# " + " " * 100000)
+        self.assertLess(time.time() - t0, 1.0)
+        self.assertEqual(mdmask.heading_text("# C#"), "C#")
+        self.assertEqual(mdmask.heading_text("## The Title ##"), "The Title")
+
+    def test_inline_code_is_paired_by_run_length_across_lines(self):  # I072, I073
+        s = mdmask.strip_inline_code
+        self.assertEqual(s("a `b\nc` d"), "a   \n   d")
+        self.assertEqual(s("a ``b ` c`` d"), "a " + " " * len("``b ` c``") + " d")
+        self.assertEqual(s("a \\`not code` e"), "a \\`not code` e", "an escaped backtick opens nothing")
+        self.assertEqual(s("see <http://x/`y`> ok"), "see <http://x/`y`> ok")
+        self.assertEqual(mdmask.mask("Hello `code\nmore` bye."), "Hello " + " " * 5 + "\n" + " " * 5 + " bye.")
+
+    def test_code_elements_are_masked(self):  # I074
+        self.assertEqual(mdmask.strip_inline_code("a <code>game-changer</code> b"),
+                         "a " + " " * len("<code>game-changer</code>") + " b")
+
     def test_helpers(self):
         self.assertEqual(mdmask.heading_text("## The Title ##"), "The Title")
         self.assertIsNone(mdmask.heading_text("not a heading"))

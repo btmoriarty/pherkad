@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.5.41 (2026-09-28)
+
+What counts as prose is read the way Markdown renders it. This is Wave 5 of the 2026-09-27 review, part 2: the Markdown reader.
+
+- **`mdmask.line_kinds`** keeps the block state it needs (I070, I073):
+  - A fence opened inside a list item closes when the item ends, instead of hiding the rest of the file.
+  - A line indented four columns after a blank line is code; a tab counts to the next multiple of four.
+  - A line right after a quoted line continues the quote unless it starts a block of its own.
+  - A line of `=` or `-` under a paragraph makes a setext heading.
+  - An HTML comment block and a `pre`, `script`, `style` or `textarea` block run to their terminator, and no fence is read inside them. Comments are a new kind, `comment`.
+  - A `>` indented four columns is code, not a quote.
+- **Inline code** is paired per paragraph, as CommonMark pairs it: a run of backticks closes at the next run of the same length, across a line break. An escaped backtick opens nothing, and backticks inside an autolink or a tag are not code. The contents of `<code>`, `<kbd>`, `<samp>` and `<tt>` are masked too (I072, I073, I074).
+- **The heading pattern** is linear; the old one backtracked cubically on a long run of spaces. A test holds a 100,000-space heading under a second, and `# C#` now reads as "C#" (I071).
+- **HTML input** (`--html`, or a `.html` file): quotations, code, preformatted text and scripts are masked whole. Entities are decoded one at a time, so a decoded line break cannot move a line. A decoded `<!--`, `>` or backtick is replaced by a look-alike, so it cannot become a directive, a quote or code (I094).
+- **An unclosed voicelint directive** is reported as `directive.unclosed` and hides nothing. It used to blank every line of prose down to the next `-->` in the file. A directive may still wrap within its paragraph, as three allow markers in the saga do (I103).
+- **`structlint`** no longer reads an HTML comment as sentences. It reads its directives from code-masked text, so a directive quoted in code silences nothing, and a directive may name the checks it silences. A suppressed line stays in its paragraph, and the findings reported on it are what is dropped (I082).
+- **On the saga corpus** (202 files, the saga's config), the count is unchanged at 309.
+- Tests: eight in `test_mdmask.py`, `test_voicelint.py` and `test_structlint.py`, all of which fail on 0.5.40.
+- No rule in `voice_config.json` changed. `VERSION` 0.5.41.
+
 ## v0.5.40 (2026-09-28)
 
 A banned phrase is caught however it is spelled, as long as it reads the same. This is Wave 5 of the 2026-09-27 review, part 1: the normalization pass.

@@ -1,6 +1,6 @@
 {
   "tool": "pherkad",
-  "version": "0.5.40",
+  "version": "0.5.41",
   "schema": 1,
   "generated": "2026-09-28",
   "required": [
@@ -13,9 +13,9 @@
   ],
   "files": {
     "pherkad.py": "76ca44fe86bdb4a77610352f7819c5cf665319190d17510ad310e4c90d4900e4",
-    "voicelint.py": "700cbaebf3891df5c48ba482eb077fef3d372b438ef22b4d404840d7fb723458",
-    "structlint.py": "6f1344e6e9c964ec7a98a718cb323e4c33ba24878d25be530913ca35b86c7bb9",
-    "mdmask.py": "ad4367fce87a619a6d411fdb3a6a2ad37bf05428e45bd6ea733045be482f6b2a",
+    "voicelint.py": "85de9f7adf2081233a3d51ccbb9dbdbddc69bc0bdb0daa15d7b686c4d19b9c22",
+    "structlint.py": "ad15f6601d32d803c64bcc1c645907bfb4dbe7df4fd9c58f77bebcafe00b5891",
+    "mdmask.py": "f758cefab26619844f9c53d6deb1832c5bff477b83e8d90b707269390501248e",
     "statefile.py": "6c29e6ae71269ebece6679b7096d4f80e08a3dc57640e1b95684b8c8e1891d9a",
     "voice_config.json": "2c9c8f13e0d98748a29d4a9230879294646171883361b4629486f61d549ce507",
     "replycheck.py": "70e71d44087de0d77f633af6accbea2091d64af624bcb6ba9f44545b376fcd39",
@@ -103,6 +103,7 @@
     "banned.writes-itself",
     "dash",
     "density",
+    "directive.unclosed",
     "filler.crucial",
     "filler.delve",
     "filler.delves",

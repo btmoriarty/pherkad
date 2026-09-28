@@ -480,6 +480,26 @@ class Evasion(unittest.TestCase):
         self.assertIn("loaded-adverb", self.ids("He left quietly."))
 
 
+class HtmlAndDirectives(unittest.TestCase):
+    def test_html_mode_masks_quotes_and_code_and_decodes_safely(self):  # I094
+        page = ("<p>Mine.</p>\n<blockquote>Their game-changer.</blockquote>\n<pre>a game-changer\nhere</pre>\n"
+                "<p>&lt;!-- voicelint: ignore-line --&gt; It is a game-changer.</p>\n<p>One&#10;two.</p>")
+        text = voicelint.strip_html(page)
+        self.assertEqual(text.count("\n"), page.count("\n"), "line count kept")
+        fs = voicelint.check(text, DEFAULT)
+        self.assertEqual([f.line for f in fs if f.rule_id == "banned.game-changer"], [5],
+                         "the quote and the pre are not his; a decoded directive is text, so line 5 still fires")
+
+    def test_unclosed_directive_is_reported_and_hides_nothing(self):  # I103
+        text = "<!-- voicelint: ignore-line\nIt is a game-changer.\n\nLater. -->\n"
+        ids = [f.rule_id for f in voicelint.check(text, DEFAULT)]
+        self.assertIn("directive.unclosed", ids)
+        self.assertIn("banned.game-changer", ids)
+        # an allow marker whose reason wraps a line is closed, and still allows
+        wrapped = "<!-- voicelint-allow: game-changer (literal: the name of\nthe board game) -->\nA game-changer.\n"
+        self.assertEqual(voicelint.check(wrapped, DEFAULT), [])
+
+
 class Suppression(unittest.TestCase):
     def counting(self, text):
         return voicelint.check_counting(text, DEFAULT)

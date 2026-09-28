@@ -66,6 +66,19 @@ class Fires(unittest.TestCase):
             "one that does not.\n"))
 
 
+class CommentsAndSuppression(unittest.TestCase):  # I082, I096
+    def test_a_comment_is_not_a_sentence(self):
+        text = "The plan is long and the day is longer than it looks from here. <!-- a. b. c. d. -->\n"
+        self.assertNotIn("staccato", rules(text))
+
+    def test_suppression_by_rule_name_and_by_line(self):
+        staccato = "It finds the break. It reports the season. It flags the outages.\n"
+        self.assertEqual(rules("<!-- structlint: ignore-next-line staccato -->\n" + staccato), set())
+        self.assertIn("staccato", rules("<!-- structlint: ignore-next-line two-beat -->\n" + staccato))
+        self.assertIn("staccato", rules("`<!-- structlint: ignore-next-line -->`\n" + staccato),
+                      "a directive quoted as code silences nothing")
+
+
 class FalsePositives(unittest.TestCase):
     def test_hard_wrapped_prose_is_joined(self):
         self.assertNotIn("two-beat", rules(
