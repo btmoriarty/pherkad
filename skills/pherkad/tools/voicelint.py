@@ -164,17 +164,23 @@ def _norm_entry(field: str, item) -> dict:
 def rule_entries(cfg: dict, field: str) -> list[dict]:
     """Every rule in ``field`` as an entry dict with a unique id.
 
-    Two plain strings that slug to the same id (``gut-check`` and ``gut check``)
-    keep the first id and give the second a short hash suffix, so derived ids
-    are unique and stable for a given list."""
+    Plain strings that slug to the same id each get a short hash of their own
+    pattern as a suffix, every member of the group alike, so an id does not
+    depend on list order and removing one rule never renames another (I055).
+    A derived id that collides with an explicit one is suffixed the same way.
+    The shipped base pins its one such pair (``gut-check``, ``gut check``) with
+    explicit ids, and the validator refuses a new collision in the base."""
+    items = cfg.get(field, [])
+    entries = [_norm_entry(field, item) for item in items]
+    explicit = [e["id"] for item, e in zip(items, entries) if not isinstance(item, str)]
+    derived = [e["id"] for item, e in zip(items, entries) if isinstance(item, str)]
+    clash = {i for i in derived if derived.count(i) > 1 or i in explicit}
     out, seen = [], set()
-    for item in cfg.get(field, []):
-        entry = _norm_entry(field, item)
+    for item, entry in zip(items, entries):
+        if isinstance(item, str) and entry["id"] in clash:
+            entry["id"] += "-" + hashlib.sha1(item.encode("utf-8")).hexdigest()[:4]
         if entry["id"] in seen:
-            if isinstance(item, str):
-                entry["id"] += "-" + hashlib.sha1(item.encode("utf-8")).hexdigest()[:4]
-            else:
-                _fail(f"config field '{field}' has two rules with id '{entry['id']}'")
+            _fail(f"config field '{field}' has two rules with id '{entry['id']}'")
         seen.add(entry["id"])
         out.append(entry)
     return out
@@ -330,24 +336,17 @@ def _deep_merge(base: dict, override: dict) -> dict:
 def _apply_list_ops(cfg: dict) -> dict:
     """Apply add_<field> / remove_<field> amendments, then drop the helper keys.
 
-    Adds are appended (skipping duplicates); removes are filtered out. This lets
-    a config extend or trim a shipped list without restating the whole thing.
+    Removes go first, then adds, so removing a rule by id and adding a new
+    entry with that id replaces it; the other order added nothing (the id was
+    taken) and then removed the rule (I054). An add is skipped only when its
+    exact pattern is already there or its explicit id is taken; a derived id
+    that merely slugs like another is kept and suffixed by rule_entries.
     """
     for field in _LIST_FIELDS:
         adds = cfg.pop("add_" + field, [])
         removes = cfg.pop("remove_" + field, [])
         if not adds and not removes:
             continue
-        merged = list(cfg.get(field, []))
-        present = {(e["id"], e["pattern"]) for e in rule_entries({field: merged}, field)}
-        ids = {i for i, _ in present}
-        pats = {p for _, p in present}
-        for item in adds:
-            e = _norm_entry(field, item)
-            if e["id"] in ids or e["pattern"] in pats:
-                continue
-            merged.append(item)
-            ids.add(e["id"]); pats.add(e["pattern"])
         # A remove entry names a rule by id or by pattern; either form works for
         # either kind of entry, so an overlay can drop a shipped regex by its id.
         drop_ids, drop_pats = set(), set()
@@ -357,12 +356,19 @@ def _apply_list_ops(cfg: dict) -> dict:
             else:
                 if r.get("id"): drop_ids.add(r["id"])
                 if r.get("pattern"): drop_pats.add(r["pattern"])
-        kept = []
-        for item, e in zip(merged, rule_entries({field: merged}, field)):
-            if e["id"] in drop_ids or e["pattern"] in drop_pats:
+        base = list(cfg.get(field, []))
+        merged = [item for item, e in zip(base, rule_entries({field: base}, field))
+                  if e["id"] not in drop_ids and e["pattern"] not in drop_pats]
+        present = rule_entries({field: merged}, field)
+        ids = {e["id"] for e in present}
+        pats = {e["pattern"] for e in present}
+        for item in adds:
+            e = _norm_entry(field, item)
+            if e["pattern"] in pats or (not isinstance(item, str) and item.get("id") and e["id"] in ids):
                 continue
-            kept.append(item)
-        cfg[field] = kept
+            merged.append(item)
+            ids.add(e["id"]); pats.add(e["pattern"])
+        cfg[field] = merged
     return cfg
 
 
@@ -635,6 +641,13 @@ def _soft_to_regex(phrase: str) -> str:
             out.append(r"(?:\w+" + _WS + ")?")
         elif p:
             out.append(_lit(p))
+    # A slot at either end has no letter for the word-edge guard to test, so the edge
+    # goes into the regex: "worth [verb]" must not end inside "worth doingness" (I100).
+    toks = [p for p in parts if p]
+    if toks and toks[0] in ("[word]", "[verb]", "[det]"):
+        out.insert(0, r"(?<!\w)")
+    if toks and toks[-1] in ("[word]", "[verb]", "[det]"):
+        out.append(r"(?!\w)")
     return "".join(out)
 
 
@@ -862,7 +875,8 @@ def check_counting(text: str, cfg: dict):
     for e in rule_entries(cfg, "soft_phrases"):
         phrase = e["pattern"]
         label = e.get("rationale") or phrase
-        for m, raw in phrase_hits(_soft_to_regex(phrase), phrase, phrase):
+        guard = "" if phrase.startswith("re:") else phrase  # a raw regex says where it ends (I093, I100)
+        for m, raw in phrase_hits(_soft_to_regex(phrase), guard, phrase):
             add(m, "warning", "soft-cliche", f"overused AI phrasing: '{label}'", e["id"], raw=raw)
 
     if cfg.get("flag_loaded_quietly", True):

@@ -59,6 +59,7 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -99,6 +100,11 @@ def load_ledger(path: str) -> list[dict]:
                 out.append(json.loads(line))
             except json.JSONDecodeError as exc:
                 _fail(f"{path}:{n} is not valid JSON: {exc}")
+    seen = set()
+    for r in out:  # two records under one id made find() return whichever came first (I184)
+        if r.get("id") in seen:
+            _fail(f"{path}: two records share the id {r['id']!r}; give one a new id by hand")
+        seen.add(r.get("id"))
     return out
 
 
@@ -113,9 +119,20 @@ def find(records: list[dict], rid: str) -> dict:
     _fail(f"no record {rid!r} in the ledger")
 
 
-def _new_id(before: str) -> str:
-    h = hashlib.sha1((before + _today()).encode("utf-8")).hexdigest()[:4]
-    return f"c-{_today().replace('-', '')}-{h}"
+def _new_id(records: list[dict]) -> str:
+    """c-<date>-<n>, the next free number for the day. A hash of the phrase and the
+    date collided when the same phrase was corrected twice in one day (I184)."""
+    day = _today().replace("-", "")
+    taken = {r.get("id") for r in records}
+    n = 1
+    while f"c-{day}-{n:03d}" in taken:
+        n += 1
+    return f"c-{day}-{n:03d}"
+
+
+def _matcher_sha(r: dict) -> str:
+    """What a trial counted: the field, the matcher and the severity."""
+    return hashlib.sha1(f"{r.get('field')}|{r.get('matcher')}|{r.get('severity')}".encode("utf-8")).hexdigest()[:12]
 
 
 def _note(r: dict, what: str) -> None:
@@ -136,9 +153,32 @@ def classify(before: str, after: str, context: str = "") -> str:
         return "judgment"
     if after and re.sub(r"[\d./-]+", "#", before) == re.sub(r"[\d./-]+", "#", after) and before != after:
         return "factual"
+    if after and _one_fact_swapped(before, after):
+        return "factual"
     if len(b_words) <= 6:
         return "literal"
     return "judgment"
+
+
+_FACT_WORDS = frozenset(
+    "monday tuesday wednesday thursday friday saturday sunday january february march april may june july "
+    "august september october november december one two three four five six seven eight nine ten eleven "
+    "twelve twenty thirty forty fifty hundred thousand million first second third fourth fifth".split())
+
+
+def _one_fact_swapped(before: str, after: str) -> bool:
+    """One word swapped for one other, where both are a name (capitalised, not the
+    first word), a weekday, a month, a number word or a single letter: a fact
+    corrected, not a phrasing (I036). "Tuesday" -> "Wednesday" is never a rule."""
+    tb, ta = re.findall(r"\w+", before), re.findall(r"\w+", after)
+    if len(tb) != len(ta):
+        return False
+    diff = [(x, y) for x, y in zip(tb, ta) if x != y]
+    if len(diff) != 1:
+        return False
+    k = next(i for i, (x, y) in enumerate(zip(tb, ta)) if x != y)
+    fact = lambda w: (w.lower() in _FACT_WORDS or len(w) == 1 or (k > 0 and w[:1].isupper()))  # noqa: E731
+    return fact(diff[0][0]) and fact(diff[0][1])
 
 
 def propose(r: dict) -> dict:
@@ -152,7 +192,10 @@ def propose(r: dict) -> dict:
             if r["kind"] == "templated":
                 r["fires"] = [ctx] if ctx else []  # a pattern is not a sentence; only the context can be an example
             else:
-                r["fires"] = [ctx] if ctx and r["before"].lower() in ctx.lower() else [r["before"]]
+                # the context, when the phrase is in it; with no context the phrase itself.
+                # A context that does not hold the phrase gives no example, so the trial
+                # reports it instead of passing on the phrase alone (I186).
+                r["fires"] = [ctx] if ctx and r["before"].lower() in ctx.lower() else ([] if ctx else [r["before"]])
         if not r.get("clean"):
             if ctx and r["before"].lower() in ctx.lower() and r.get("after"):
                 r["clean"] = [re.sub(re.escape(r["before"]), r["after"], ctx, count=1, flags=re.I)]
@@ -208,6 +251,8 @@ def examples_hold(r: dict, cfg: dict) -> list[str]:
     """Problems with the record's examples under the candidate alone; empty when all hold."""
     cand, rid = solo_config(cfg, r)
     problems = []
+    if not r.get("fires"):
+        problems.append("no fires example: the phrase is not in the context it was recorded with")
     for text in r.get("fires", []):
         if rid not in {f.rule_id for f in voicelint.check(text, cand)}:
             problems.append(f"fires example does not fire: {text!r}")
@@ -226,7 +271,7 @@ def cmd_add(args) -> int:
     if not before:
         _fail("--before is required and must not be empty")
     kind = args.kind or classify(before, args.after or "", args.context or "")
-    r = {"id": _new_id(before), "date": _today(), "before": before, "after": (args.after or "").strip(),
+    r = {"id": _new_id(records), "date": _today(), "before": before, "after": (args.after or "").strip(),
          "context": (args.context or "").strip(), "source": (args.source or "").strip(),
          "surface": args.surface or "", "kind": kind, "rationale": (args.rationale or "").strip(),
          "status": "pending", "rule_id": "", "supersedes": args.supersedes or "", "history": []}
@@ -256,14 +301,30 @@ def cmd_add(args) -> int:
     return 0
 
 
+def _set_kind(r: dict, kind: str | None) -> None:
+    """A mined record has no kind until the author gives one (I036)."""
+    if kind:
+        r["kind"] = kind
+        _note(r, f"kind set to {kind} by the author")
+    elif not r.get("kind"):
+        _fail(f"{r['id']} has no kind; a mined record waits for the author: pass --kind "
+              f"({', '.join(KINDS)}); the tool's guess was {r.get('suggested_kind') or 'none'}")
+
+
 def cmd_trial(args) -> int:
     records = load_ledger(args.ledger)
     r = find(records, args.id)
+    _set_kind(r, getattr(args, "kind", None))
     if r["kind"] not in RULE_KINDS:
         _fail(f"{r['id']} is {r['kind']}; only literal and templated corrections are trialled as rules")
     if r["status"] in ("promoted", "retired", "rejected"):
         _fail(f"{r['id']} is {r['status']}; nothing to trial")
     propose(r)
+    if r["matcher"].startswith("re:"):
+        try:
+            re.compile(r["matcher"][3:])
+        except re.error as exc:
+            _fail(f"{r['id']}: the matcher {r['matcher']!r} is not a valid regex: {exc}")
     cfg = voicelint.load_config(args.config)
     problems = examples_hold(r, cfg)
     files = corpusscan.collect_files(args.paths, exclude=args.exclude)
@@ -280,7 +341,7 @@ def cmd_trial(args) -> int:
                   "base_sha256": corpusscan._sha(voicelint.DEFAULTS_PATH),
                   "hits": row["hits"], "files_hit": row["files"], "per_1k_words": row["per_1k_words"],
                   "contexts": row.get("contexts", []), "example_problems": problems,
-                  "covered_by": covered}
+                  "covered_by": covered, "matcher_sha": _matcher_sha(r)}
     r["status"] = "trialled"
     _note(r, f"trialled: {row['hits']} hit(s) in {row['files']} file(s), {len(problems)} example problem(s)")
     save_ledger(args.ledger, records)
@@ -340,9 +401,44 @@ def prose_line(r: dict) -> str:
     return f"- {left}{right}{why}{tail}"
 
 
+BROAD_PER_1K = 1.0  # trialled hits per 1,000 words above which a rule is too broad to promote unasked
+
+
+def _promote_checks(r: dict, args) -> None:
+    """What a rule must show before it is written (I185, I036, I184)."""
+    t = r.get("trial") or {}
+    if t.get("matcher_sha") and t["matcher_sha"] != _matcher_sha(r):
+        _fail(f"{r['id']}: the matcher changed after its trial; trial it again")
+    if not (r.get("rationale") or "").strip():
+        _fail(f"{r['id']} has no rationale; a rule carries the author's reason (add it to the record, or retire it)")
+    rate = float(t.get("per_1k_words") or 0)
+    if rate > BROAD_PER_1K and not getattr(args, "broad", False):
+        _fail(f"{r['id']} fired {rate} times per 1,000 words in its trial, over {BROAD_PER_1K}; "
+              "read the contexts, and pass --broad only if a rule that wide is meant")
+    if r["matcher"].startswith("re:") and _slow_regex(r["matcher"][3:]):
+        _fail(f"{r['id']}: the matcher takes over a second on a 2,000-character line; it would stall the hook")
+    if r["kind"] == "literal" and len(re.findall(r"\w+", r["matcher"])) == 1 and not getattr(args, "confirm", False):
+        _fail(f"{r['id']} would ban the single word {r['matcher']!r} (the author wrote {r['before']!r} -> "
+              f"{r['after']!r}); a one-word rule fires everywhere the word does. Pass --confirm if that is meant")
+
+
+def _slow_regex(pattern: str) -> bool:
+    """Whether the pattern takes over a second on hostile 2,000-character lines, timed
+    in a child process so a catastrophic backtrack cannot hang this one."""
+    code = ("import re,sys\np=re.compile(sys.argv[1],re.I)\n"
+            "for s in ('a'*2000+'!', ' '*2000+'x', 'ab '*667, 'x'*2000):\n    p.search(s)\n")
+    try:
+        subprocess.run([sys.executable, "-c", code, pattern], timeout=1.0, capture_output=True)
+    except subprocess.TimeoutExpired:
+        return True
+    return False
+
+
 def cmd_promote(args) -> int:
     records = load_ledger(args.ledger)
     r = find(records, args.id)
+    if r["status"] not in ("promoted", "retired", "rejected"):
+        _set_kind(r, getattr(args, "kind", None))
     if r["status"] in ("promoted", "retired", "rejected"):
         _fail(f"{r['id']} is already {r['status']}")
     source = args.source or r.get("source") or ""
@@ -368,6 +464,7 @@ def cmd_promote(args) -> int:
         _fail(f"{r['id']} has example problems from its trial; fix the matcher or the examples, trial again")
     if not args.overlay:
         _fail("--overlay is required to promote a rule")
+    _promote_checks(r, args)
     # Everything is checked and built in memory before the first write, then
     # the ledger records "promoting", then the overlay, the prose, and the
     # ledger's "promoted" are each swapped in atomically. An interruption
@@ -492,6 +589,50 @@ def _phrase(tokens: list[str]) -> str:
     return out.strip()
 
 
+def _overlap(x: str, y: str) -> float:
+    a, b = set(re.findall(r"\w+", x.lower())), set(re.findall(r"\w+", y.lower()))
+    return len(a & b) / max(1, len(a | b))
+
+
+def _pair_by_overlap(xs: list[str], ys: list[str], floor: float = 0.3) -> list[tuple]:
+    """Pairs (x, y) of sentences that share the most words, each used once, in the
+    draft's order. An x left over that matches two consecutive ys well is a split,
+    and a y left over that matches two xs is a merge; each gives a tuple side."""
+    cand = sorted(((_overlap(x, y), i, j) for i, x in enumerate(xs) for j, y in enumerate(ys)), reverse=True)
+    used_x, used_y, pairs = set(), set(), {}
+    for score, i, j in cand:
+        if score < floor or i in used_x or j in used_y:
+            continue
+        used_x.add(i)
+        used_y.add(j)
+        pairs[i] = ys[j]
+    out = []
+    for i, x in enumerate(xs):
+        if i in pairs:
+            out.append((x, pairs[i]))
+            continue
+        split = next(((x, (ys[j], ys[j + 1])) for j in range(len(ys) - 1)
+                      if j not in used_y and j + 1 not in used_y and _overlap(x, ys[j] + " " + ys[j + 1]) >= 0.6), None)
+        out.append(split or (x, None))
+    merged = set()
+    for j, y in enumerate(ys):
+        if j in used_y:
+            continue
+        merge = next((((xs[i], xs[i + 1]), y) for i in range(len(xs) - 1)
+                      if _overlap(xs[i] + " " + xs[i + 1], y) >= 0.6), None)
+        if merge:
+            out.append(merge)
+            merged.add(j)
+    # one sentence left on each side is a sentence rewritten whole: pair them. With
+    # unequal leftovers, position means nothing and nothing is paired.
+    left_x = [k for k, (x, y) in enumerate(out) if y is None]
+    left_y = [j for j in range(len(ys)) if j not in used_y and j not in merged
+              and not any(isinstance(y, tuple) and ys[j] in y for _, y in out)]
+    if len(left_x) == 1 and len(left_y) == 1:
+        out[left_x[0]] = (out[left_x[0]][0], ys[left_y[0]])
+    return out
+
+
 def mine_pairs(draft: str, edited: str, max_words: int = 8, whole: float = 0.6) -> list[dict]:
     """Candidates from the diff of two texts: {before, after, context, kind}."""
     import difflib
@@ -501,8 +642,17 @@ def mine_pairs(draft: str, edited: str, max_words: int = 8, whole: float = 0.6) 
     for tag, i1, i2, j1, j2 in sm.get_opcodes():
         if tag != "replace":
             continue  # equal sentences carry nothing; a whole sentence added or deleted is not a phrase correction
-        # pair the replaced sentences in order; extra sentences on one side are left
-        for da, db in zip(a[i1:i2], b[j1:j2]):
+        # pair the replaced sentences by shared words, not by position: an inserted
+        # sentence used to shift every pair after it and invent corrections (I186)
+        for da, db in _pair_by_overlap(a[i1:i2], b[j1:j2]):
+            if db is None:
+                continue
+            if isinstance(da, tuple) or isinstance(db, tuple):  # one sentence split in two, or two merged
+                out.append({"before": " ".join(da) if isinstance(da, tuple) else da,
+                            "after": " ".join(db) if isinstance(db, tuple) else db,
+                            "context": " ".join(da) if isinstance(da, tuple) else da, "kind": "structural"})
+                continue
+            spans_a = [m.span() for m in _TOKEN.finditer(da)]
             ta, tb = _TOKEN.findall(da), _TOKEN.findall(db)
             wm = difflib.SequenceMatcher(a=[t.lower() for t in ta], b=[t.lower() for t in tb], autojunk=False)
             changed = sum(i2_ - i1_ for tg, i1_, i2_, _, _ in wm.get_opcodes() if tg != "equal")
@@ -513,7 +663,7 @@ def mine_pairs(draft: str, edited: str, max_words: int = 8, whole: float = 0.6) 
             for tg, x1, x2, y1, y2 in wm.get_opcodes():
                 if tg == "equal" or tg == "insert":
                     continue
-                before = _phrase(ta[x1:x2])
+                before = da[spans_a[x1][0]:spans_a[x2 - 1][1]]  # the author's own characters, sliced
                 after = _phrase(tb[y1:y2]) if tg == "replace" else ""
                 bw = re.findall(r"\w+", before)
                 if not bw or len(bw) > max_words:
@@ -522,6 +672,8 @@ def mine_pairs(draft: str, edited: str, max_words: int = 8, whole: float = 0.6) 
                     continue  # case or punctuation only
                 if re.fullmatch(r"[\W\d]+", before):
                     continue  # punctuation or a number
+                if before.lower() not in da.lower():
+                    continue
                 out.append({"before": before, "after": after, "context": da, "kind": ""})
     return out
 
@@ -540,15 +692,17 @@ def cmd_mine(args) -> int:
     source = args.source or f"diff of {os.path.basename(args.draft)} and {os.path.basename(args.edited)}"
     added = 0
     for c in cands:
-        kind = c["kind"] or classify(c["before"], c["after"], c["context"])
+        guess = c["kind"] or classify(c["before"], c["after"], c["context"])
+        kind = c["kind"] if c["kind"] in ("judgment", "structural") else ""  # the author sets a phrase's kind (I036)
         dup = any(x["before"].lower() == c["before"].lower() and x["status"] not in ("retired", "rejected") for x in records)
         mark = "  (already in the ledger)" if dup else ""
-        print(f"{kind:10} {c['before']!r} -> {c['after']!r}{mark}")
+        print(f"{(kind or guess + '?'):10} {c['before']!r} -> {c['after']!r}{mark}")
         if args.dry_run or dup:
             continue
-        r = {"id": _new_id(c["before"]), "date": _today(), "before": c["before"], "after": c["after"],
+        r = {"id": _new_id(records), "date": _today(), "before": c["before"], "after": c["after"],
              "context": c["context"], "source": source, "surface": args.surface or "", "kind": kind,
-             "rationale": "", "status": "pending", "rule_id": "", "supersedes": "", "history": []}
+             "suggested_kind": guess, "rationale": "", "status": "pending", "rule_id": "", "supersedes": "",
+             "history": []}
         if kind in RULE_KINDS:
             propose(r)
         _note(r, f"mined from the author's edit ({source})")
@@ -599,6 +753,7 @@ def main(argv=None) -> int:
     pt.add_argument("--config")
     pt.add_argument("--exclude", action="append", default=[])
     pt.add_argument("--contexts", type=int, default=6)
+    pt.add_argument("--kind", choices=list(KINDS), help="set the kind of a mined record, which has none until the author gives one")
     pt.set_defaults(fn=cmd_trial)
 
     pp = sub.add_parser("promote", help="write the overlay entry, the fixtures, and the prose line")
@@ -607,6 +762,9 @@ def main(argv=None) -> int:
     pp.add_argument("--overlay", help="the project overlay to write the rule into")
     pp.add_argument("--prose", help="the prose rules file to append the mined-correction line to")
     pp.add_argument("--source", help="override the record's source for the prose heading")
+    pp.add_argument("--kind", choices=list(KINDS), help="set the kind of a mined record")
+    pp.add_argument("--broad", action="store_true", help=f"promote a rule that fired over {BROAD_PER_1K} per 1,000 words in its trial")
+    pp.add_argument("--confirm", action="store_true", help="promote a literal rule of one word")
     pp.set_defaults(fn=cmd_promote)
 
     pl = sub.add_parser("list")

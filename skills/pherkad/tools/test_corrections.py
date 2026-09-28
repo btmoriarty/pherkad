@@ -76,7 +76,7 @@ class Ledger(unittest.TestCase):
 
     def test_promote_refuses_untrialled(self):
         rid = self.add("connections worth a look", "connections worth reviewing")
-        code, _, err = run("promote", rid, "--ledger", self.ledger, "--overlay", self.overlay)
+        code, _, err = run("promote", rid, "--ledger", self.ledger, "--overlay", self.overlay, "--broad")
         self.assertEqual(code, 2)
         self.assertIn("not been trialled", err)
 
@@ -101,7 +101,7 @@ class Ledger(unittest.TestCase):
         code, out, _ = run("trial", rid, self.corpus, "--ledger", self.ledger)
         self.assertEqual(code, 1)
         self.assertIn("clean example fires", out)
-        code, _, err = run("promote", rid, "--ledger", self.ledger, "--overlay", self.overlay)
+        code, _, err = run("promote", rid, "--ledger", self.ledger, "--overlay", self.overlay, "--broad")
         self.assertEqual(code, 2)
         self.assertIn("example problems", err)
 
@@ -110,7 +110,7 @@ class Ledger(unittest.TestCase):
                        context="There are three connections worth a look in the graph.",
                        source="email", rationale="vague momentum idiom")
         run("trial", rid, self.corpus, "--ledger", self.ledger)
-        code, out, err = run("promote", rid, "--ledger", self.ledger, "--overlay", self.overlay, "--prose", self.prose)
+        code, out, err = run("promote", rid, "--ledger", self.ledger, "--overlay", self.overlay, "--broad", "--prose", self.prose)
         self.assertEqual(code, 0, err)
         ov = json.load(open(self.overlay))
         e = ov["add_soft_phrases"][0]
@@ -133,13 +133,13 @@ class Ledger(unittest.TestCase):
     def test_promote_twice_is_refused(self):
         rid = self.add("connections worth a look", "connections worth reviewing")
         run("trial", rid, self.corpus, "--ledger", self.ledger)
-        run("promote", rid, "--ledger", self.ledger, "--overlay", self.overlay)
-        self.assertEqual(run("promote", rid, "--ledger", self.ledger, "--overlay", self.overlay)[0], 2)
+        run("promote", rid, "--ledger", self.ledger, "--overlay", self.overlay, "--broad")
+        self.assertEqual(run("promote", rid, "--ledger", self.ledger, "--overlay", self.overlay, "--broad")[0], 2)
 
     def test_factual_never_becomes_a_rule(self):
         rid = self.add("371 courses", "421 courses")
         self.assertEqual(self.records()[0]["kind"], "factual")
-        code, out, _ = run("promote", rid, "--ledger", self.ledger, "--overlay", self.overlay, "--prose", self.prose)
+        code, out, _ = run("promote", rid, "--ledger", self.ledger, "--overlay", self.overlay, "--broad", "--prose", self.prose)
         self.assertEqual(code, 0)
         self.assertFalse(os.path.exists(self.overlay))
         self.assertIn("not a style rule", open(self.prose).read())
@@ -149,7 +149,7 @@ class Ledger(unittest.TestCase):
         r1 = self.add("but that is the kind of thing X is for", rationale="self-justifying tail; cut it")
         r2 = self.add("reusable surface", "reusable instrument", kind="preference")
         for rid in (r1, r2):
-            run("promote", rid, "--ledger", self.ledger, "--overlay", self.overlay, "--prose", self.prose)
+            run("promote", rid, "--ledger", self.ledger, "--overlay", self.overlay, "--broad", "--prose", self.prose)
         self.assertFalse(os.path.exists(self.overlay))
         statuses = {r["id"]: r["status"] for r in self.records()}
         self.assertEqual(statuses[r1], "judgment-only")
@@ -190,10 +190,10 @@ class Ledger(unittest.TestCase):
         import shutil
         base = os.path.join(self.tmp.name, "voice_config.json")
         shutil.copy(corrections.voicelint.DEFAULTS_PATH, base)
-        rid = self.add("connections worth a look", "connections worth reviewing")
+        rid = self.add("connections worth a look", "connections worth reviewing", rationale="a stock phrase")
         run("trial", rid, self.corpus, "--ledger", self.ledger)
         # promote into a copy: it is not the shipped file, so it goes under add_
-        run("promote", rid, "--ledger", self.ledger, "--overlay", base)
+        run("promote", rid, "--ledger", self.ledger, "--overlay", base, "--broad")
         ov = json.load(open(base))
         self.assertIn("add_soft_phrases", ov)
         # the into-base branch is exercised by samefile on the real DEFAULTS_PATH; assert the
@@ -210,7 +210,59 @@ class Ledger(unittest.TestCase):
 
 
 
+class Guards(unittest.TestCase):
+    """Wave 5 part 4: what a correction must show before it becomes a rule."""
+    setUp, tearDown, add, records = Ledger.setUp, Ledger.tearDown, Ledger.add, Ledger.records
+
+    def test_ids_are_unique_and_duplicates_refused(self):  # I184
+        a = self.add("connections worth a look", "x")
+        b = self.add("connections worth a look", "y")
+        self.assertNotEqual(a, b)
+        lines = open(self.ledger).read().splitlines()
+        open(self.ledger, "w").write(lines[0] + "\n" + lines[0] + "\n")
+        self.assertEqual(run("list", "--ledger", self.ledger)[0], 2)
+
+    def test_promote_refusals(self):  # I185, I184
+        rid = self.add("connections worth a look", "connections worth reviewing")
+        run("trial", rid, self.corpus, "--ledger", self.ledger)
+        code, _, err = run("promote", rid, "--ledger", self.ledger, "--overlay", self.overlay, "--broad")
+        self.assertEqual(code, 2)
+        self.assertIn("no rationale", err)
+        recs = self.records()
+        recs[0]["rationale"] = "a stock phrase"
+        corrections.save_ledger(self.ledger, recs)
+        code, _, err = run("promote", rid, "--ledger", self.ledger, "--overlay", self.overlay)
+        self.assertIn("per 1,000 words", err, "a broad rule needs --broad")
+        recs = self.records()
+        recs[0]["matcher"] = "connections worth"
+        corrections.save_ledger(self.ledger, recs)
+        code, _, err = run("promote", rid, "--ledger", self.ledger, "--overlay", self.overlay, "--broad")
+        self.assertIn("changed after its trial", err)
+
+    def test_one_word_rule_needs_confirm_and_slow_regex_is_refused(self):  # I036, I185
+        rid = self.add("connections", "links", rationale="house word")
+        run("trial", rid, self.corpus, "--ledger", self.ledger)
+        code, _, err = run("promote", rid, "--ledger", self.ledger, "--overlay", self.overlay, "--broad")
+        self.assertIn("--confirm", err)
+        self.assertTrue(corrections._slow_regex(r"(a+)+$"))
+        self.assertFalse(corrections._slow_regex(r"\bworth a look\b"))
+
+    def test_a_swapped_fact_is_factual(self):  # I036
+        self.assertEqual(corrections.classify("on Tuesday", "on Wednesday"), "factual")
+        self.assertEqual(corrections.classify("met Anna there", "met Clara there"), "factual")
+        self.assertEqual(corrections.classify("three people", "four people"), "factual")
+        self.assertEqual(corrections.classify("a game-changer", "a big step"), "literal")
+
+
 class Mine(unittest.TestCase):
+    def test_an_inserted_sentence_does_not_shift_the_pairs(self):  # I186
+        draft = "The first point is clear. The second point is a game-changer. The third point closes it."
+        edited = ("The first point is clear. A new sentence sits here now. The second point is a big step. "
+                  "The third point closes it.")
+        pairs = {(c["before"], c["after"]) for c in corrections.mine_pairs(draft, edited)}
+        self.assertIn(("game-changer", "big step"), pairs)
+        self.assertFalse(any("new sentence" in b or "new sentence" in a for b, a in pairs if a), pairs)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.ledger = os.path.join(self.tmp.name, "ledger.jsonl")
@@ -249,7 +301,12 @@ class Mine(unittest.TestCase):
         self.assertEqual(len(recs), 4)
         self.assertTrue(all(r["status"] == "pending" and r["surface"] == "email" and r["source"] == "email to the cohort" for r in recs))
         lit = next(r for r in recs if r["before"] == "game-changer")
-        self.assertEqual((lit["kind"], lit["after"], lit["field"]), ("literal", "big step", "soft_phrases"))
+        # a mined phrase waits for the author's kind; the tool's guess is kept beside it (I036)
+        self.assertEqual((lit["kind"], lit["suggested_kind"], lit["after"]), ("", "literal", "big step"))
+        self.assertEqual(run("trial", lit["id"], self.draft, "--ledger", self.ledger)[0], 2, "no kind, no trial")
+        code, out, err = run("trial", lit["id"], self.draft, "--ledger", self.ledger, "--kind", "literal")
+        lit = next(r for r in corrections.load_ledger(self.ledger) if r["id"] == lit["id"])
+        self.assertEqual((lit["kind"], lit["field"]), ("literal", "soft_phrases"))
         self.assertIn("game-changer", lit["fires"][0])
         self.assertIn("big step", lit["clean"][0])
         self.assertEqual(next(r for r in recs if r["kind"] == "judgment")["rationale"], "")

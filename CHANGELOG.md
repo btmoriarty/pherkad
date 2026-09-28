@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.5.43 (2026-09-28)
+
+An overlay does what it says, and a correction shows its reason, its reach and its speed before it becomes a rule. This is Wave 5 of the 2026-09-27 review, part 4: overlays, rule ids and `corrections.py`.
+
+**Overlays and ids** (`voicelint.py`, `pherkad.py check-overlay`):
+- Removes are applied before adds, so removing a rule by id and adding a new entry with that id replaces it. Before, the add was skipped because the id was taken, and the remove then deleted the rule. An add is skipped only for an exact pattern already present or an explicit id already taken. `check-overlay` prints the net effect, the shipped rules the overlay ends up without, as notes (I054).
+- A derived id that collides is suffixed with its own pattern's hash, every member of the group alike, so an id no longer depends on list order (I055). The shipped base pins its one such pair, `gut-check` and `gut check`, with the ids they already had, and a test refuses a new collision in the base. An overlay that adds two strings slugging alike now gets a suffix on both.
+- A soft `re:` rule gets no word-edge guard it did not ask for, and a phrase that starts or ends with a slot (`[word]`, `[verb]`, `[det]`) ends at a word edge (I093, I100).
+
+**Corrections** (`corrections.py`):
+- Ids are a date and a counter; a hash of the phrase and the date collided on a second correction of one phrase in a day. The ledger refuses two records with one id, and `promote` refuses a matcher that changed after its trial (I184).
+- `promote` requires a rationale. It refuses a rule that fired more than once per 1,000 words in its trial unless given `--broad`, and a regex that takes over a second on a 2,000-character line. `trial` reports a regex that does not compile (I185).
+- A one-for-one swap of a name, a weekday, a month, a number word or a single letter is classed factual, so it never becomes a style rule. A mined phrase waits for the author's kind (`--kind` on `trial` or `promote`), with the tool's guess kept beside it. A one-word literal rule needs `--confirm` (I036).
+- `mine` pairs the sentences of a changed block by shared words, not by position, so an inserted sentence no longer shifts every pair after it. A sentence split in two or two merged is recorded as structural. The phrase is sliced from the author's own characters, and a phrase not found in its context is dropped. A record whose context lacks its phrase gets no example, and its trial says so (I186).
+
+**Also:**
+- **On the saga corpus**, `corpusscan diff` over 202 files and 273,431 words shows no finding appearing or vanishing. It lists `soft.gut-check-c10a -> soft.gut-check` as renamed only because it reads the 0.5.42 list with the 0.5.43 id rule; under 0.5.42 itself the ids were the two now pinned.
+- Tests: eleven new or changed in `test_voicelint.py` and `test_corrections.py`, all of which fail on 0.5.42. The older promote tests pass `--broad`, since their fixture corpus is a few lines long.
+- `voice_config.json` changed only in pinning two ids. `VERSION` 0.5.43.
+
 ## v0.5.42 (2026-09-28)
 
 The structural checks count the constructions they name, and fewer that only look like them. This is Wave 5 of the 2026-09-27 review, part 3: `structlint`.

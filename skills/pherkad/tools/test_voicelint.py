@@ -480,6 +480,44 @@ class Evasion(unittest.TestCase):
         self.assertIn("loaded-adverb", self.ids("He left quietly."))
 
 
+class OverlaysAndIds(unittest.TestCase):
+    def load(self, overlay):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "o.json")
+            json.dump(overlay, open(p, "w"))
+            return voicelint.load_config(p)
+
+    def test_remove_then_add_replaces_by_id(self):  # I054
+        cfg = self.load({"remove_banned_phrases": ["banned.game-changer"],
+                         "add_banned_phrases": [{"id": "banned.game-changer", "pattern": "game changer"}]})
+        e = {x["id"]: x["pattern"] for x in voicelint.rule_entries(cfg, "banned_phrases")}
+        self.assertEqual(e.get("banned.game-changer"), "game changer")
+
+    def test_a_derived_id_collision_keeps_both_rules(self):  # I054, I055
+        cfg = self.load({"add_soft_phrases": ["gut  check"]})
+        pats = [x["pattern"] for x in voicelint.rule_entries(cfg, "soft_phrases")]
+        self.assertIn("gut  check", pats)
+
+    def test_suffixes_do_not_depend_on_order(self):  # I055
+        ids = lambda lst: {x["pattern"]: x["id"] for x in voicelint.rule_entries({"soft_phrases": lst}, "soft_phrases")}  # noqa: E731
+        self.assertEqual(ids(["a-b", "a b"]), ids(["a b", "a-b"]))
+        self.assertEqual(ids(["a-b"])["a-b"], "soft.a-b", "no collision, no suffix")
+
+    def test_the_shipped_base_has_no_derived_collision(self):  # I055
+        for field in voicelint._LIST_FIELDS:
+            for item, e in zip(DEFAULT.get(field, []), voicelint.rule_entries(DEFAULT, field)):
+                if isinstance(item, str):
+                    self.assertEqual(e["id"], voicelint._derive_id(field, item), item)
+
+    def test_slot_edges_and_regex_guards(self):  # I093, I100
+        cfg = json.loads(json.dumps(DEFAULT))
+        cfg["soft_phrases"] = ["it's worth [verb]", "re:,\\s*frankly\\b"]
+        ids = lambda t: {f.rule_id for f in voicelint.check(t, cfg)}  # noqa: E731
+        self.assertTrue(ids("It's worth doing."))
+        self.assertFalse(ids("It's worth doingness."), "a trailing slot ends at a word edge")
+        self.assertTrue(ids("Yes,frankly so."), "a raw regex is not given a guard it did not ask for")
+
+
 class HtmlAndDirectives(unittest.TestCase):
     def test_html_mode_masks_quotes_and_code_and_decodes_safely(self):  # I094
         page = ("<p>Mine.</p>\n<blockquote>Their game-changer.</blockquote>\n<pre>a game-changer\nhere</pre>\n"

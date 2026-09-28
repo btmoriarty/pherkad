@@ -760,9 +760,12 @@ def cmd_manifest(args) -> int:
     return 0
 
 
-def check_overlay(overlay_path: str) -> tuple[list[str], list[str]]:
-    """(errors, warnings) for a downstream overlay against the shipped base."""
+def check_overlay(overlay_path: str, notes: list[str] | None = None) -> tuple[list[str], list[str]]:
+    """(errors, warnings) for a downstream overlay against the shipped base.
+    ``notes``, when given, collects the net effect: the shipped rules the
+    overlay ends up without, so a removal meant as a replacement shows (I054)."""
     errors, warnings = [], []
+    notes = [] if notes is None else notes
     try:
         with open(overlay_path, encoding="utf-8") as fh:
             ov = json.load(fh)
@@ -770,6 +773,7 @@ def check_overlay(overlay_path: str) -> tuple[list[str], list[str]]:
         return [f"cannot read overlay: {exc}"], []
     voicelint._validate(ov)  # exits 2 on a structural problem, as the linter would
     base = voicelint.load_config(voicelint.DEFAULTS_PATH)
+    effective = voicelint.load_config(overlay_path)
     for field in voicelint._LIST_FIELDS:
         shipped = voicelint.rule_entries(base, field)
         ids = {e["id"] for e in shipped}
@@ -779,12 +783,24 @@ def check_overlay(overlay_path: str) -> tuple[list[str], list[str]]:
             pat = r if isinstance(r, str) else r.get("pattern")
             if rid not in ids and pat not in pats:
                 errors.append(f"remove_{field}: {rid or pat!r} names no shipped rule; the removal does nothing")
+        removed = set()
+        for r in ov.get("remove_" + field, []):
+            removed |= {r} if isinstance(r, str) else {r.get("id"), r.get("pattern")}
+        kept = [e for e in shipped if e["id"] not in removed and e["pattern"] not in removed]
+        kept_ids, kept_pats = {e["id"] for e in kept}, {e["pattern"] for e in kept}
         for a in ov.get("add_" + field, []):
             e = voicelint._norm_entry(field, a)
-            if e["id"] in ids:
-                warnings.append(f"add_{field}: {e['id']} is already a shipped rule; the addition is skipped")
-            elif e["pattern"] in pats:
-                warnings.append(f"add_{field}: {e['pattern']!r} is already shipped (as a different id); the addition is skipped")
+            if e["pattern"] in kept_pats:
+                warnings.append(f"add_{field}: {e['pattern']!r} is already a shipped rule; the addition is skipped")
+            elif not isinstance(a, str) and a.get("id") and e["id"] in kept_ids:
+                warnings.append(f"add_{field}: {e['id']} is already a shipped rule; the addition is skipped "
+                                f"(remove it by id in remove_{field} to replace it)")
+        # the net effect, so a removal the overlay meant as a replacement is visible (I054)
+        eff = {e["id"] for e in voicelint.rule_entries(effective, field)}
+        gone = sorted(e["id"] for e in shipped if e["id"] not in eff)
+        if gone:
+            notes.append(f"{field}: the overlay removes {len(gone)} shipped rule(s): {', '.join(gone[:8])}"
+                            + (" ..." if len(gone) > 8 else ""))
         if field in ov and shipped:
             warnings.append(f"{field}: the overlay replaces the whole shipped list ({len(shipped)} rules) with {len(ov[field])}; "
                             f"use add_/remove_ to inherit")
@@ -822,7 +838,10 @@ def check_overlay(overlay_path: str) -> tuple[list[str], list[str]]:
 
 
 def cmd_check_overlay(args) -> int:
-    errors, warnings = check_overlay(args.overlay)
+    notes: list[str] = []
+    errors, warnings = check_overlay(args.overlay, notes)
+    for n_ in notes:
+        print(f"note: {n_}")
     for w in warnings:
         print(f"warning: {w}")
     for e in errors:
