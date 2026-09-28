@@ -179,17 +179,14 @@ def _better(a: dict, b: dict) -> bool:
 
 
 def _run_one(runner: str, prompt: str, timeout: int) -> tuple[str | None, str]:
-    import shlex
-    import subprocess
-    try:
-        proc = subprocess.run(shlex.split(runner), input=prompt, capture_output=True, text=True, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        return None, f"runner timed out after {timeout}s"
-    except OSError as exc:
-        return None, f"runner could not start: {exc}"
-    if proc.returncode != 0:
-        return None, f"runner exit {proc.returncode}: {proc.stderr.strip()[:300]}"
-    return proc.stdout.strip(), ""
+    """(draft or None, error). A reply that is a runner's error message or a
+    refusal is an error, never a draft to score (I023)."""
+    import runner as rn
+    reply, err, _meta = rn.run(runner, prompt, timeout)
+    if reply is None:
+        return None, err
+    bad = rn.looks_like_error(reply)
+    return (None, bad) if bad else (reply, "")
 
 
 def author_loop(packet: dict, runner: str, rounds: int, fp: dict, surface: str, reference: dict | None, cfg: dict, timeout: int = 600) -> dict:

@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.5.37 (2026-09-27)
+
+The eval runners are isolated, and every run proves it before a prompt goes out. Wave 3 of the 2026-09-27 review, part 1.
+
+- **Both runners saw the profile.** A canary question showed `eval/runners/claude.sh` loading the operator's memory index, which describes the author's voice rules, and `codex.sh` loading an `AGENTS.md` that names the author's profile. Every pilot run before this release saw part of the profile it was meant to lack, including the generic and bare control arms and every flattening, and those numbers wait on a rerun (I019, I020).
+- **The runners are isolated.** `claude.sh` runs with `--safe-mode --strict-mcp-config`, no settings, no tools, and an empty working folder. `codex.sh` runs with a throwaway `CODEX_HOME` holding only a link to the existing login, plus `--ignore-user-config --ignore-rules` and an empty working folder. Both now answer the canary NONE. Codex still sends its own built-in writing guidance on every call, which no flag removes; `eval/README.md` records this.
+- **`tools/runner.py`** (new, bundled) is the one runner call that `study.py` and `author.py` share, replacing two copies:
+  - The runner starts in its own process group, so a timeout kills the whole group. The old path left a grandchild running (I021).
+  - A nonzero exit keeps stderr and the start of stdout in the error.
+  - A reply that is a runner error, a rate-limit notice, or a refusal is never scored as a draft (I023).
+  - It provides `canary()`.
+- **`study.py run` and `flatten`:**
+  - Both ask the canary first, refuse to send anything unless the answer is a bare NONE, and keep the answer in `canary.json`. `--skip-canary` records the run as unchecked.
+  - Status is written atomically as each reply lands, together with its reply file. Ctrl-C keeps every finished reply, and a resume adopts a reply file whose status entry was never written (I024).
+  - `--force` restarts the attempt count and never marks a done item failed without calling the runner (I025).
+  - The model recorded is the one the runner reports on its `runner-meta` line, with the CLI version; `--model` is kept as a label, and only items finished in the current pass are stamped (I026).
+  - Flattenings are held to the 10 percent length band their prompt states, instead of 15 (I028).
+- Tests:
+  - Five in `test_runner.py`. The group-kill test fails the old way, which left the grandchild running.
+  - Three in `test_study.py`: a leaky runner is refused with nothing sent, the reported model is recorded, and an unrecorded reply is adopted.
+  - Fake runners answer the canary as a clean runner would.
+- No rule in `voice_config.json` changed. `VERSION` 0.5.37.
+
 ## v0.5.36 (2026-09-27)
 
 Exposure and the supply chain: the mechanical half of Wave 0 of the 2026-09-27 review. The history purge waits on the author.

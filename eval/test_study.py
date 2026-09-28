@@ -207,11 +207,52 @@ class ReviseTask(unittest.TestCase):
 class RunItems(ReviseTask):
     """study.py run with a fake runner script: validation, retries, resume, status."""
 
-    def _runner(self, body):
-        p = os.path.join(self.tmp.name, "runner.py")
+    def _runner(self, body, canary="NONE", name="runner.py"):
+        # an isolated runner answers the canary question NONE (tools/runner.py);
+        # the body then reads the prompt from stdin as before
+        head = ("import io, sys as _s\n_p = _s.stdin.read()\n"
+                f"if 'reply with exactly the word NONE' in _p:\n    print({canary!r}); _s.exit(0)\n"
+                "_s.stdin = io.StringIO(_p)\n")
+        p = os.path.join(self.tmp.name, name)
         with open(p, "w") as fh:
-            fh.write(body)
+            fh.write(head + body)
         return f"{sys.executable} {p}"
+
+    def test_a_runner_that_is_not_isolated_is_refused(self):
+        # I019, I020: a runner carrying the operator's profile contaminates every control arm
+        self._detect_run()
+        leaky = self._runner("raise SystemExit('the prompt must never be sent')",
+                             canary="PRESENT: memory entries on the author's voice")
+        with self.assertRaises(SystemExit) as cm:
+            self._run(["run", "d1", "--runner", leaky, "--limit", "1"])
+        self.assertIn("not isolated", str(cm.exception))
+        run_dir = os.path.join(study.RUNS, "d1")
+        self.assertFalse(os.path.exists(os.path.join(run_dir, "status.json")), "nothing was sent")
+        self.assertFalse(json.load(open(os.path.join(run_dir, "canary.json")))["isolated"])
+
+    def test_the_model_recorded_is_the_one_the_runner_reports(self):
+        # I026: the operator's --model is a label; the runner's own report is the record
+        self._detect_run()
+        good = self._runner("import sys; sys.stdin.read(); "
+                            "sys.stderr.write('runner-meta: {\"models\": [\"real-model-7\"], \"cli\": \"x 1.0\"}\\n'); "
+                            "print('{\"rating\": 4, \"verdict\": \"PASS\", \"evidence\": [\"e\"]}')")
+        self._run(["run", "d1", "--runner", good, "--model", "what-i-typed", "--limit", "1"])
+        st = next(v for v in json.load(open(os.path.join(study.RUNS, "d1", "status.json"))).values())
+        self.assertEqual(st["model"], "real-model-7")
+        self.assertEqual(st["label"], "what-i-typed")
+        self.assertEqual(st["cli"], "x 1.0")
+
+    def test_a_reply_written_before_an_interruption_is_adopted(self):
+        # I024: a finished reply whose status entry was never written is kept, not re-sent
+        self._detect_run()
+        run_dir = os.path.join(study.RUNS, "d1")
+        manifest = json.load(open(os.path.join(run_dir, "manifest.json")))
+        it = next(i for i in manifest["items"] if os.path.exists(os.path.join(run_dir, "prompts", i["blind_id"] + ".txt")))
+        study._write(os.path.join(run_dir, it["verdict"]), '{"rating": 4, "verdict": "PASS", "evidence": ["e"]}\n')
+        never = self._runner("raise SystemExit(9)")
+        code, out = self._run(["run", "d1", "--runner", never, "--dry-run"])
+        self.assertIn("adopted 1 reply file", out)
+        self.assertEqual(json.load(open(os.path.join(run_dir, "status.json")))[it["blind_id"]]["state"], "done")
 
     def _detect_run(self):
         DetectTask._setup_detect(self)
@@ -234,7 +275,8 @@ class RunItems(ReviseTask):
         m = json.load(open(os.path.join(run_dir, "manifest.json")))
         judged = [it for it in m["items"] if it["condition"] != "linter"]
         self.assertTrue(all(os.path.exists(os.path.join(run_dir, it["verdict"])) for it in judged))
-        self.assertTrue(all(it["model"] == "fake-1" for it in judged))
+        # the typed --model is a label; the model is what the runner reports, and this fake reports none (I026)
+        self.assertTrue(all(it["model"] == "unreported" and it["model_label"] == "fake-1" for it in judged))
         v = json.load(open(os.path.join(run_dir, judged[0]["verdict"])))
         self.assertEqual(v["verdict"], "PASS", "only the JSON object is saved, not the chatter around it")
         st = status[judged[0]["blind_id"]]
@@ -298,7 +340,7 @@ class RunItems(ReviseTask):
         fl = os.path.join(study.WRITERS, "brian", "flattened")
         self.assertEqual(sorted(os.listdir(fl)), ["piece.1.md", "piece.1.meta.json", "piece.2.md", "piece.2.meta.json"])
         meta = json.load(open(os.path.join(fl, "piece.2.meta.json")))
-        self.assertEqual((meta["k"], meta["model"], meta["source_words"]), (2, "fam-b", 100))
+        self.assertEqual((meta["k"], meta["model"], meta["label"], meta["source_words"]), (2, "unreported", "fam-b", 100))
         code, out = self._run(["flatten", "brian", "--runner", echo])
         self.assertIn("nothing to flatten", out)
         short = self._runner("print('too short')")

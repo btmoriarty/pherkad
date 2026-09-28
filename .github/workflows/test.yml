@@ -74,6 +74,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: python3 skills/pherkad/tools/test_statefile.py
 
+      - name: Run the runner tests
+        if: ${{ !cancelled() }}
+        run: python3 skills/pherkad/tools/test_runner.py
+
       - name: Run the author tests
         if: ${{ !cancelled() }}
         run: python3 skills/pherkad/tools/test_author.py

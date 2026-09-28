@@ -66,6 +66,9 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOLS = os.path.join(HERE, "..", "skills", "pherkad", "tools")
+sys.path.insert(0, TOOLS)
+import runner as rn  # noqa: E402
+import statefile  # noqa: E402
 DATA = os.path.join(HERE, "data")
 ARMS = ("untouched", "generic", "mechanical", "judgment", "both")
 WRITERS = os.path.join(DATA, "writers")
@@ -718,39 +721,56 @@ def _validate_reply(task, reply):
         if not [e for e in v.get("evidence") or [] if str(e).strip()]:
             return False, "no quoted evidence for the verdict"
         return True, ""
+    bad = rn.looks_like_error(reply)
+    if bad:
+        return False, bad
     if len(reply.strip()) < 40:
         return False, "reply is empty or too short to be a draft"
     return True, ""
 
 
 def _run_one(runner, prompt, timeout):
-    import shlex
-    import subprocess
-    try:
-        proc = subprocess.run(shlex.split(runner), input=prompt, capture_output=True, text=True, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        return None, f"runner timed out after {timeout}s"
-    except OSError as exc:
-        return None, f"runner could not start: {exc}"
-    if proc.returncode != 0:
-        return None, f"runner exit {proc.returncode}: {proc.stderr.strip()[:300]}"
-    return proc.stdout, ""
+    """(reply or None, error). The shared runner call; see tools/runner.py."""
+    reply, err, _meta = rn.run(runner, prompt, timeout)
+    return reply, err
+
+
+def _require_isolated(runner, record_path, skip, timeout):
+    """Ask the runner the canary question before any prompt goes out. A runner
+    that loads the operator's CLAUDE.md, memory, or AGENTS.md sees the author's
+    profile, and every control arm is contaminated (I019, I020). The answer is
+    kept beside the results it vouches for."""
+    if skip:
+        sys.stderr.write("study: --skip-canary: runner isolation NOT checked; record why in the run notes\n")
+        return {"checked": False}
+    ok, answer, meta = rn.canary(runner, timeout)
+    rec = {"checked": True, "isolated": ok, "answer": answer[:400], "runner": runner, "meta": meta,
+           "env": {k: os.environ.get(k, "") for k in ("CLAUDE_MODEL", "CODEX_MODEL")}}
+    statefile.write_json(record_path, rec, sort_keys=True)
+    if not ok:
+        sys.exit(f"study: the runner is not isolated; it answered the canary with {answer[:200]!r}. "
+                 f"Nothing was sent. Fix the runner (eval/runners/) and rerun.")
+    return rec
 
 
 def run_items(args):
     """Run every pending prompt of a planned run through --runner."""
     import concurrent.futures
     import datetime
+    import threading
     run_dir = os.path.join(RUNS, args.run)
     manifest = _load_manifest(args.run)
     task = manifest.get("task", "author")
     status_path = os.path.join(run_dir, "status.json")
-    status = json.load(open(status_path)) if os.path.exists(status_path) else {}
+    try:
+        status = json.load(open(status_path)) if os.path.exists(status_path) else {}
+    except json.JSONDecodeError as exc:
+        sys.exit(f"study: {status_path} is not valid JSON ({exc}); restore it or move it aside, then resume")
 
     def out_path(it):
         return os.path.join(run_dir, it["verdict"] if task == "detect" else it["draft"])
 
-    todo = []
+    todo, adopted = [], 0
     for it in manifest["items"]:
         bid = it["blind_id"]
         prompt_path = os.path.join(run_dir, "prompts", bid + ".txt")
@@ -759,9 +779,21 @@ def run_items(args):
         st = status.get(bid, {})
         if st.get("state") == "done" and os.path.exists(out_path(it)) and not args.force:
             continue
+        if st.get("state") != "done" and os.path.exists(out_path(it)) and not args.force:
+            # a reply written before an interruption recorded it: adopt it, do not send the prompt again (I024)
+            reply = _read(out_path(it))
+            ok, _why = _validate_reply(task, reply)
+            if ok:
+                status[bid] = dict(st, state="done", error="", adopted=True, reply_sha256=_sha(reply),
+                                   prompt_sha256=_sha(_read(prompt_path)))
+                adopted += 1
+                continue
         if st.get("state") == "failed" and st.get("attempts", 0) >= args.retries + 1 and not args.force:
             continue
         todo.append(it)
+    if adopted:
+        statefile.write_json(status_path, status, sort_keys=True)
+        print(f"adopted {adopted} reply file(s) written before an interruption recorded them")
     if args.limit:
         todo = todo[:args.limit]
     if args.dry_run:
@@ -773,54 +805,81 @@ def run_items(args):
     if not todo:
         print("nothing to run: every item with a prompt is done (use --force to redo)")
         return 0
+    _require_isolated(args.runner, os.path.join(run_dir, "canary.json"), args.skip_canary, args.timeout)
+
+    stop = threading.Event()
+    lock = threading.Lock()
+    this_pass = set()
 
     def work(it):
         bid = it["blind_id"]
         prompt = _read(os.path.join(run_dir, "prompts", bid + ".txt"))
-        st = status.get(bid, {"attempts": 0})
-        last_err = ""
+        # --force starts the count again, and a done item is never marked
+        # failed without the runner being called (I025)
+        st = {"attempts": 0} if args.force else dict(status.get(bid, {"attempts": 0}))
+        last_err = "not attempted"
         for attempt in range(st.get("attempts", 0), args.retries + 1):
-            reply, err = _run_one(args.runner, prompt, args.timeout)
+            if stop.is_set():
+                last_err = "interrupted before this attempt"
+                break
+            reply, err, meta = rn.run(args.runner, prompt, args.timeout)
             st["attempts"] = attempt + 1
             if reply is None:
                 last_err = err
                 continue
             ok, why = _validate_reply(task, reply)
             if ok:
-                if task == "detect":
-                    _write(out_path(it), _VERDICT_RE.search(reply).group(0) + "\n")
-                else:
-                    _write(out_path(it), reply.strip() + "\n")
+                text = _VERDICT_RE.search(reply).group(0) + "\n" if task == "detect" else reply.strip() + "\n"
                 st.update(state="done", error="", reply_sha256=_sha(reply), prompt_sha256=_sha(prompt),
-                          runner=args.runner, model=args.model or "", finished=datetime.datetime.now().isoformat(timespec="seconds"))
+                          runner=args.runner, label=args.model or "",
+                          model=",".join(meta.get("models") or []) or "unreported", cli=meta.get("cli", ""),
+                          finished=datetime.datetime.now().isoformat(timespec="seconds"))
+                with lock:  # the reply and its status entry land together
+                    statefile.write_text(out_path(it), text)
+                    status[bid] = st
+                    this_pass.add(bid)
+                    statefile.write_json(status_path, status, sort_keys=True)
                 return bid, st
             last_err = why
+        if st.get("attempts", 0) == 0 and status.get(bid, {}).get("state") == "done":
+            return bid, status[bid]
         st.update(state="failed", error=last_err)
+        with lock:
+            status[bid] = st
+            statefile.write_json(status_path, status, sort_keys=True)
         return bid, st
 
     done = failed = 0
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.jobs)) as ex:
-        for bid, st in ex.map(work, todo):
-            status[bid] = st
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.jobs))
+    futures = [ex.submit(work, it) for it in todo]
+    try:
+        for fut in concurrent.futures.as_completed(futures):
+            bid, st = fut.result()
             if st["state"] == "done":
                 done += 1
             else:
                 failed += 1
                 print(f"failed {bid}: {st['error']}")
-            with open(status_path, "w") as fh:
-                json.dump(status, fh, indent=2, sort_keys=True)
-    if args.model:
+    except KeyboardInterrupt:
+        stop.set()
+        for f in futures:
+            f.cancel()
+        print("\ninterrupted: finishing the calls in flight; every finished reply is kept. Rerun to resume.")
+        ex.shutdown(wait=True)
+        return 130
+    ex.shutdown(wait=True)
+    if this_pass:
+        # stamp only what this pass produced, with the model the runner reported (I026)
         for it in manifest["items"]:
-            if status.get(it["blind_id"], {}).get("state") == "done":
-                it["model"] = args.model
-        with open(os.path.join(run_dir, "manifest.json"), "w") as fh:
-            json.dump(manifest, fh, indent=2, sort_keys=True)
+            if it["blind_id"] in this_pass:
+                it["model"] = status[it["blind_id"]].get("model", "")
+                it["model_label"] = status[it["blind_id"]].get("label", "")
+        statefile.write_json(os.path.join(run_dir, "manifest.json"), manifest, sort_keys=True)
     total_done = sum(1 for v in status.values() if v.get("state") == "done")
     print(f"run {args.run}: {done} done, {failed} failed this pass; {total_done} done in total. "
           f"Status in {status_path}; rerun the same command to resume.")
     print(f"next: study.py sheet {args.run}" if failed == 0 else "fix or --force the failures, then study.py sheet")
     return 1 if failed else 0
-
 
 # ---------------------------------------------------------------------------
 # flatten: the detect task's flattened cases, written by a runner that never
@@ -875,6 +934,8 @@ def flatten(args):
         print(f"{len(jobs)} flattening(s) would be written with runner {args.runner!r}")
         return 0
 
+    _require_isolated(args.runner, os.path.join(wdir, "flatten.canary.json"), args.skip_canary, args.timeout)
+
     def work(job):
         name, k, dst = job
         src = _read(os.path.join(hold, name))
@@ -882,17 +943,22 @@ def flatten(args):
         prompt = FLATTEN_PROMPT.format(words=words, variant=_FLATTEN_VARIANTS.get(k, ""), text=src.strip())
         last = ""
         for attempt in range(args.retries + 1):
-            reply, err = _run_one(args.runner, prompt, args.timeout)
+            reply, err, meta = rn.run(args.runner, prompt, args.timeout)
             if reply is None:
                 last = err
                 continue
+            bad = rn.looks_like_error(reply)
+            if bad:
+                last = bad
+                continue
             n = len(reply.split())
-            if not 0.85 * words <= n <= 1.15 * words:
+            if not 0.9 * words <= n <= 1.1 * words:  # the prompt says 10 percent (I028)
                 last = f"length {n} words, source {words}; outside the 10 percent band"
                 continue
             _write(dst, reply.strip() + "\n")
             _write(dst[:-3] + ".meta.json", json.dumps({
-                "source": name, "k": k, "runner": args.runner, "model": args.model or "",
+                "source": name, "k": k, "runner": args.runner, "label": args.model or "",
+                "model": ",".join(meta.get("models") or []) or "unreported", "cli": meta.get("cli", ""),
                 "source_sha256": _sha(src), "reply_sha256": _sha(reply), "source_words": words, "words": n,
                 "prompt_sha256": _sha(prompt), "written": datetime.datetime.now().isoformat(timespec="seconds")},
                 indent=2, sort_keys=True) + "\n")
@@ -964,6 +1030,7 @@ def main(argv):
     s.add_argument("--model", help="record this model name on every item the run completes")
     s.add_argument("--jobs", type=int, default=2)
     s.add_argument("--retries", type=int, default=2, help="extra attempts on an invalid or failed reply")
+    s.add_argument("--skip-canary", action="store_true", help="do not ask the runner the isolation question first (recorded as unchecked)")
     s.add_argument("--timeout", type=int, default=600, help="seconds per prompt")
     s.add_argument("--limit", type=int, help="run at most this many pending items (a smoke test)")
     s.add_argument("--force", action="store_true", help="redo items already done or given up on")
@@ -976,6 +1043,7 @@ def main(argv):
     s.add_argument("--k", type=int, default=2, help="flattenings per held-out piece")
     s.add_argument("--jobs", type=int, default=2)
     s.add_argument("--retries", type=int, default=2)
+    s.add_argument("--skip-canary", action="store_true", help="do not ask the runner the isolation question first (recorded as unchecked)")
     s.add_argument("--timeout", type=int, default=600)
     s.add_argument("--force", action="store_true")
     s.add_argument("--dry-run", action="store_true")

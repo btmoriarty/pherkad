@@ -643,7 +643,7 @@ MANIFEST_SCHEMA = 1
 # The five a gate needs are required wherever the bundle is vendored; the rest
 # are listed so their hashes travel, but a vendored copy may leave them out.
 REQUIRED_FILES = ("pherkad.py", "voicelint.py", "structlint.py", "mdmask.py", "statefile.py", "voice_config.json")
-BUNDLE_FILES = REQUIRED_FILES + ("replycheck.py", "replycheck-hook.py", "corpusscan.py", "corrections.py", "samples.py", "fingerprint.py", "author.py")
+BUNDLE_FILES = REQUIRED_FILES + ("replycheck.py", "replycheck-hook.py", "corpusscan.py", "corrections.py", "samples.py", "fingerprint.py", "author.py", "runner.py")
 
 
 def _file_sha(path: str) -> str:
