@@ -172,7 +172,7 @@ def plan(args):
                 "profile_sha256": _profile_sha(profile) if profile else "", "model": "",
             })
         if args.anchor:
-            hp = _pick_holdout(target)
+            hp = _pick_holdout(target, args.seed)
             bid = _blind_id(args.run, target, args.brief, "anchor", hp or "none")
             items.append({
                 "blind_id": bid, "target": target, "brief": args.brief,
@@ -256,12 +256,17 @@ def _all_writers():
                   if os.path.isdir(os.path.join(WRITERS, d))) if os.path.isdir(WRITERS) else []
 
 
-def _pick_holdout(writer):
+def _pick_holdout(writer, seed=1):
+    """The anchor: a held-out piece sampled with the run's seed, never the
+    atypical one. It used to be the alphabetically first file, which was the
+    atypical piece (I168)."""
     hd = os.path.join(WRITERS, writer, "holdout")
     if not os.path.isdir(hd):
         return None
-    files = sorted(f for f in os.listdir(hd) if not f.startswith("."))
-    return os.path.join("writers", writer, "holdout", files[0]) if files else None
+    files = sorted(f for f in os.listdir(hd) if f.endswith(".md") and not f.startswith((".", "atypical-")))
+    if not files:
+        sys.exit(f"no typical held-out piece for '{writer}' to anchor with (atypical-*.md is never the anchor)")
+    return os.path.join("writers", writer, "holdout", random.Random(f"{seed}-{writer}").choice(files))
 
 
 # ---------------------------------------------------------------------------
@@ -271,16 +276,24 @@ GENERIC_REVIEW = (
     "is, and keep the author's emphasis. Change only what you can justify; leave the "
     "rest as written. Return ONLY the revised draft, no commentary.")
 
-JUDGMENT_REVIEW = (
-    "Revise the draft below once, using Pherkad's quick-mode judgment rules ONLY: "
+# One statement of the judgment clauses, shared by the judgment and both arms,
+# so the both arm cannot drift into a thinner reading than the judgment arm
+# it is compared with (I170: it had dropped the tell families and the
+# positive-register step).
+JUDGMENT_CLAUSES = (
     "read it against the writer's voice profile for the judgment-only tells "
     "(antithesis and triplet families, counter-X and authenticity constructions, "
     "structural artifacts, and whatever the profile bans that no regex expresses), "
-    "and for the positive register where the surface expects it. Do NOT run any "
-    "linter or mechanical check; this arm is the model's reading alone. Decide each "
+    "and for the positive register where the surface expects it. Decide each "
     "finding (fix, intentional, literal, not applicable, quoted) and edit only the "
-    "fix rows. Keep every fact, name, number, date, and source exactly as it is, and "
-    "keep the author's emphasis. Return ONLY the revised draft, no commentary.")
+    "fix rows.")
+KEEP_CLAUSE = ("Keep every fact, name, number, date, and source exactly as it is, and "
+               "keep the author's emphasis. Return ONLY the revised draft, no commentary.")
+
+JUDGMENT_REVIEW = (
+    "Revise the draft below once, using Pherkad's quick-mode judgment rules ONLY: "
+    + JUDGMENT_CLAUSES + " Do NOT run any linter or mechanical check; this arm is the "
+    "model's reading alone. " + KEEP_CLAUSE)
 
 MECHANICAL_REVIEW = (
     "Revise the draft below once, acting ONLY on the mechanical findings listed "
@@ -292,28 +305,33 @@ MECHANICAL_REVIEW = (
 
 BOTH_REVIEW = (
     "Revise the draft below once, using BOTH the mechanical findings listed (from "
-    "pherkad.py check) and Pherkad's quick-mode judgment rules against the writer's "
-    "voice profile. Decide each finding (fix, intentional, literal, not applicable, "
-    "quoted) and edit only the fix rows. Keep every fact, name, number, date, and "
-    "source exactly as it is, and keep the author's emphasis. Return ONLY the revised "
-    "draft, no commentary.")
+    "pherkad.py check, both engines; fix what each finding supports) and Pherkad's "
+    "quick-mode judgment rules: " + JUDGMENT_CLAUSES + " " + KEEP_CLAUSE)
 
 
-def _mechanical_findings(text, surface):
-    """pherkad.py check over the source, rendered as the feedback block for a prompt."""
-    sys.path.insert(0, TOOLS)
+def _mechanical_findings(text, surface, cfg=None):
+    """pherkad.py check over the source: (the feedback block for a prompt, the finding count)."""
     import pherkad  # noqa: WPS433
-    cfg, _ = pherkad.load_layers(surface, None)
+    if cfg is None:
+        cfg, _ = pherkad.load_layers(surface, None)
     findings, _ = pherkad.run_text(text, cfg)
     if not findings:
-        return "(no mechanical findings)"
+        return "(no mechanical findings)", 0
     return "\n".join(f"line {f['line']}: [{f['severity']}] {f['rule_id']}: {f['message']}  ->  {f['match']!r}"
-                      for f in findings)
+                      for f in findings), len(findings)
 
 
 def prompts_revise(args, run_dir, manifest):
+    import pherkad  # noqa: WPS433
     n = 0
-    missing = set()
+    missing, empty = set(), set()
+    status_path = os.path.join(run_dir, "status.json")
+    done = {b for b, v in (json.load(open(status_path)) if os.path.exists(status_path) else {}).items()
+            if v.get("state") == "done"}
+    if done and not getattr(args, "force", False):
+        sys.exit(f"prompts: {len(done)} item(s) of this run are already done; rewriting their prompts would "
+                 f"orphan those drafts (I167). --force rewrites them anyway.")
+    layers = {}
     for it in manifest["items"]:
         src_abs = os.path.join(run_dir, it["source"])
         source = _read(src_abs).strip() if os.path.exists(src_abs) else ""
@@ -326,11 +344,22 @@ def prompts_revise(args, run_dir, manifest):
             it["model"] = "none (untouched)"
             continue
         profile_txt = _read(os.path.join(WRITERS, it["profile"], "profile.md"))
+        # provenance from the same rule set that produced the findings, at prompt time (I167)
+        if it["surface"] not in layers:
+            layers[it["surface"]], _info = pherkad.load_layers(it["surface"], None)
+        cfg = layers[it["surface"]]
+        it.update(tool_version=_tool_version(), config_sha256=pherkad.config_sha256(cfg)[:16],
+                  profile_sha256=_sha(profile_txt), source_sha256=_sha(source),
+                  surfaces_map=os.environ.get("PHERKAD_SURFACES", ""))
         head = {"generic": GENERIC_REVIEW, "judgment": JUDGMENT_REVIEW,
                 "mechanical": MECHANICAL_REVIEW, "both": BOTH_REVIEW}[it["arm"]]
         parts = [head, "", f"Surface: {it['surface']}", ""]
         if it["arm"] in ("mechanical", "both"):
-            parts += ["=== MECHANICAL FINDINGS ===", _mechanical_findings(source, it["surface"]), ""]
+            block, count = _mechanical_findings(source, it["surface"], cfg)
+            it["mechanical_findings"] = count
+            if count == 0:
+                empty.add(it["target"])  # the arm would return the source verbatim (I171)
+            parts += ["=== MECHANICAL FINDINGS ===", block, ""]
         if it["arm"] in ("judgment", "both"):
             parts += ["=== VOICE PROFILE ===", profile_txt, ""]
         parts += ["=== DRAFT ===", source, ""]
@@ -344,6 +373,10 @@ def prompts_revise(args, run_dir, manifest):
         json.dump(manifest, fh, indent=2, sort_keys=True)
     for w in sorted(missing):
         print(f"no source draft for {w}: put it in {run_dir}/sources/{w}.md")
+    if empty and not getattr(args, "allow_empty", False):
+        sys.exit(f"prompts: the source for {', '.join(sorted(empty))} has no mechanical findings, so the mechanical "
+                 f"and both arms would return it unchanged and measure nothing (I171). Choose a source that "
+                 f"carries findings, or pass --allow-empty to run it anyway.")
     print(f"wrote {n} revision prompts to {run_dir}/prompts/ (untouched arms copied from the source)")
     print("run every prompt with the SAME editing model and the same one-pass budget, save each\n"
           f"output to {run_dir}/drafts/<blind_id>.md, then: study.py sheet {args.run}")
@@ -402,53 +435,76 @@ def sheet(args):
     if manifest.get("task") == "detect":
         import detect
         return detect.sheet(args, run_dir, manifest)
-    rng = random.Random(str(manifest["seed"]) + "-sheet")
+    import detect
+    import secrets
+    detect._guard_filled([(os.path.join(run_dir, "ratings.csv"), "rating"),
+                          (os.path.join(run_dir, "ratings.csv"), "forced_choice_pick")], getattr(args, "force", False))
+    rng = secrets.SystemRandom()  # candidate order cannot be rebuilt from the plan (I027)
+    revise = manifest.get("task") == "revise"
+    forced = args.format == "forcedchoice" and not revise
 
     # group items by target writer; shuffle within each so condition order leaks nothing
-    by_writer = {}
+    by_writer, sources = {}, {}
     for it in manifest["items"]:
+        if forced and it.get("kind") == "anchor":
+            continue  # the real text would be the obvious pick (I168)
+        if revise and it.get("arm") == "untouched":
+            sources.setdefault(it["target"], []).append(it)  # rated once, as the starting draft (I172)
+            continue
         by_writer.setdefault(it["target"], []).append(it)
     for w in by_writer:
         rng.shuffle(by_writer[w])
-
-    revise = manifest.get("task") == "revise"
     lines = [f"# Blind rating sheet: run {manifest['run']} (brief {manifest['brief']}"
              + (", revision task" if revise else "") + ")", ""]
     if revise:
-        lines += ["Each candidate is a revision of the same starting draft (one of them is the draft",
-                  "untouched). Rate each 1 to 5 for how much it sounds like the named writer. Then",
-                  "flag fidelity (F if it invents facts, over-claims certainty, or caricatures the",
-                  "writer), count the edits that helped (useful_edits) and the edits that were",
-                  "unnecessary or harmful (unnecessary_edits), and note the minutes you spent.",
-                  "Do NOT open manifest.json until you have rated everything.", ""]
+        lines += ["Each writer's starting draft is printed first; every candidate below it is a revision",
+                  "of that draft. Rate the starting draft and each candidate 1 to 5 for how much it sounds",
+                  "like the named writer. Flag fidelity F when a text drops, changes, or invents a fact,",
+                  "name, number, date, or source, strips a qualification the draft had, over-claims",
+                  "certainty, or caricatures the writer. Count the edits that helped (useful_edits) and",
+                  "the ones that were unnecessary or harmful (unnecessary_edits), and note your minutes.",
+                  "Identical candidates are shown once. Do NOT open manifest.json or sheet-map.json",
+                  "until you have rated everything.", ""]
     elif args.format == "rating":
         lines += ["Rate each candidate 1 to 5 for how much it sounds like the named writer,",
                   "then also flag fidelity. Do NOT open manifest.json until you have rated everything.",
                   "", "Scale: 5 unmistakably this writer, 3 could be anyone, 1 clearly not them.",
-                  "Fidelity flag: F if it invents facts, over-claims certainty, or caricatures the",
-                  "writer's tics; else leave blank.", ""]
+                  "Fidelity flag: F if it drops, changes, or invents a fact, name, number, date, or",
+                  "source, over-claims certainty, or caricatures the writer's tics; else leave blank.", ""]
     else:
         lines += ["For each writer, read the reference, then pick the ONE candidate that most",
                   "sounds like them. Record its letter in ratings.csv. Do NOT open manifest.json first.", ""]
 
-    rows = []  # for the csv template
-    for w in sorted(by_writer):
+    rows, sheet_map = [], {}  # csv template; row blind_id -> every item with that exact text
+    for w in sorted(set(by_writer) | set(sources)):
         lines.append(f"## Writer: {w}")
         ref = _reference_block(w)
-        lines.append("")
-        lines.append("Reference (real writing by this writer):")
-        lines.append("")
-        lines.append(ref)
-        lines.append("")
-        lines.append("Candidates:")
-        lines.append("")
-        for i, it in enumerate(by_writer[w]):
-            letter = chr(ord("a") + i)
+        if forced and ref.startswith("(no reference"):
+            sys.exit(f"sheet: no reference sample on file for {w}; a forced choice needs one (I168)")
+        lines += ["", "Reference (real writing by this writer):", "", ref, ""]
+        for src_it in sources.get(w, [])[:1]:
+            text = _read(os.path.join(run_dir, src_it["draft"])).strip() or "(source not written yet)"
+            lines += ["### The starting draft (every candidate below revises this)  [" + src_it["blind_id"] + "]", "", text, ""]
+            row = {"blind_id": src_it["blind_id"], "writer": w, "candidate": "source",
+                   "rating": "", "fidelity_flag": "", "forced_choice_pick": ""}
+            if revise:
+                row.update({"useful_edits": "", "unnecessary_edits": "", "minutes": ""})
+            rows.append(row)
+            sheet_map[src_it["blind_id"]] = [x["blind_id"] for x in sources[w]]
+        lines += ["Candidates:", ""]
+        seen = {}
+        letter_i = 0
+        for it in by_writer.get(w, []):
             draft = _read(os.path.join(run_dir, it["draft"])).strip() or "(draft not generated yet)"
-            lines.append(f"### {w} / candidate {letter}  [{it['blind_id']}]")
-            lines.append("")
-            lines.append(draft)
-            lines.append("")
+            h = _sha(draft)
+            if h in seen and not draft.startswith("(draft not generated"):
+                sheet_map[seen[h]].append(it["blind_id"])  # rated once, scored for every arm that wrote it (I156)
+                continue
+            letter = chr(ord("a") + letter_i)
+            letter_i += 1
+            seen[h] = it["blind_id"]
+            sheet_map[it["blind_id"]] = [it["blind_id"]]
+            lines += [f"### {w} / candidate {letter}  [{it['blind_id']}]", "", draft, ""]
             row = {"blind_id": it["blind_id"], "writer": w, "candidate": letter,
                    "rating": "", "fidelity_flag": "", "forced_choice_pick": ""}
             if revise:
@@ -456,6 +512,7 @@ def sheet(args):
             rows.append(row)
 
     _write(os.path.join(run_dir, "rating-sheet.md"), "\n".join(lines))
+    statefile.write_json(os.path.join(run_dir, "sheet-map.json"), sheet_map, sort_keys=True)
     csv_path = os.path.join(run_dir, "ratings.csv")
     fields = ["blind_id", "writer", "candidate", "rating", "fidelity_flag", "forced_choice_pick"]
     if revise:
@@ -493,32 +550,44 @@ def _read_ratings(rows):
     A letter that names no candidate, or two rows for one writer naming
     different letters, stops the run: a silent guess would look like a result.
     """
+    import math
     ratings, picks = {}, {}
     by_writer = {}
     for row in rows:
-        bid = row["blind_id"]
-        writer = row["writer"]
+        bid = (row.get("blind_id") or "").strip()
+        writer = (row.get("writer") or "").strip()
+        if bid in ratings:
+            sys.exit(f"ratings.csv: {bid} appears on more than one row; keep one (I174)")
         letter = (row.get("candidate") or "").strip().lower()
         by_writer.setdefault(writer, {})[letter] = bid
+        raw_flag = (row.get("fidelity_flag") or "").strip()
+        if raw_flag and not re.match(r"^f\b", raw_flag, re.I):
+            sys.exit(f"ratings.csv: fidelity_flag {raw_flag!r} on {bid} is not F; leave it blank or start it with F (I174)")
+        flag = "F" if raw_flag else ""
         val = (row.get("rating") or "").strip()
+        num = None
         if val:
             try:
                 num = float(val)
             except ValueError:
                 sys.exit(f"ratings.csv: rating {val!r} on {bid} is not a number")
-            if not 1 <= num <= 5:
+            if not math.isfinite(num) or not 1 <= num <= 5:
                 sys.exit(f"ratings.csv: rating {val!r} on {bid} is outside 1 to 5")
-            ratings[bid] = (num, (row.get("fidelity_flag") or "").strip().upper())
-            extras = {}
-            for k in ("useful_edits", "unnecessary_edits", "minutes"):
-                v = (row.get(k) or "").strip()
-                if v:
-                    try:
-                        extras[k] = float(v)
-                    except ValueError:
-                        sys.exit(f"ratings.csv: {k} {v!r} on {bid} is not a number")
-            if extras:
-                ratings[bid] = ratings[bid] + (extras,)
+        if num is None and not flag:
+            continue
+        extras = {}
+        for k in ("useful_edits", "unnecessary_edits", "minutes"):
+            v = (row.get(k) or "").strip()
+            if v:
+                try:
+                    x = float(v)
+                except ValueError:
+                    sys.exit(f"ratings.csv: {k} {v!r} on {bid} is not a number")
+                if not math.isfinite(x) or x < 0:
+                    sys.exit(f"ratings.csv: {k} {v!r} on {bid} must be a finite number, zero or more")
+                extras[k] = x
+        # a flagged row with no rating is still a flagged draft; it scores as a failure (1.0)
+        ratings[bid] = (num if num is not None else 1.0, flag) + ((extras,) if extras else ())
     chosen = {}
     for row in rows:
         pick = (row.get("forced_choice_pick") or "").strip().lower()
@@ -550,6 +619,12 @@ def score(args):
 
     with open(csv_path, newline="") as fh:
         ratings, picks = _read_ratings(list(csv.DictReader(fh)))
+    mp = os.path.join(run_dir, "sheet-map.json")
+    if os.path.exists(mp):  # a text shown once is scored for every item that produced it (I156)
+        smap = json.load(open(mp))
+        for bid, rec in list(ratings.items()):
+            for other in smap.get(bid, []):
+                ratings.setdefault(other, rec)
 
     if manifest.get("task") == "revise":
         return score_revise(run_dir, manifest, key, ratings)
@@ -574,10 +649,15 @@ def score(args):
         lines.append("")
         for w in sorted(per_writer):
             conds = per_writer[w]
-            means = {c: sum(v for v, _ in xs) / len(xs) for c, xs in conds.items()}
+            # a flagged draft counts as 1 in the means that feed the lift (I175); the unflagged mean is shown beside it
+            means = {c: sum(1.0 if f == "F" else v for v, f in xs) / len(xs) for c, xs in conds.items()}
+            clean = {c: [v for v, f in xs if f != "F"] for c, xs in conds.items()}
             controls = [means[c] for c in ("wrong", "none") if c in means]
-            summary = ", ".join(f"{c}={means[c]:.2f}" for c in
-                                ("correct", "wrong", "none", "anchor") if c in means)
+            summary = ", ".join(f"{c}={means[c]:.2f}"
+                                + ((f" (unflagged {sum(clean[c]) / len(clean[c]):.2f})" if clean[c] else " (unflagged: none)")
+                                   if len(clean[c]) != len(conds[c]) else "")
+                                + f" n={len(conds[c])}"
+                                for c in ("correct", "wrong", "none", "anchor") if c in means)
             if "correct" in means and controls:
                 lift = means["correct"] - sum(controls) / len(controls)
                 lifts.append(lift)
@@ -641,23 +721,37 @@ def score_revise(run_dir, manifest, key, ratings):
              "A flagged draft (F) is scored 1 whatever its rating, and the primary outcome, an arm's mean",
              "minus the generic arm's, is computed over every draft with that penalty in, so an arm that",
              "invents facts cannot look good on its clean runs. The unflagged mean is shown beside it.", ""]
-    pooled = {}
+    pooled, pooled_writers, excluded_writers = {}, {}, []
+    src_text = {}
+    for it in manifest["items"]:
+        sp = os.path.join(run_dir, it.get("source", ""))
+        if it.get("source") and os.path.exists(sp):
+            src_text[it["target"]] = _read(sp).strip()
+
+    def unchanged(w, arm):
+        its = [it for it in manifest["items"] if it["target"] == w and it.get("arm") == arm]
+        same = sum(1 for it in its if os.path.exists(os.path.join(run_dir, it["draft"]))
+                   and _read(os.path.join(run_dir, it["draft"])).strip() == src_text.get(w))
+        return f"{same}/{len(its)}"
+
     for w in sorted(per):
         arms = per[w]
         lines.append(f"## {w}")
         lines.append("")
-        lines.append("| arm | n | rating (unflagged) | flagged | penalised mean | useful edits | unnecessary edits | minutes | vs generic |")
-        lines.append("|---|---|---|---|---|---|---|---|---|")
+        lines.append("| arm | n | rating (unflagged) | flagged | penalised mean | useful edits | unnecessary edits | minutes | unchanged | vs generic |")
+        lines.append("|---|---|---|---|---|---|---|---|---|---|")
 
         def penalised(xs):
             vals = [1.0 if f == "F" else v for v, f, _, _ in xs]
             return sum(vals) / len(vals) if vals else None
 
         gen_mean = penalised(arms.get("generic", []))
+        if gen_mean is None:
+            excluded_writers.append((w, "no rated generic draft"))
         for arm in manifest["arms"]:
             xs = arms.get(arm, [])
             if not xs:
-                lines.append(f"| {arm} | 0 | | | | | | | not rated |")
+                lines.append(f"| {arm} | 0 | | | | | | | | not rated |")
                 continue
             ok = [v for v, f, _, _ in xs if f != "F"]
             flagged = sum(1 for _, f, _, _ in xs if f == "F")
@@ -672,18 +766,21 @@ def score_revise(run_dir, manifest, key, ratings):
                 d = pen - gen_mean
                 vs = f"{d:+.2f}"
                 pooled.setdefault(arm, []).append(d)
+                pooled_writers.setdefault(arm, []).append(f"{w} (n={len(xs)})")
             elif arm == "generic":
                 vs = "control"
             lines.append(f"| {arm} | {len(xs)} | {'' if mean is None else f'{mean:.2f}'}{rng_s} | {flagged}/{len(xs)} | "
                          f"{'' if pen is None else f'{pen:.2f}'} | "
-                         f"{avg('useful_edits')} | {avg('unnecessary_edits')} | {avg('minutes')} | {vs} |")
+                         f"{avg('useful_edits')} | {avg('unnecessary_edits')} | {avg('minutes')} | {unchanged(w, arm)} | {vs} |")
         lines.append("")
     if pooled:
         lines.append("## Pooled: each arm against the generic self-review, across writers")
         lines.append("")
         for arm, ds in pooled.items():
             lines.append(f"- **{arm}**: mean {sum(ds)/len(ds):+.2f} over {len(ds)} writer(s), "
-                         f"range {min(ds):+.2f} to {max(ds):+.2f}")
+                         f"range {min(ds):+.2f} to {max(ds):+.2f}; writers: {', '.join(pooled_writers[arm])}")
+        if excluded_writers:
+            lines.append("- left out of every comparison: " + "; ".join(f"{w} ({why})" for w, why in excluded_writers))
         lines.append("")
     lines += ["## Reading it",
               "- An arm at or below generic has not earned its cost: another editing pass does as well.",
@@ -1037,6 +1134,8 @@ def main(argv):
     s.add_argument("--surface", default="post", help="revision task: the surface the mechanical arm checks under")
     s.add_argument("--seed", type=int, default=1); s.set_defaults(fn=plan)
     s = sub.add_parser("prompts"); s.add_argument("run")
+    s.add_argument("--force", action="store_true", help="rewrite prompts even for items already done")
+    s.add_argument("--allow-empty", action="store_true", help="revise task: run mechanical arms on a source with no findings")
     s.add_argument("--model", help="record the model that will run these prompts")
     s.add_argument("--fingerprint", help="detect task: the measured profile for the fingerprint condition (fingerprint.py build)")
     s.add_argument("--reference", help="detect task: the reference profile for the fingerprint condition (fingerprint.py build-reference)")

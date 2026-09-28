@@ -110,28 +110,53 @@ def generate(args) -> int:
               f"  (errors bare {row['bare']['errors']}, packet {row['packet']['errors']})")
         _write(os.path.join(run_dir, "scores.json"), json.dumps(scores, indent=2))
     # blind pairs sheet
-    rng = random.Random(args.seed)
+    import secrets
+    pairs_csv, key_path = os.path.join(run_dir, "pairs.csv"), os.path.join(run_dir, "pairs-key.json")
+    if os.path.exists(pairs_csv) and any((r.get("pick") or "").strip() for r in csv.DictReader(open(pairs_csv, newline=""))) \
+            and not args.force:
+        sys.exit("author_pilot: pairs.csv already holds picks; regenerating would blank them (I147). --force to redo.")
+    old_key = json.load(open(key_path)) if os.path.exists(key_path) else {}
+    sysrng = secrets.SystemRandom()  # the A/B key cannot be rebuilt from --seed (I027)
     lines = [f"# Authoring pairs: run {args.run}", "",
              "Each pair is two drafts written from the same notes. Mark in pairs.csv which one reads as the author (A or B),",
-             "or 'same'. Do not open scores.json or the arm folders until every pair is marked.", ""]
-    rows = []
+             "or 'same'. Do not open scores.json, pairs-key.json, or the arm folders until every pair is marked.",
+             "Dashes are shown as commas in both drafts: only one arm is told the author does not use them, so a",
+             "dash would name the arm (I156). The scores are computed on the drafts as written.", ""]
+    rows, keyd = [], {}
     for sid in sorted(scores):
-        a, b = "bare", "packet"
-        if rng.random() < 0.5:
-            a, b = b, a
-        ta = open(os.path.join(run_dir, a, sid + ".md"), encoding="utf-8").read().strip()
-        tb = open(os.path.join(run_dir, b, sid + ".md"), encoding="utf-8").read().strip()
+        if sid in old_key:  # a pair keeps its placement when the sheet is regenerated (I147)
+            a, b = old_key[sid]["A"], old_key[sid]["B"]
+        else:
+            a, b = ("bare", "packet") if sysrng.random() < 0.5 else ("packet", "bare")
+        ta = _undash(open(os.path.join(run_dir, a, sid + ".md"), encoding="utf-8").read().strip())
+        tb = _undash(open(os.path.join(run_dir, b, sid + ".md"), encoding="utf-8").read().strip())
         lines += [f"## {sid}", "", "### A", "", ta, "", "### B", "", tb, ""]
-        rows.append({"id": sid, "pick": "", "_a": a, "_b": b})
+        rows.append({"id": sid, "pick": ""})
+        keyd[sid] = {"A": a, "B": b}
     _write(os.path.join(run_dir, "pairs-sheet.md"), "\n".join(lines))
-    with open(os.path.join(run_dir, "pairs.csv"), "w", newline="") as fh:
+    with open(pairs_csv, "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=["id", "pick"])
         w.writeheader()
-        for r in rows:
-            w.writerow({"id": r["id"], "pick": ""})
-    _write(os.path.join(run_dir, "pairs-key.json"), json.dumps({r["id"]: {"A": r["_a"], "B": r["_b"]} for r in rows}, indent=2))
+        w.writerows(rows)
+    _write(key_path, json.dumps(keyd, indent=2, sort_keys=True))
     print(f"wrote {run_dir}/pairs-sheet.md and pairs.csv ({len(rows)} pairs); the key is in pairs-key.json, do not open it before marking")
     return report(args.run, scores, None)
+
+
+def _undash(text: str) -> str:
+    """Em and en dashes as commas, for the reading sheet only."""
+    import re
+    text = re.sub(r"(?<=\w)\u2013(?=\w)", "-", text)  # an en dash inside a compound is a hyphen
+    return re.sub(r"\s*[\u2014\u2013]\s*", ", ", text).replace(" -- ", ", ")
+
+
+def _sign_p(wins: int, n: int) -> float:
+    """Exact two-sided sign-test p-value for `wins` of `n` untied pairs."""
+    from math import comb
+    if n == 0:
+        return 1.0
+    k = min(wins, n - wins)
+    return min(1.0, 2 * sum(comb(n, i) for i in range(k + 1)) / 2 ** n)
 
 
 def report(run: str, scores: dict, picks: dict | None) -> int:
@@ -139,6 +164,7 @@ def report(run: str, scores: dict, picks: dict | None) -> int:
     ids = sorted(scores)
     d = {arm: [scores[i][arm]["discriminant"] for i in ids if scores[i][arm]["discriminant"] is not None] for arm in ("real", "bare", "packet")}
     wins = sum(1 for i in ids if (scores[i]["packet"]["discriminant"] or 0) > (scores[i]["bare"]["discriminant"] or 0))
+    ties = sum(1 for i in ids if (scores[i]["packet"]["discriminant"] or 0) == (scores[i]["bare"]["discriminant"] or 0))
     errs = {arm: sum(scores[i][arm]["errors"] for i in ids) for arm in ("real", "bare", "packet")}
     warns = {arm: sum(scores[i][arm]["warnings"] for i in ids) for arm in ("real", "bare", "packet")}
     lines = [f"# Results: authoring pilot {run}", "",
@@ -146,7 +172,13 @@ def report(run: str, scores: dict, picks: dict | None) -> int:
              "| arm | mean discriminant | errors | warnings |", "|---|---|---|---|"]
     for arm in ("real", "bare", "packet"):
         lines.append(f"| {arm} | {statistics.fmean(d[arm]):+.2f} | {errs[arm]} | {warns[arm]} |")
-    lines += ["", f"Packet above bare on {wins} of {len(ids)} pieces.", ""]
+    untied = len(ids) - ties
+    lines += ["", f"Packet above bare on {wins} of {len(ids)} pieces ({ties} tied); exact two-sided sign test "
+                  f"p = {_sign_p(wins, untied):.3f} over the {untied} untied piece(s).", "",
+              "Caution (I157): the packet states the features the discriminant measures and the loop revises toward "
+              "the discriminant, so a discriminant win is a win on the measure the arm was optimised for. It is not "
+              "evidence of voice until the author's blind picks agree, or the discriminant is computed from a second, "
+              "independent reference.", ""]
     if picks:
         key = json.load(open(os.path.join(run_dir, "pairs-key.json")))
         chose_packet = sum(1 for i, p in picks.items() if p in ("A", "B") and key[i][p] == "packet")
@@ -172,6 +204,7 @@ def main(argv=None) -> int:
     ap.add_argument("--profile-dir")
     ap.add_argument("--exemplars", type=int, default=3)
     ap.add_argument("--rounds", type=int, default=1)
+    ap.add_argument("--force", action="store_true", help="regenerate the pairs sheet even when pairs.csv holds picks")
     ap.add_argument("--timeout", type=int, default=600)
     ap.add_argument("--limit", type=int)
     ap.add_argument("--seed", type=int, default=1)

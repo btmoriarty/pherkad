@@ -68,6 +68,36 @@ class ReadRatings(unittest.TestCase):
         with self.assertRaises(SystemExit):
             study._read_ratings([row("item-a", "brian", "a", rating="four")])
 
+    # I174: annotated flags, flagged rows with no rating, repeats, and bad numbers
+    def test_an_annotated_flag_is_still_a_flag(self):
+        ratings, _ = study._read_ratings([row("item-a", "brian", "a", rating="4", flag="F: invented a date")])
+        self.assertEqual(ratings, {"item-a": (4.0, "F")})
+
+    def test_a_flag_that_is_not_f_stops_the_run(self):
+        with self.assertRaises(SystemExit):
+            study._read_ratings([row("item-a", "brian", "a", rating="4", flag="ok")])
+
+    def test_a_flagged_row_with_no_rating_counts_as_a_failure(self):
+        ratings, _ = study._read_ratings([row("item-a", "brian", "a", flag="F")])
+        self.assertEqual(ratings, {"item-a": (1.0, "F")})
+
+    def test_a_repeated_blind_id_stops_the_run(self):
+        with self.assertRaises(SystemExit):
+            study._read_ratings([row("item-a", "brian", "a", rating="4"), row(" item-a ", "brian", "b", rating="3")])
+
+    def test_nan_and_negative_numbers_stop_the_run(self):
+        with self.assertRaises(SystemExit):
+            study._read_ratings([row("item-a", "brian", "a", rating="nan")])
+        bad = dict(row("item-a", "brian", "a", rating="4"), minutes="-2")
+        with self.assertRaises(SystemExit):
+            study._read_ratings([bad])
+
+    def test_both_carries_every_judgment_clause(self):
+        # I170: the both arm is compared with the judgment arm, so it must read at least as much
+        self.assertIn(study.JUDGMENT_CLAUSES, study.BOTH_REVIEW)
+        self.assertIn(study.JUDGMENT_CLAUSES, study.JUDGMENT_REVIEW)
+        self.assertIn("positive register", study.BOTH_REVIEW)
+
 
 class ReviseTask(unittest.TestCase):
     """The revision experiment end to end in a temporary data directory."""
@@ -149,14 +179,18 @@ class ReviseTask(unittest.TestCase):
         for it in m["items"]:
             p = os.path.join(run_dir, it["draft"])
             if not os.path.exists(p):
-                with open(p, "w") as fh:
-                    fh.write(f"Revised by {it['arm']}.\n")
+                with open(p, "w") as fh:  # generic writes the same text twice: rated once, scored for both (I156)
+                    fh.write(f"Revised by {it['arm']}.\n" if it["arm"] == "generic" else f"Revised by {it['arm']}, pass {it['repeat']}.\n")
         code, out = self._run(["sheet", "r1"])
         self.assertEqual(code, 0, out)
         self.assertIn("revision task", open(os.path.join(run_dir, "rating-sheet.md")).read())
         import csv
         rows = list(csv.DictReader(open(os.path.join(run_dir, "ratings.csv"))))
-        self.assertEqual(len(rows), 10)
+        # the source once, generic's identical pair once, mechanical/judgment/both twice each (I156, I172)
+        self.assertEqual(len(rows), 1 + 1 + 3 * 2)
+        sheet_md = open(os.path.join(run_dir, "rating-sheet.md")).read()
+        self.assertEqual(sheet_md.count("This is a game-changer. The honest answer is that it works."), 1)
+        self.assertIn("The starting draft", sheet_md)
         self.assertIn("useful_edits", rows[0])
         # rate: generic 3, mechanical 4, judgment 5 (one flagged), both 4, untouched 2
         key = {it["blind_id"]: it for it in m["items"]}
@@ -178,13 +212,17 @@ class ReviseTask(unittest.TestCase):
         res = open(os.path.join(run_dir, "results.md")).read()
         self.assertIn("revision task", res)
         self.assertIn("| generic | 2 | 3.00 (3 to 3) | 0/2 | 3.00 |", res)
-        self.assertIn("| mechanical | 2 | 4.00 (4 to 4) | 0/2 | 4.00 | 2.0 | 0.0 | 1.0 | +1.00 |", res)
+        self.assertIn("| mechanical | 2 | 4.00 (4 to 4) | 0/2 | 4.00 | 2.0 | 0.0 | 1.0 | 0/2 | +1.00 |", res)
         # judgment rated 5 and 5, one flagged: unflagged mean 5.00, penalised (5 + 1) / 2 = 3.00, so no lift
-        self.assertIn("| judgment | 2 | 5.00 | 1/2 | 3.00 | 2.0 | 3.0 | 1.0 | +0.00 |", res,
+        self.assertIn("| judgment | 2 | 5.00 | 1/2 | 3.00 | 2.0 | 3.0 | 1.0 | 0/2 | +0.00 |", res,
                       "a flagged draft is scored 1 in the primary contrast")
-        self.assertIn("| untouched | 2 | 2.00 (2 to 2) | 0/2 | 2.00 | 2.0 | 0.0 | 1.0 | -1.00 |", res)
+        self.assertIn("| untouched | 2 | 2.00 (2 to 2) | 0/2 | 2.00 | 2.0 | 0.0 | 1.0 | 2/2 | -1.00 |", res,
+                      "the untouched arm is the source itself, unchanged 2/2 (I171)")
         self.assertIn("**mechanical**: mean +1.00 over 1 writer(s)", res)
         self.assertIn("**judgment**: mean +0.00 over 1 writer(s)", res)
+        self.assertIn("writers: brian (n=2)", res, "each pooled comparison names its writers (I177)")
+        with self.assertRaises(SystemExit):
+            self._run(["sheet", "r1"])  # the ratings are filled; regenerating would blank them (I147)
 
     def test_generic_arm_is_required(self):
         self._setup_writer()
@@ -352,6 +390,47 @@ class RunItems(ReviseTask):
 
     def test_plan_prompts_sheet_score(self):
         pass  # covered by DetectTask
+
+
+class AuthorScore(ReviseTask):
+    """The author task's scorer, end to end (I178): two writers, distinct control
+    means, a flagged correct draft, and a forced-choice pick."""
+
+    def test_lift_penalises_flags_and_reports_each_control(self):
+        self._setup_writer()
+        self._run(["add-writer", "rosa"])
+        open(os.path.join(study.WRITERS, "rosa", "profile.md"), "w").write("# rosa\n\nLong clauses.\n")
+        code, out = self._run(["plan", "a1", "--brief", "weeding", "--writers", "brian,rosa"])
+        self.assertEqual(code, 0, out)
+        run_dir = os.path.join(study.RUNS, "a1")
+        m = json.load(open(os.path.join(run_dir, "manifest.json")))
+        for it in m["items"]:
+            open(os.path.join(run_dir, it["draft"]), "w").write(f"Draft {it['blind_id']}.\n")
+        code, out = self._run(["sheet", "a1"])
+        self.assertEqual(code, 0, out)
+        import csv
+        rows = list(csv.DictReader(open(os.path.join(run_dir, "ratings.csv"))))
+        key = {it["blind_id"]: it for it in m["items"]}
+        # brian: correct 5 but flagged (so it counts 1), wrong 3, none 2; rosa: correct 4, wrong 2, none 3
+        table = {("brian", "correct"): ("5", "F"), ("brian", "wrong"): ("3", ""), ("brian", "none"): ("2", ""),
+                 ("rosa", "correct"): ("4", ""), ("rosa", "wrong"): ("2", ""), ("rosa", "none"): ("3", "")}
+        for r in rows:
+            it = key[r["blind_id"]]
+            r["rating"], r["fidelity_flag"] = table[(it["target"], it["condition"])]
+            if it["target"] == "rosa" and it["condition"] == "correct":
+                r["forced_choice_pick"] = r["candidate"]
+        with open(os.path.join(run_dir, "ratings.csv"), "w", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(rows[0].keys())); w.writeheader(); w.writerows(rows)
+        code, out = self._run(["score", "a1"])
+        self.assertEqual(code, 0, out)
+        res = open(os.path.join(run_dir, "results.md")).read()
+        # brian: the flagged correct counts 1, so lift = 1 - (3 + 2) / 2 = -1.50
+        self.assertIn("**brian**: correct=1.00 (unflagged", res)
+        self.assertIn("lift = -1.50", res, "a flagged draft does not carry its rating into the lift (I175)")
+        # rosa: 4 - (2 + 3) / 2 = +1.50
+        self.assertIn("lift = +1.50", res)
+        self.assertIn("mean +0.00 across 2 writer(s), range -1.50 to +1.50", res)
+        self.assertIn("Picked the correct-profile draft on 1/1", res)
 
 
 class DetectTask(ReviseTask):
