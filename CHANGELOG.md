@@ -1,5 +1,46 @@
 # Changelog
 
+## v0.5.38 (2026-09-27)
+
+The eval harness scores what it claims to, and refuses to score a measure against its own inputs. Wave 3 of the 2026-09-27 review, part 2. Rescored under this release as exploratory, detect-01's correct-profile lift falls from +0.26 / +0.83 to +0.03 / +0.46; `docs/ROADMAP.md` says so beside the finding it undercuts.
+
+**Detect scoring** (`eval/detect.py`):
+- Verdicts are re-validated at score time, and planned against scored is printed per condition and case type. detect-01 had 139 verdicts the current validator rejects (I022).
+- A pair's direction comes from the reader. Pairs marked `same`, or where the reader heard the flattening as the writer, leave the model's scores. Picks other than A, B or same stop the run. Model-reader agreement is shown per condition (I164, I166).
+- Lift is reported against each control, paired by case, with a bootstrap interval. A control whose verdicts all sit on one side of the pass bar is marked degenerate and never pooled (I165).
+- The atypical piece has its own row, and every rate shows its denominators (I166).
+- Manifests record the hash of the profile actually used, and of the whole fingerprint and reference files (I162). The shuffled control no longer tells the judge it is one (I161).
+
+**Preregistration** (I163): `study.py freeze RUN` records `prereg.md`'s hash. `prompts`, `run` and `score` refuse an unfrozen or changed plan, and `score --exploratory` says so on the first line of the results.
+
+**Blinding:**
+- Blind ids are random (I027).
+- Detect pair sheets are one per flattening round, so an authentic text never repeats on a sheet (I156).
+- Revise sheets show the starting draft once and rate it there, show identical drafts once, and score the rating for every arm that wrote that text (I156, I172).
+- The author pilot keeps its A/B key across regenerations and shows dashes as commas in both arms (I147, I156).
+- No sheet blanks filled answers without `--force`, which keeps a copy (I147).
+
+**Revise and author scoring** (`eval/study.py`):
+- Provenance is taken at prompt time from the rule set that produced the findings, and prompts will not orphan finished drafts (I167).
+- The both arm shares the judgment arm's clauses (I170).
+- A mechanical arm with no findings stops (I171), and each arm reports how many of its drafts came back unchanged.
+- A new `profile` arm, the generic review with the profile attached, separates the method's effect from the profile's (I169).
+- The anchor is sampled, never atypical, and never a forced-choice candidate (I168).
+- Ratings parse strictly (I174). A flagged author draft counts 1 in the lift (I175). Pooled comparisons name their writers and who was left out (I177).
+- The author pilot reports an exact sign test (5 of 8 is p = 0.73), with a caution that its discriminant is the measure the loop optimises (I157).
+
+**Leakage** (`tools/fingerprint.py`):
+- A reference records each source file's hash and stem.
+- `fingerprint.leakage` flags a case that the reference was built from or is a fingerprint sample, and `detect prompts` and the author pilot refuse on it (I158). The pilot's reference was built from flattenings of all eight held-out emails.
+- `build --exclude` also drops near-duplicates of an excluded piece, at 5-word-run containment of 0.2 or more either way round, and the pilot's exemplars skip them (I159). One training email, `email-1ebacf1e`, is caught on the real data.
+- `detect plan` refuses a profile that shares an 8-word run with a case (I160). The `brian` profile used in detect-01 quotes the held-out op-ed.
+
+**Tests:**
+- The detect end-to-end test is asymmetric: `wrong` discriminates, `shuffled` and `none` are degenerate. It asserts the pooled +1.00, which the old code would have reported as +2.00.
+- There is now an author-scorer test, plus parser, clause and leakage tests (I178).
+
+No rule in `voice_config.json` changed. `VERSION` 0.5.38.
+
 ## v0.5.37 (2026-09-27)
 
 The eval runners are isolated, and every run proves it before a prompt goes out. Wave 3 of the 2026-09-27 review, part 1.

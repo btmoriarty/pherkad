@@ -122,12 +122,29 @@ class BuildCompare(unittest.TestCase):
         self.assertIn("nearer the reference", text)
 
     def test_exclude_holds_samples_out(self):
+        # a held-out piece with its own content: excluded by id, and nothing else goes with it
+        p = os.path.join(self.tmp.name, "own.md")
+        own = ("Quarterly harbour dredging resumed after the storm season, according to the port office. "
+               "Two barges worked the eastern channel while a survey launch logged depths near the old ferry ramp. "
+               "Fishermen moved their moorings twice. The council posted notices at the chandlery and the bakery. "
+               "By October the channel held nine metres at low water, and the pilots stopped asking for escorts. ")
+        open(p, "w").write((own * 2) + "\n")
+        samples.main(["add", p, "--dir", self.dir, "--provenance", "hand", "--surface", "note"])
+        fingerprint.main(["build", "--samples", self.dir, "--out", self.fp_path])
+        fp = json.load(open(self.fp_path))
+        own = next(s["id"] for s in fp["samples"] if s["words"] < 150)
+        fingerprint.main(["build", "--samples", self.dir, "--out", self.fp_path, "--exclude", own])
+        fp = json.load(open(self.fp_path))
+        self.assertEqual(len(fp["samples"]), 4)
+        self.assertEqual(fp["excluded"], [own])
+        self.assertEqual(fp["excluded_near_duplicates"], [])
+
+    def test_exclude_takes_near_duplicates_with_it(self):
+        # these samples are shuffles of one sentence pool, so each carries the others' text (I159)
         fingerprint.main(["build", "--samples", self.dir, "--out", self.fp_path])
         ids = [s["id"] for s in json.load(open(self.fp_path))["samples"]]
-        fingerprint.main(["build", "--samples", self.dir, "--out", self.fp_path, "--exclude", ids[0]])
-        fp = json.load(open(self.fp_path))
-        self.assertEqual(len(fp["samples"]), 3)
-        self.assertEqual(fp["excluded"], [ids[0]])
+        with self.assertRaises(SystemExit):
+            fingerprint.main(["build", "--samples", self.dir, "--out", self.fp_path, "--exclude", ids[0]])
 
     def test_prose_is_a_view_of_the_numbers(self):
         fingerprint.main(["build", "--samples", self.dir, "--out", self.fp_path])
@@ -163,6 +180,54 @@ class BuildCompare(unittest.TestCase):
         samples.main(["add", p, "--dir", d, "--provenance", "hand", "--surface", "note", "--min-words", "1"])
         with self.assertRaises(SystemExit):
             fingerprint.main(["build", "--samples", d, "--out", self.fp_path])
+
+
+class Leakage(unittest.TestCase):
+    """I158, I159, I160: the measure must not be scored against its own inputs."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.d = self.tmp.name
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def write(self, name, text):
+        p = os.path.join(self.d, name)
+        with open(p, "w") as fh:
+            fh.write(text)
+        return p
+
+    def test_a_reference_built_from_a_case_is_leakage(self):
+        held = self.write("email-aaaa1111.md", "The shed leaked on Tuesday and forty bags were wet by noon.\n")
+        flat = self.write("email-aaaa1111.2.md", "There was a leak in the shed and the bags got wet.\n")
+        other = self.write("email-bbbb2222.md", "An unrelated note about the budget meeting next week.\n")
+        body = " ".join(["The storage facility had not been inspected in several months, so the bags were damaged."] * 60)
+        refsrc = [self.write(f"r{i}.md", body + "\n") for i in range(3)] + [flat]
+        ref = fingerprint.build_reference(refsrc, "test")
+        self.assertIn("email-aaaa1111", ref["stems"])
+        problems = fingerprint.leakage([held, other], None, ref)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("email-aaaa1111.md", problems[0])
+
+    def test_a_case_that_is_a_fingerprint_sample_is_leakage(self):
+        held = self.write("note-1.md", "Forty bags, all wet.\n")
+        import hashlib
+        fp = {"samples": [{"id": "note-1", "sha256": hashlib.sha256(b"Forty bags, all wet.\n").hexdigest()}]}
+        self.assertTrue(fingerprint.leakage([held], fp, None))
+
+    def test_near_duplicates_are_found_either_way_round(self):
+        held = "The committee met on Tuesday and agreed to fund the pilot for one more term, with a review in March."
+        reply = "Thanks. > The committee met on Tuesday and agreed to fund the pilot for one more term, with a review in March. Great news."
+        unrelated = "The weather held for the whole trip and we saw the coast from the ridge at dawn on the third day."
+        samples_ = [{"id": "reply", "text": reply}, {"id": "other", "text": unrelated}]
+        self.assertEqual(fingerprint.near_duplicates(samples_, [held]), {"reply"})
+
+    def test_shared_run_finds_a_quoted_sentence(self):
+        profile = 'Exemplar: "the system architect, who worked through a bottle of wine while the three of us talked"'
+        case = "Later the system architect, who worked through a bottle of wine while the three of us talked, left."
+        self.assertTrue(fingerprint.shared_run(profile, case))
+        self.assertEqual(fingerprint.shared_run(profile, "A different text entirely, about something else."), "")
 
 
 if __name__ == "__main__":

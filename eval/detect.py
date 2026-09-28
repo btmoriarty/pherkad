@@ -141,6 +141,17 @@ def plan(args, run_dir, writers, rng):
                 missing.append(f"{target}: no {need} case (add files under writers/{target}/"
                                f"{[k for k, v in CASE_DIRS.items() if v == need][0]}/)")
         prof = os.path.join(base, "profile.md")
+        if os.path.exists(prof):
+            # a profile that quotes a case hands the judge the answer (I160)
+            import fingerprint as fpm  # noqa: WPS433
+            ptext = study._read(prof)
+            quoted = [(c["name"], fpm.shared_run(ptext, study._read(os.path.join(study.DATA, c["file"]))))
+                      for c in cases]
+            quoted = [(n, r) for n, r in quoted if r]
+            if quoted and not getattr(args, "allow_quoting", False):
+                sys.exit(f"plan: {target}'s profile.md shares a run of 8 or more words with {len(quoted)} case(s), e.g. "
+                         f"{quoted[0][0]}: {quoted[0][1]!r}. Rebuild the profile without them, or hold those pieces out "
+                         f"of the profile's samples (I160).")
         if "shuffled" in conditions and os.path.exists(prof):
             study._write(os.path.join(run_dir, "profiles", f"{target}-shuffled.md"),
                          _shuffled_profile(study._read(prof), args.seed))
@@ -246,6 +257,12 @@ def prompts(args, run_dir, manifest):
             sys.exit("the fingerprint condition needs --fingerprint F and --reference R (fingerprint.py build / build-reference)")
         fp = json.load(open(args.fingerprint))
         ref = json.load(open(args.reference))
+        import fingerprint as fpm  # noqa: WPS433
+        cases = sorted({os.path.join(study.DATA, it["text"]) for it in manifest["items"]})
+        leaks = fpm.leakage(cases, fp, ref)
+        if leaks:
+            sys.exit("prompts: the fingerprint condition would score the cases against themselves (I158):\n  "
+                     + "\n  ".join(leaks[:8]) + "\nBuild the reference and the fingerprint from pieces outside this run's cases.")
     for it in manifest["items"]:
         text = study._read(os.path.join(study.DATA, it["text"])).strip()
         if it["condition"] == "linter":

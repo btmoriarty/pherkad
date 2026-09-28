@@ -307,12 +307,52 @@ def _profile_from(sample_list: list[dict]) -> dict | None:
             "first_words": [[w, round(c / nsent, 4)] for w, c in sorted(firsts.items(), key=lambda kv: -kv[1])[:20]]}
 
 
+def _grams(text: str, n: int) -> set:
+    w = re.findall(r"[a-z0-9']+", text.lower())
+    return {" ".join(w[i:i + n]) for i in range(len(w) - n + 1)}
+
+
+def containment(a: str, b: str, n: int = 5) -> float:
+    """The share of a's n-word runs that also occur in b."""
+    ga = _grams(a, n)
+    return len(ga & _grams(b, n)) / len(ga) if ga else 0.0
+
+
+def shared_run(a: str, b: str, n: int = 8) -> str:
+    """The first run of n words the two texts share, or ''."""
+    common = _grams(a, n) & _grams(b, n)
+    return min(common) if common else ""
+
+
+NEAR_DUPLICATE = 0.2  # 5-word-run containment at which one text holds a real part of another
+
+
+def near_duplicates(samples: list[dict], held_texts: list[str]) -> set:
+    """Ids of samples that carry a real part of any held-out text, either way
+    round: a reply quoting the held-out email, or the held-out email quoting it.
+    Excluding by id alone let a same-thread near-copy through as training data
+    and as a top exemplar (I159)."""
+    out = set()
+    for s in samples:
+        for h in held_texts:
+            if containment(s["text"], h) >= NEAR_DUPLICATE or containment(h, s["text"]) >= NEAR_DUPLICATE:
+                out.add(s["id"])
+                break
+    return out
+
+
 def build(samples_dir: str, provenance=("hand", "captured"), surface=None, exclude=()) -> dict:
     sample_list = load_samples(samples_dir, tuple(provenance), surface, tuple(exclude))
+    near = set()
+    if exclude:
+        held = [s["text"] for s in load_samples(samples_dir, ("hand", "captured", "approved"), None) if s["id"] in set(exclude)]
+        near = near_duplicates(sample_list, held)
+        sample_list = [s for s in sample_list if s["id"] not in near]
     if not sample_list:
         sys.exit("fingerprint: no samples match (check --samples, --provenance, --surface)")
     fp = {"tool": "pherkad-fingerprint", "version": _tool_version(), "built": datetime.date.today().isoformat(),
           "chunk_words": CHUNK_WORDS, "provenance": list(provenance), "excluded": list(exclude),
+          "excluded_near_duplicates": sorted(near),
           "samples": [{"id": s["id"], "sha256": s["sha256"], "provenance": s["provenance"], "surface": s["surface"], "words": s["words"]} for s in sample_list],
           "surfaces": {}, "pooled": None}
     by_surface = {}
@@ -351,9 +391,42 @@ def build_reference(paths: list[str], name: str = "reference") -> dict:
         sys.exit(f"fingerprint: the reference needs at least {MIN_CHUNKS} chunks of {CHUNK_WORDS} words")
     keys = _scalar_keys(per[0])
     stats = {k: {"mean": statistics.fmean(x[k] for x in per), "sd": statistics.pstdev([x[k] for x in per])} for k in keys}
+    file_sha = {}
+    for p in paths:
+        with open(p, "rb") as fh:
+            file_sha[os.path.basename(p)] = hashlib.sha256(fh.read()).hexdigest()
     return {"tool": "pherkad-fingerprint-reference", "version": _tool_version(), "built": datetime.date.today().isoformat(),
-            "name": name, "files": [os.path.basename(p) for p in paths], "chunks": len(per),
+            "name": name, "files": [os.path.basename(p) for p in paths], "file_sha256": file_sha,
+            "stems": sorted({_stem(os.path.basename(p)) for p in paths}), "chunks": len(per),
             "words": sum(x["_words"] for x in per), "features": stats}
+
+
+def _stem(name: str) -> str:
+    """The piece a file comes from: email-1f93cb21.2.md and email-1f93cb21.md are both email-1f93cb21."""
+    base = name[:-3] if name.endswith(".md") else name
+    return re.sub(r"\.\d+$", "", base)
+
+
+def leakage(case_paths: list[str], fp: dict | None = None, reference: dict | None = None) -> list[str]:
+    """Why a measured verdict on these cases would be scored against itself (I158):
+    a case that is, or is a flattening of, a file the reference was built from,
+    and a case whose text is one of the fingerprint's own samples. Empty when clean."""
+    problems = []
+    ref_stems = set((reference or {}).get("stems") or {_stem(f) for f in (reference or {}).get("files", [])})
+    ref_sha = set(((reference or {}).get("file_sha256") or {}).values())
+    fp_sha = {s.get("sha256") for s in (fp or {}).get("samples", []) if isinstance(s, dict)}
+    fp_ids = {s.get("id") for s in (fp or {}).get("samples", []) if isinstance(s, dict)}
+    for p in case_paths:
+        name = os.path.basename(p)
+        stem = _stem(name)
+        with open(p, "rb") as fh:
+            raw = fh.read()
+        sha = hashlib.sha256(raw).hexdigest()
+        if stem in ref_stems or sha in ref_sha:
+            problems.append(f"{name}: the reference was built from this piece or a flattening of it")
+        if stem in fp_ids or sha in fp_sha or hashlib.sha256(raw.decode("utf-8", "replace").rstrip().encode() + b"\n").hexdigest() in fp_sha:
+            problems.append(f"{name}: this piece is one of the fingerprint's own samples")
+    return problems
 
 
 def discriminant(f: dict, author: dict, reference: dict, min_effect: float = 0.5) -> dict:

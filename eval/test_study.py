@@ -141,7 +141,7 @@ class ReviseTask(unittest.TestCase):
         run_dir = os.path.join(study.RUNS, "r1")
         m = json.load(open(os.path.join(run_dir, "manifest.json")))
         self.assertEqual(m["task"], "revise")
-        self.assertEqual(len(m["items"]), 5 * 2)
+        self.assertEqual(len(m["items"]), 6 * 2)
         self.assertEqual({it["arm"] for it in m["items"]}, set(study.ARMS))
         for it in m["items"]:
             for k in ("tool_version", "config_sha256", "profile_sha256", "surface", "repeat", "source"):
@@ -162,14 +162,14 @@ class ReviseTask(unittest.TestCase):
         self.assertEqual(open(os.path.join(run_dir, untouched["draft"])).read().strip(),
                          "This is a game-changer. The honest answer is that it works.")
         self.assertEqual(untouched["model"], "none (untouched)")
-        for arm in ("generic", "mechanical", "judgment", "both"):
+        for arm in ("generic", "profile", "mechanical", "judgment", "both"):
             it = by_arm[arm][0]
             self.assertEqual(it["model"], "test-model")
             self.assertTrue(it.get("prompt_sha256"))
             prompt = open(os.path.join(run_dir, "prompts", it["blind_id"] + ".txt")).read()
             self.assertIn("=== DRAFT ===", prompt)
             self.assertEqual("=== MECHANICAL FINDINGS ===" in prompt, arm in ("mechanical", "both"))
-            self.assertEqual("=== VOICE PROFILE ===" in prompt, arm in ("judgment", "both"))
+            self.assertEqual("=== VOICE PROFILE ===" in prompt, arm in ("profile", "judgment", "both"))
             if arm in ("mechanical", "both"):
                 self.assertIn("banned.game-changer", prompt)
                 self.assertIn("honest-framing", prompt)
@@ -187,14 +187,14 @@ class ReviseTask(unittest.TestCase):
         import csv
         rows = list(csv.DictReader(open(os.path.join(run_dir, "ratings.csv"))))
         # the source once, generic's identical pair once, mechanical/judgment/both twice each (I156, I172)
-        self.assertEqual(len(rows), 1 + 1 + 3 * 2)
+        self.assertEqual(len(rows), 1 + 1 + 4 * 2)
         sheet_md = open(os.path.join(run_dir, "rating-sheet.md")).read()
         self.assertEqual(sheet_md.count("This is a game-changer. The honest answer is that it works."), 1)
         self.assertIn("The starting draft", sheet_md)
         self.assertIn("useful_edits", rows[0])
         # rate: generic 3, mechanical 4, judgment 5 (one flagged), both 4, untouched 2
         key = {it["blind_id"]: it for it in m["items"]}
-        score = {"untouched": 2, "generic": 3, "mechanical": 4, "judgment": 5, "both": 4}
+        score = {"untouched": 2, "generic": 3, "profile": 4, "mechanical": 4, "judgment": 5, "both": 4}
         for r in rows:
             it = key[r["blind_id"]]
             r["rating"] = str(score[it["arm"]])
@@ -221,6 +221,9 @@ class ReviseTask(unittest.TestCase):
         self.assertIn("**mechanical**: mean +1.00 over 1 writer(s)", res)
         self.assertIn("**judgment**: mean +0.00 over 1 writer(s)", res)
         self.assertIn("writers: brian (n=2)", res, "each pooled comparison names its writers (I177)")
+        # the profile arm (4) beats generic by 1; judgment (penalised 3) sits 1 below it (I169)
+        self.assertIn("**profile**: mean +1.00", res)
+        self.assertIn("judgment minus profile, same writers): mean -1.00", res)
         with self.assertRaises(SystemExit):
             self._run(["sheet", "r1"])  # the ratings are filled; regenerating would blank them (I147)
 

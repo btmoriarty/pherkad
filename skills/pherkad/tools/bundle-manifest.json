@@ -1,6 +1,6 @@
 {
   "tool": "pherkad",
-  "version": "0.5.37",
+  "version": "0.5.38",
   "schema": 1,
   "generated": "2026-09-27",
   "required": [
@@ -23,7 +23,7 @@
     "corpusscan.py": "36c3b46488919c819943ae8fdb1d795b93cde285195d12ceb36c94549bd1bed0",
     "corrections.py": "4ae4a1a37663cae0e5d220bfa224b17b8999d294b80cd1c9b1577a9adebda3fb",
     "samples.py": "424c67f566c31fbbc48b03f3325a54407b47694d20eb66f7dfa7063fb5a75234",
-    "fingerprint.py": "29cea4f1d8284d0a5e6d28d8cdd9c68e2af9d1656d7e720bef020a45f7792e4e",
+    "fingerprint.py": "4bc04a79f4347d031ea79959be8f3ca3a31f1025fc929dec65845444f6507244",
     "author.py": "96d9fd30e2155a127670e1727362c69ea4e648c6bafaac7b407b846ebcb0606b",
     "runner.py": "47045bf38b130c0fa34cfac13f99237f436fed66dc9b741e0523b20004842430",
     "surfaces/assistant-chat.json": "5b09680e12757b96e188d0f30cec763ffb165ef7b88358776f1a2e62c8a9fc74",

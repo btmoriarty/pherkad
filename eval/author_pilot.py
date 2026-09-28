@@ -65,7 +65,16 @@ def generate(args) -> int:
     if args.limit:
         held = held[:args.limit]
     held_ids = {f[:-3] for f in held}
+    leaks = fpm.leakage([os.path.join(args.holdout, f) for f in held], fp, ref)
+    if leaks and not args.allow_leakage:
+        sys.exit("author_pilot: the measure would be scored against itself (I158):\n  " + "\n  ".join(leaks[:8])
+                 + "\nBuild the reference from pieces outside the held-out set, and the fingerprint with them excluded.")
     samples = [s for s in fpm.load_samples(args.samples, ("hand",), None) if s["id"] not in held_ids]
+    held_texts = [open(os.path.join(args.holdout, f), encoding="utf-8").read() for f in held]
+    near = fpm.near_duplicates(samples, held_texts)  # a same-thread near-copy is not an exemplar (I159)
+    if near:
+        print(f"author_pilot: {len(near)} near-duplicate(s) of held-out pieces kept out of the exemplars: {', '.join(sorted(near))}")
+    samples = [s for s in samples if s["id"] not in near]
     archetype = ""
     if args.profile_dir and os.path.exists(os.path.join(args.profile_dir, "Voice_Profile.md")):
         archetype = open(os.path.join(args.profile_dir, "Voice_Profile.md"), encoding="utf-8").read()
@@ -205,6 +214,7 @@ def main(argv=None) -> int:
     ap.add_argument("--exemplars", type=int, default=3)
     ap.add_argument("--rounds", type=int, default=1)
     ap.add_argument("--force", action="store_true", help="regenerate the pairs sheet even when pairs.csv holds picks")
+    ap.add_argument("--allow-leakage", action="store_true", help="run even when the reference or fingerprint overlaps the held-out set (results are then not evidence)")
     ap.add_argument("--timeout", type=int, default=600)
     ap.add_argument("--limit", type=int)
     ap.add_argument("--seed", type=int, default=1)

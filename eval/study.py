@@ -41,7 +41,9 @@ more than another editing pass would?
   study.py sheet <run>
   study.py score <run>
 Arms: untouched (the source as is), generic (a self-review with no Pherkad
-input, the control), mechanical (pherkad.py check findings only), judgment
+input, the control), profile (the generic review with the profile attached and
+nothing else, so judgment minus profile is the method's own effect), mechanical
+(pherkad.py check findings only), judgment
 (the skill's quick-mode judgment rules, mechanical calls disabled), both.
 The primary outcome is each arm's rating minus the generic arm's, per writer,
 with factual preservation required; a flagged draft counts against its arm
@@ -70,7 +72,7 @@ sys.path.insert(0, TOOLS)
 import runner as rn  # noqa: E402
 import statefile  # noqa: E402
 DATA = os.path.join(HERE, "data")
-ARMS = ("untouched", "generic", "mechanical", "judgment", "both")
+ARMS = ("untouched", "generic", "profile", "mechanical", "judgment", "both")
 WRITERS = os.path.join(DATA, "writers")
 BRIEFS = os.path.join(DATA, "briefs")
 RUNS = os.path.join(DATA, "runs")
@@ -276,6 +278,13 @@ GENERIC_REVIEW = (
     "is, and keep the author's emphasis. Change only what you can justify; leave the "
     "rest as written. Return ONLY the revised draft, no commentary.")
 
+# The profile-only arm (I169): the generic review with the same VOICE PROFILE
+# block the judgment arm gets, and nothing else. profile minus generic is what
+# handing over the profile does; judgment minus profile is what the method adds.
+PROFILE_REVIEW = GENERIC_REVIEW.replace(
+    "Read it as a careful editor would,",
+    "Read it as a careful editor would, with the writer's voice profile below in mind,")
+
 # One statement of the judgment clauses, shared by the judgment and both arms,
 # so the both arm cannot drift into a thinner reading than the judgment arm
 # it is compared with (I170: it had dropped the tell families and the
@@ -351,7 +360,7 @@ def prompts_revise(args, run_dir, manifest):
         it.update(tool_version=_tool_version(), config_sha256=pherkad.config_sha256(cfg)[:16],
                   profile_sha256=_sha(profile_txt), source_sha256=_sha(source),
                   surfaces_map=os.environ.get("PHERKAD_SURFACES", ""))
-        head = {"generic": GENERIC_REVIEW, "judgment": JUDGMENT_REVIEW,
+        head = {"generic": GENERIC_REVIEW, "profile": PROFILE_REVIEW, "judgment": JUDGMENT_REVIEW,
                 "mechanical": MECHANICAL_REVIEW, "both": BOTH_REVIEW}[it["arm"]]
         parts = [head, "", f"Surface: {it['surface']}", ""]
         if it["arm"] in ("mechanical", "both"):
@@ -360,7 +369,7 @@ def prompts_revise(args, run_dir, manifest):
             if count == 0:
                 empty.add(it["target"])  # the arm would return the source verbatim (I171)
             parts += ["=== MECHANICAL FINDINGS ===", block, ""]
-        if it["arm"] in ("judgment", "both"):
+        if it["arm"] in ("profile", "judgment", "both"):
             parts += ["=== VOICE PROFILE ===", profile_txt, ""]
         parts += ["=== DRAFT ===", source, ""]
         prompt = "\n".join(parts)
@@ -782,8 +791,18 @@ def score_revise(run_dir, manifest, key, ratings):
         if excluded_writers:
             lines.append("- left out of every comparison: " + "; ".join(f"{w} ({why})" for w, why in excluded_writers))
         lines.append("")
+    if "profile" in pooled and "judgment" in pooled:
+        common = [w for w in pooled_writers["profile"] if w in pooled_writers["judgment"]]
+        pr = dict(zip(pooled_writers["profile"], pooled["profile"]))
+        jd = dict(zip(pooled_writers["judgment"], pooled["judgment"]))
+        diffs = [jd[w] - pr[w] for w in common]
+        if diffs:
+            lines += [f"**The method over the profile alone** (judgment minus profile, same writers): mean "
+                      f"{sum(diffs) / len(diffs):+.2f} over {len(diffs)} writer(s). The profile arm minus generic is what "
+                      f"handing over the profile does by itself (I169).", ""]
     lines += ["## Reading it",
               "- An arm at or below generic has not earned its cost: another editing pass does as well.",
+              "- Judgment above profile is the method's own contribution; judgment above generic alone may be the profile.",
               "- A high unflagged mean beside a low penalised mean is an arm that writes well when it does not invent;",
               "  the penalised number is the one that counts.",
               "- An arm above generic with fidelity intact and few unnecessary edits is the claim, per writer.",
@@ -1132,6 +1151,7 @@ def main(argv):
     s.add_argument("--arms", default=",".join(ARMS), help="revision task: the arms to run (generic is required)")
     s.add_argument("--repeats", type=int, default=1, help="revision task: runs per arm per writer")
     s.add_argument("--surface", default="post", help="revision task: the surface the mechanical arm checks under")
+    s.add_argument("--allow-quoting", action="store_true", help="detect task: plan even when a profile quotes a case (the results are then not evidence)")
     s.add_argument("--seed", type=int, default=1); s.set_defaults(fn=plan)
     s = sub.add_parser("prompts"); s.add_argument("run")
     s.add_argument("--force", action="store_true", help="rewrite prompts even for items already done")
