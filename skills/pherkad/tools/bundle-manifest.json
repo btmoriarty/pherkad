@@ -1,6 +1,6 @@
 {
   "tool": "pherkad",
-  "version": "0.5.46",
+  "version": "0.5.47",
   "schema": 1,
   "generated": "2026-09-28",
   "required": [
@@ -21,7 +21,7 @@
     "replycheck.py": "70e71d44087de0d77f633af6accbea2091d64af624bcb6ba9f44545b376fcd39",
     "replycheck-hook.py": "e43bb0ee0d066f3b5e8b1bd5c79498aa3f1255a2a0f8d8ee2a23c582e4fa94d3",
     "corpusscan.py": "36c3b46488919c819943ae8fdb1d795b93cde285195d12ceb36c94549bd1bed0",
-    "corrections.py": "904ec8b9d8a892e03f783a3b05092c9327be3bb122f1a044e3782260ab40273a",
+    "corrections.py": "a4b9ad3401f9679d7da5b6c86d65773fa116c9ba59b08e2b512d4c89671ef817",
     "samples.py": "8875c5ceffca0d78b98c7e74c1172b25822a44ef00e68fe1ccee9e7ab7b86375",
     "fingerprint.py": "8764759bdb5da212aa848d74c482a8fe88c9b183f638320b44909e01bce97754",
     "author.py": "0b13164f18a800f0cbff77010fd77f28ced95c64e915d8edee41edd759bdfbdc",

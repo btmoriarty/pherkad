@@ -88,7 +88,8 @@ jobs:
 
       - name: Lint the self-lint-scoped docs
         if: ${{ !cancelled() }}
-        # Lint the two documents covered by the repository's public self-lint
+        # Lint the documents covered by the repository's public self-lint
         # claim. CHANGELOG.md and references/ai_tells.md quote configured
-        # patterns, so they are excluded from this mechanical check.
-        run: python3 skills/pherkad/tools/voicelint.py README.md docs/CHEATSHEET.md
+        # patterns, so they are excluded from this mechanical check. The HTML is
+        # the source of the published PDF, so it is linted too (I017).
+        run: python3 skills/pherkad/tools/voicelint.py README.md docs/CHEATSHEET.md docs/CHEATSHEET.html

@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.5.47 (2026-09-28)
+
+The docs describe the tool that ships, and the bundle holds only what is tracked. This is Wave 7 of the 2026-09-27 review, part 2: docs and build.
+
+- **The cheat sheet.** The HTML, which the published PDF is rendered from, described the product before quick mode. Its voice-check card now describes quick and full, with the density floor, and its CLI card describes `pherkad.py check`. It still fits one letter-landscape page: measured at the page's width, the content ends at 735 of 755 pixels, against 725 before. CI now lints the HTML with the Markdown, so the two cannot drift silently again (I017).
+- **Stale names** in `docs/ROADMAP.md` and `docs/measured-profile.md` are the commands that exist: `corpusscan.py scan` and `diff`, `pherkad.py check-overlay`, and `corrections.py mine` (there was never a `--from-diff`). `docs/priority-fixes.md` is marked as the closed record of the 2026-09-15 round (I017).
+- **`build.sh`** builds from git with `git archive`, so only tracked files ship, and it says so when uncommitted changes under the skill are left out. Before, it zipped the working tree, caches and untracked files included (I014).
+- **`corrections.py add` and `mine`** refuse a ledger path that does not exist unless given `--init`. A mistyped path used to start a second, empty ledger that nothing read (I016).
+- **A linked ledger** (the live one is a link into the private voice repository) now says where the write landed and that the commit belongs there; nothing prompted that commit before (I008).
+- **`docs/reply-preflight.md`** describes the chat surface's link rule as it ships: a link whose target is an absolute path, `~` or `http` is the miss, and a relative link is the right form in the desktop app. Its sample output comes from a real run (I066, the documentation half).
+- **Five test counts** in older entries (0.5.4 to 0.5.12) were wrong; the numbers are dropped (I015).
+- The repository's `CLAUDE.md` describes the measured check as 0.5.39 made it.
+- Tests: two new in `test_corrections.py`, both of which fail on 0.5.46; the corrections and statefile fixtures start their ledgers with `--init`.
+- No rule in `voice_config.json` changed. `VERSION` 0.5.47.
+
 ## v0.5.46 (2026-09-28)
 
 The skill runs the commands it describes, and the packet a model reads is guarded. This is Wave 7 of the 2026-09-27 review, part 1: the skill's mechanics.
@@ -491,7 +506,7 @@ Item 10 of `docs/ROADMAP.md`, the correction ledger.
 - **The prose is generated from the record.** The ledger is the transaction log; the mined-corrections section is a view of it.
 - **`pherkad.py check-overlay` runs an overlay's fixtures**, each rule alone, so a promoted correction's tests run wherever the overlay is checked.
 - A promotion into the shipped base joins the list itself rather than an `add_`; the tool says to write the manifest, count it, and record it.
-- `tools/test_corrections.py`, 16 tests, in CI. `corrections.jsonl` is gitignored beside the personal voice documents.
+- `tools/test_corrections.py`, in CI. `corrections.jsonl` is gitignored beside the personal voice documents.
 - `VERSION` 0.5.12.
 
 ## v0.5.11 (2026-09-15)
@@ -512,7 +527,7 @@ Item 8 of `docs/ROADMAP.md`, the release manifest and the overlay check, which c
 - **`tools/bundle-manifest.json`**, new, written by `pherkad.py manifest --write` at release: the version, a schema number, the sha256 of every vendored file (the five a gate needs, plus replycheck, its hook, corpusscan, and the surfaces), and every rule id the shipped base runs. `pherkad.py manifest --verify` fails when a file beside the script no longer matches, when a file is missing or unlisted, when the version differs from `VERSION`, or when the rule ids differ from the shipped config. CI runs it, so a release that edits a tool and forgets the manifest fails its own tests; the first run of the test did exactly that.
 - **`pherkad.py check-overlay OVERLAY`** loads a downstream overlay on the shipped base and reports what would silently do nothing: a `remove_<field>` naming a rule that is not here (error), an `add_<field>` duplicating a shipped rule (warning), a whole-list replacement where `add_`/`remove_` would inherit (warning), a structure key the base does not know (config error). The saga overlay checks clean; the shipped `assistant-chat` surface checks clean.
 - **The saga's `sync-voicelint.sh --check`** now verifies three things: the six vendored files against its own sha record, pherkad's manifest against the copies, and the saga overlay against the vendored base. Any one failing exits non-zero, and `lint-voice.sh` reports it at the top of every run.
-- `test_pherkad.py` grows by 10 cases.
+- `test_pherkad.py` gains cases for the new commands.
 - `VERSION` 0.5.10.
 
 ## v0.5.9 (2026-09-15)
@@ -534,7 +549,7 @@ Item 6 of `docs/ROADMAP.md`, the combined runner.
 - **Density is computed once**, over both engines' findings, against `structure.density_per_100`; structlint's own per-document density is dropped from the combined list. **Overlap**: a structlint `header` finding whose heading contains the text of a voicelint finding on the same line is the same tell twice, and the voicelint one, which names the rule, is kept.
 - **`replycheck` runs on the shared core** (`pherkad.run_text`) and splits by engine; its verdict and output are unchanged.
 - **The saga gate calls one command.** `lint-voice.sh` runs `pherkad.py check --config <overlay> --advisory structure.` in place of the separate voicelint and structlint steps, and no longer resolves a world-specific structlint path. `sync-voicelint.sh` vendors five files: `pherkad.py`, `voicelint.py`, `structlint.py`, `mdmask.py`, `voice_config.json`. The whole-tree run reports 6 errors, 293 warnings, 116 advisory, the same numbers the two steps gave.
-- `tools/test_pherkad.py`, 16 tests, in CI.
+- `tools/test_pherkad.py`, in CI.
 - `VERSION` 0.5.8.
 
 ## v0.5.7 (2026-09-15)
@@ -545,7 +560,7 @@ Item 5 of `docs/ROADMAP.md`, the shared Markdown extraction layer, which closes 
 - **voicelint imports it** and now masks blockquotes as well as code. A quoted passage is someone else's words, which voice-rules.md exempts, and structlint already skipped it; the two tools no longer disagree on what is prose. Inline quotation marks are still linted: in fiction the dialogue is the author's voice, and adjudicating a direct quote stays with the judgment layer. On the saga corpus no finding sat on a blockquoted line, so voicelint's count is unchanged at 6 errors and 293 warnings.
 - **structlint imports it** for code, blockquote, table, heading, field, and list detection, and drops its own copies of those regexes and its unused `QUOTED` constant. One consequence: an inline code span now keeps its width when a sentence is measured, where the old stripper collapsed it to one space, so a sentence that was only "short" because its code collapsed no longer counts. Two staccato findings on the saga corpus went away for that reason (118 to 116); both were sentences carrying a code span.
 - The saga's `sync-voicelint.sh` vendors `mdmask.py` beside `voicelint.py`; a vendored voicelint without it fails at import, loudly, rather than running with less.
-- `tools/test_mdmask.py`, 14 tests, in CI; voicelint gains cases for blockquote masking and for inline quotation staying prose.
+- `tools/test_mdmask.py`, in CI; voicelint gains cases for blockquote masking and for inline quotation staying prose.
 - `VERSION` 0.5.7.
 
 ## v0.5.6 (2026-09-15)
@@ -581,7 +596,7 @@ Item 2 of `docs/ROADMAP.md`: the reply preflight, for the gap where nothing chec
 - **`banned_phrases` and `engagement_bait` accept `re:` patterns**, as `soft_phrases` already did, with no word-edge guard on a regex. A banned finding's message shows the rule's rationale when it has one.
 - **`docs/reply-preflight.md`** and a repository `CLAUDE.md` carry the recipe: draft to a file, check, revise at most three times, send the exact buffer that passed, and a check that did not run is not a pass. The habit it will keep catching is quoting a banned phrase in plain quotation marks; backticks are masked.
 - Evidence from the session that built it: two of eight long assistant replies would have been sent back, all on quoted examples.
-- `tools/test_replycheck.py`, 22 tests, in CI.
+- `tools/test_replycheck.py`, in CI.
 - `VERSION` 0.5.4.
 
 ## v0.5.3 (2026-09-15)

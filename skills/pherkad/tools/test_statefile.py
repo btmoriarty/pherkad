@@ -59,7 +59,7 @@ class Atomic(unittest.TestCase):
     @unittest.skipIf(statefile.fcntl is None, "no fcntl on this platform")
     def test_concurrent_adds_lose_nothing(self):
         ledger = os.path.join(self.d, "c.jsonl")
-        procs = [subprocess.Popen([sys.executable, CORRECTIONS, "add", "--ledger", ledger,
+        procs = [subprocess.Popen([sys.executable, CORRECTIONS, "add", "--init", "--ledger", ledger,
                                    "--before", f"phrase number {i}", "--after", "", "--source", "t",
                                    "--surface", "email", "--rationale", "r"],
                                   stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)

@@ -30,6 +30,7 @@ class Ledger(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         d = self.tmp.name
         self.ledger = os.path.join(d, "c.jsonl")
+        open(self.ledger, "w").close()  # a ledger exists; add refuses to start one without --init
         self.overlay = os.path.join(d, "overlay.json")
         self.prose = os.path.join(d, "rules.md")
         self.corpus = os.path.join(d, "corpus")
@@ -255,6 +256,22 @@ class Guards(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("no clean example", out)
 
+    def test_a_linked_ledger_says_where_to_commit(self):  # I008
+        real = os.path.join(self.tmp.name, "elsewhere.jsonl")
+        open(real, "w").close()
+        link = os.path.join(self.tmp.name, "link.jsonl")
+        os.symlink(real, link)
+        code, _, err = run("add", "--ledger", link, "--before", "x y z", "--after", "a")
+        self.assertEqual(code, 0)
+        self.assertIn("commit it in that repository", err)
+
+    def test_a_missing_ledger_needs_init(self):  # I016
+        other = os.path.join(self.tmp.name, "typo.jsonl")
+        code, _, err = run("add", "--ledger", other, "--before", "x y z", "--after", "a")
+        self.assertEqual(code, 2)
+        self.assertIn("--init", err)
+        self.assertEqual(run("add", "--ledger", other, "--before", "x y z", "--after", "a", "--init")[0], 0)
+
     def test_a_swapped_fact_is_factual(self):  # I036
         self.assertEqual(corrections.classify("on Tuesday", "on Wednesday"), "factual")
         self.assertEqual(corrections.classify("met Anna there", "met Clara there"), "factual")
@@ -304,6 +321,8 @@ class Mine(unittest.TestCase):
         self.assertIn("dry run", out)
         self.assertFalse(os.path.exists(self.ledger))
         code, out, err = run("mine", self.draft, self.edited, "--ledger", self.ledger, "--surface", "email", "--source", "email to the cohort")
+        self.assertEqual(code, 2, "no ledger there, and no --init")
+        code, out, err = run("mine", self.draft, self.edited, "--ledger", self.ledger, "--surface", "email", "--source", "email to the cohort", "--init")
         self.assertEqual(code, 0, err)
         recs = corrections.load_ledger(self.ledger)
         self.assertEqual(len(recs), 4)

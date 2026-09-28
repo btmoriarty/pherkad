@@ -46,7 +46,7 @@ The prose profile is rendered from the fingerprint, each claim carrying its coun
 
 ## Learning
 
-Two channels, both already partly built. New samples: `samples.py add` records them and `build` reruns; the fingerprint's sample list says what changed. The author's edits: `corrections.py add --from-diff draft.md edited.md` mines phrase-level changes between an AI draft and the author's edit into the ledger as candidates; nothing becomes a rule without the corpus count and his approval, as now. A factual correction still never becomes a style rule.
+Two channels, both already partly built. New samples: `samples.py add` records them and `build` reruns; the fingerprint's sample list says what changed. The author's edits: `corrections.py mine draft.md edited.md` mines phrase-level changes between an AI draft and the author's edit into the ledger as candidates; nothing becomes a rule without the corpus count and his approval, as now. A factual correction still never becomes a style rule.
 
 ## Authoring on demand (`pherkad.py author`)
 
@@ -62,7 +62,7 @@ Eight held-out work emails, facts extracted as notes by the runner, one draft fr
 2. `fingerprint.py build` and `compare`, with tests, run on whatever `hand` samples exist plus the pilot corpus as the test set.
 3. The `fingerprint` condition in the detect harness; rerun detect on the pilot corpus with the fingerprint alongside the model judge.
 4. `prose` rendering; `Voice_Profile.md` regenerated from it and diffed against the hand-written one.
-5. `corrections.py --from-diff`.
+5. `corrections.py mine` (done in 0.5.32).
 6. `pherkad.py author` and the authoring experiment.
 
 Each step is a release with its own count, and steps 2 and 3 are the ones that decide whether the rest is worth building.

@@ -79,13 +79,12 @@
   <div class="card alt">
     <h2>Voice check</h2>
     <div class="body">
-      <span class="say">does this sound like me</span> <span class="say">voice check this draft</span>
+      <span class="say">does this read as me</span> <span class="say">audit this</span>
       <div class="get">
         <ul class="tight">
-          <li>Fingerprint: the 3 sentences most and least like you, quoted</li>
-          <li>Seven dimensions scored 1 to 5, each with cited evidence</li>
-          <li>The full catalog checked, each flag naming its specific tell</li>
-          <li>Density signal: flagged constructions per 100 words (warn above 2.0), plus cluster warnings per paragraph</li>
+          <li><b>Quick</b> (the default): one table, each flagged passage ruled, then a verdict line</li>
+          <li><b>Full audit</b>: the 3 sentences most and least like you, seven dimensions scored with evidence, the full catalog</li>
+          <li>Density above 2.0 flags per 100 words (150 words and 3 flags or more), plus cluster warnings</li>
           <li>Verdict: <span class="verdict v-pass">PASS</span> <span class="verdict v-revise">REVISE</span> <span class="verdict v-rewrite">REWRITE</span></li>
         </ul>
       </div>
@@ -143,11 +142,11 @@
   <div class="card alt">
     <h2>CLI linter (no model needed)</h2>
     <div class="body">
-      <span class="say">python3 tools/voicelint.py draft.md</span>
+      <span class="say">python3 tools/pherkad.py check --surface email draft.md</span>
       <div class="get">
         <ul class="tight">
-          <li>Mechanical tells with exact line and column numbers</li>
-          <li><b>--json --strict</b> for CI or a pre-commit hook</li>
+          <li>Both mechanical engines, one list, a stable rule id on every finding</li>
+          <li><b>--format json</b> or <b>sarif</b>, <b>--strict</b> for CI; <b>--decisions FILE</b> keeps a ruled finding quiet</li>
           <li>Exit 0 no error-level findings, 1 an error (or a warning under <b>--strict</b>), 2 a usage, IO, or config error</li>
           <li>Reads Markdown, plain text, and HTML; stdlib only, Python 3.8+</li>
         </ul>

@@ -1,6 +1,6 @@
 # Reply preflight
 
-Roadmap item 2. Most of the AI-speak the author objects to arrives in chat replies from a coding assistant, and until now nothing ran the linter there. This is the check for that gap, in two halves: a cooperative pre-send recipe, and a Claude Code Stop hook that enforces it after the fact.
+Roadmap item 2. Most of the AI-speak the author objects to arrives in chat replies from a coding assistant, and until now nothing ran the linter there. Two halves close that gap: a cooperative pre-send recipe, and a Claude Code Stop hook that enforces it after the fact.
 
 ## The tool
 
@@ -12,8 +12,8 @@ reads a drafted reply on stdin (or a file path), runs voicelint under the `assis
 
 ```
 3:1 [error] honest-framing: 'the honest X' performs candour instead of exercising it; cut it and say the thing  ->  'The honest answer'
-3:51 [error] banned.markdown-link: canned phrase: 'no markdown links in chat; print the full absolute path'  ->  '[the diff](docs/x.md)'
-1 [advisory] structure.staccato: 3 short sentences in a row; merge them  ->  'Done. Tests pass. Committed.'
+3:41 [error] banned.markdown-link: canned phrase: 'in the desktop app a link is what Brian wants [...]; it must be relative to the working directory, so an absolute-path, ~ or http link in the target is the miss. [...]'  ->  '[the diff](/Users/me/docs/x.md)'
+5:1 [advisory] structure.staccato: 3 short sentences in a row; merge them  ->  'Done. Tests pass. Committed.'
 replycheck: FIX (2 error(s), 0 warning(s), 1 structural advisory; surface assistant-chat)
 ```
 
@@ -28,7 +28,7 @@ replycheck: FIX (2 error(s), 0 warning(s), 1 structural advisory; surface assist
 | `banned.pointer-*` | the demonstrative pointer: `that is the part that`, `that's the thing that`, `that is the detail that` |
 | `banned.worth-noting`, `banned.worth-saying` | announcing instead of delivering |
 | `banned.question-praise-*` | `great question`, `good question`, `fair question` |
-| `banned.markdown-link` | any `[text](target)`; chat prints full absolute paths |
+| `banned.markdown-link` | a link whose target is an absolute path, `~` or `http`; in the desktop app a link relative to the working directory is the right form |
 | `banned.tilde-path` | `~/...`; full absolute paths, never a tilde |
 | `banned.section-sign` | the symbol; write `section 5` |
 | `soft.plainly-tag` | `to put it plainly`, `state it plainly` |

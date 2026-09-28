@@ -110,6 +110,10 @@ def load_ledger(path: str) -> list[dict]:
 
 def save_ledger(path: str, records: list[dict]) -> None:
     statefile.write_text(path, "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records))
+    real = os.path.realpath(path)
+    if real != os.path.abspath(path):
+        # the ledger is a link into another repository; the write lands there, and so must the commit (I008)
+        sys.stderr.write(f"corrections: the ledger is {real}; commit it in that repository\n")
 
 
 def find(records: list[dict], rid: str) -> dict:
@@ -267,7 +271,15 @@ def examples_hold(r: dict, cfg: dict) -> list[str]:
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
+def _ledger_exists_or_init(args) -> None:
+    """A mistyped --ledger used to start a new, empty ledger beside the real one,
+    and the correction went where nobody reads it (I016)."""
+    if not os.path.exists(args.ledger) and not getattr(args, "init", False):
+        _fail(f"no ledger at {args.ledger}; pass --init to start one there")
+
+
 def cmd_add(args) -> int:
+    _ledger_exists_or_init(args)
     records = load_ledger(args.ledger)
     before = args.before.strip()
     if not before:
@@ -685,6 +697,8 @@ def mine_pairs(draft: str, edited: str, max_words: int = 8, whole: float = 0.6) 
 
 
 def cmd_mine(args) -> int:
+    if not args.dry_run:
+        _ledger_exists_or_init(args)
     try:
         draft = open(args.draft, encoding="utf-8", errors="replace").read()
         edited = open(args.edited, encoding="utf-8", errors="replace").read()
@@ -729,6 +743,7 @@ def main(argv=None) -> int:
 
     pa = sub.add_parser("add", help="record a correction")
     pa.add_argument("--ledger", required=True)
+    pa.add_argument("--init", action="store_true", help="start a new ledger at --ledger when none exists there")
     pa.add_argument("--before", required=True, help="what was written")
     pa.add_argument("--after", default="", help="what the author put instead")
     pa.add_argument("--context", default="", help="the sentence it was in")
@@ -752,6 +767,7 @@ def main(argv=None) -> int:
     pm.add_argument("--surface", default="")
     pm.add_argument("--max-words", type=int, default=8, help="longest changed run treated as a phrase; longer runs become judgment records only when the whole sentence changed")
     pm.add_argument("--dry-run", action="store_true")
+    pm.add_argument("--init", action="store_true", help="start a new ledger at --ledger when none exists there")
     pm.set_defaults(fn=cmd_mine)
 
     pt = sub.add_parser("trial", help="count the candidate on a corpus and check its examples")
