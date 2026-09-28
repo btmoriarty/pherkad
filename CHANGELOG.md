@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.5.50 (2026-09-28)
+
+The authoring pilot can no longer grade itself on the measure it optimised. This closes I157 from the 2026-09-27 review.
+
+- **An independent grading reference.** `author_pilot.py --grade-reference R` grades the drafts against a reference the packet and the loop never see, while `--reference` stays the one the loop revises toward. The run records which reference graded it in `grading.json`, and both references are checked for leakage against the held-out pieces. Without `--grade-reference`, the report keeps its caution that a win is a win on the loop's own measure.
+- **An even bare arm.** The bare prompt now carries the dash ban, and the bare draft gets one generic revision round, so the packet arm differs from it by the packet alone.
+- **A preregistered verdict.** A `prereg.json` (`max_p`, optionally `min_wins`) written before the drafts are scored gives a verdict line, Met or Not met, next to the sign test. Without one, or with one written after the scores, the results open with an EXPLORATORY banner and report no verdict.
+- **A score of None** (a draft under 100 words, or a reference too small to fit) no longer crashes the progress line or the report's means.
+- Tests: two in `eval/test_study.py`, both of which fail on 0.5.49. A test is also added for `detect.plan`'s refusal of a profile that quotes a case, which has been in place since 0.5.38 (I160).
+- No rule in `voice_config.json` changed. `VERSION` 0.5.50.
+
 ## v0.5.49 (2026-09-28)
 
 Soft phrases are errors, and a project can set a family's severity back.

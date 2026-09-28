@@ -43,10 +43,19 @@ bullet and do not reuse the message's sentences or phrasing; nouns and numbers o
 === MESSAGE ===
 {text}
 """
-BARE_PROMPT = """Write a {surface} from these notes. Include every fact and add none. Reply with the finished text only.
+BARE_PROMPT = """Write a {surface} from these notes. Include every fact and add none. Do not use em or en dashes.
+Reply with the finished text only.
 
 === NOTES ===
 {notes}
+"""
+# The bare arm gets one revision round and the dash ban, so the packet arm differs from it by
+# the packet alone and not by an extra pass or a rule the bare arm was never told (I157).
+BARE_REVISE_PROMPT = """Revise this {surface} once: make it read as a person's own message, tighten it, and fix anything
+awkward. Keep every fact and add none. Do not use em or en dashes. Reply with the revised text only.
+
+=== DRAFT ===
+{draft}
 """
 
 
@@ -60,12 +69,18 @@ def generate(args) -> int:
     run_dir = os.path.join(RUNS, args.run)
     fp = json.load(open(args.fingerprint))
     ref = json.load(open(args.reference))
+    # The loop revises toward --reference; the drafts are graded against --grade-reference,
+    # which the packet and the loop never see, so a win is not a win on the measure the arm
+    # was optimised for (I157). Without one, the grade is the loop's own reference, and says so.
+    grade = json.load(open(args.grade_reference)) if args.grade_reference else ref
     cfg, info = pherkad.load_layers(args.surface, None, None)
     held = sorted(f for f in os.listdir(args.holdout) if f.endswith(".md"))
     if args.limit:
         held = held[:args.limit]
     held_ids = {f[:-3] for f in held}
     leaks = fpm.leakage([os.path.join(args.holdout, f) for f in held], fp, ref)
+    if grade is not ref:
+        leaks += fpm.leakage([os.path.join(args.holdout, f) for f in held], None, grade)
     if leaks and not args.allow_leakage:
         sys.exit("author_pilot: the measure would be scored against itself (I158):\n  " + "\n  ".join(leaks[:8])
                  + "\nBuild the reference from pieces outside the held-out set, and the fingerprint with them excluded.")
@@ -96,7 +111,11 @@ def generate(args) -> int:
             if bare is None:
                 print(f"{sid}: bare failed: {err}")
                 continue
-            _write(bare_p, bare)
+            revised, err = au._run_one(args.runner, BARE_REVISE_PROMPT.format(surface=args.surface, draft=bare.strip()), args.timeout)
+            if revised is None:
+                print(f"{sid}: bare revision failed: {err}")
+                continue
+            _write(bare_p, revised)
         pack_p = os.path.join(run_dir, "packet", f)
         if not os.path.exists(pack_p):
             packet = au.build_packet(notes, args.surface, fp, ref, samples, args.exemplars, archetype,
@@ -111,11 +130,12 @@ def generate(args) -> int:
         row = {}
         for arm, path in (("real", os.path.join(args.holdout, f)), ("bare", bare_p), ("packet", pack_p)):
             text = open(path, encoding="utf-8").read()
-            sc = au.score(text, fp, args.surface, ref, cfg)
+            sc = au.score(text, fp, args.surface, grade, cfg)
             row[arm] = {"words": sc["words"], "errors": len(sc["errors"]), "warnings": len(sc["warnings"]),
                         "discriminant": sc["discriminant"], "shape_distance": sc["shape_distance"]}
         scores[sid] = row
-        print(f"{sid}: real {row['real']['discriminant']:+.2f}  bare {row['bare']['discriminant']:+.2f}  packet {row['packet']['discriminant']:+.2f}"
+        fmt = lambda x: "  n/a" if x is None else f"{x:+.2f}"  # noqa: E731  None when a draft is too short to measure
+        print(f"{sid}: real {fmt(row['real']['discriminant'])}  bare {fmt(row['bare']['discriminant'])}  packet {fmt(row['packet']['discriminant'])}"
               f"  (errors bare {row['bare']['errors']}, packet {row['packet']['errors']})")
         _write(os.path.join(run_dir, "scores.json"), json.dumps(scores, indent=2))
     # blind pairs sheet
@@ -129,8 +149,8 @@ def generate(args) -> int:
     lines = [f"# Authoring pairs: run {args.run}", "",
              "Each pair is two drafts written from the same notes. Mark in pairs.csv which one reads as the author (A or B),",
              "or 'same'. Do not open scores.json, pairs-key.json, or the arm folders until every pair is marked.",
-             "Dashes are shown as commas in both drafts: only one arm is told the author does not use them, so a",
-             "dash would name the arm (I156). The scores are computed on the drafts as written.", ""]
+             "Dashes are shown as commas in both drafts, so a stray dash cannot name the arm (I156). The scores are",
+             "computed on the drafts as written.", ""]
     rows, keyd = [], {}
     for sid in sorted(scores):
         if sid in old_key:  # a pair keeps its placement when the sheet is regenerated (I147)
@@ -148,6 +168,9 @@ def generate(args) -> int:
         w.writeheader()
         w.writerows(rows)
     _write(key_path, json.dumps(keyd, indent=2, sort_keys=True))
+    _write(os.path.join(run_dir, "grading.json"), json.dumps({
+        "loop_reference": ref.get("name", ""), "grade_reference": grade.get("name", ""),
+        "independent": grade is not ref, "grade_reference_files_sha256": grade.get("file_sha256", {})}, indent=2, sort_keys=True))
     print(f"wrote {run_dir}/pairs-sheet.md and pairs.csv ({len(rows)} pairs); the key is in pairs-key.json, do not open it before marking")
     return report(args.run, scores, None)
 
@@ -168,26 +191,57 @@ def _sign_p(wins: int, n: int) -> float:
     return min(1.0, 2 * sum(comb(n, i) for i in range(k + 1)) / 2 ** n)
 
 
+def _prereg(run_dir: str) -> dict | None:
+    """The run's preregistered threshold, if it was written before any draft: prereg.json
+    with max_p (and optionally min_wins), older than scores.json (I157)."""
+    p = os.path.join(run_dir, "prereg.json")
+    if not os.path.exists(p):
+        return None
+    pre = json.load(open(p))
+    sc = os.path.join(run_dir, "scores.json")
+    if os.path.exists(sc) and os.path.getmtime(p) > os.path.getmtime(sc):
+        return dict(pre, late=True)
+    return pre
+
+
 def report(run: str, scores: dict, picks: dict | None) -> int:
     run_dir = os.path.join(RUNS, run)
     ids = sorted(scores)
+    grading = json.load(open(os.path.join(run_dir, "grading.json"))) if os.path.exists(os.path.join(run_dir, "grading.json")) else {}
+    pre = _prereg(run_dir)
     d = {arm: [scores[i][arm]["discriminant"] for i in ids if scores[i][arm]["discriminant"] is not None] for arm in ("real", "bare", "packet")}
     wins = sum(1 for i in ids if (scores[i]["packet"]["discriminant"] or 0) > (scores[i]["bare"]["discriminant"] or 0))
     ties = sum(1 for i in ids if (scores[i]["packet"]["discriminant"] or 0) == (scores[i]["bare"]["discriminant"] or 0))
     errs = {arm: sum(scores[i][arm]["errors"] for i in ids) for arm in ("real", "bare", "packet")}
     warns = {arm: sum(scores[i][arm]["warnings"] for i in ids) for arm in ("real", "bare", "packet")}
-    lines = [f"# Results: authoring pilot {run}", "",
-             f"{len(ids)} pieces. Discriminant against the reference (positive is nearer the author):", "",
+    banner = []
+    if not pre or pre.get("late"):
+        banner = ["**EXPLORATORY.** " + ("prereg.json was written after the drafts were scored, so "
+                                          if pre else "No prereg.json was written before the drafts, so ")
+                  + "no threshold was fixed in advance and no verdict is reported.", ""]
+    lines = [f"# Results: authoring pilot {run}", "", *banner,
+             f"{len(ids)} pieces. Discriminant against {grading.get('grade_reference') or 'the reference'} "
+             "(positive is nearer the author):", "",
              "| arm | mean discriminant | errors | warnings |", "|---|---|---|---|"]
     for arm in ("real", "bare", "packet"):
-        lines.append(f"| {arm} | {statistics.fmean(d[arm]):+.2f} | {errs[arm]} | {warns[arm]} |")
+        mean = f"{statistics.fmean(d[arm]):+.2f}" if d[arm] else "n/a"
+        lines.append(f"| {arm} | {mean} | {errs[arm]} | {warns[arm]} |")
     untied = len(ids) - ties
+    p_sign = _sign_p(wins, untied)
     lines += ["", f"Packet above bare on {wins} of {len(ids)} pieces ({ties} tied); exact two-sided sign test "
-                  f"p = {_sign_p(wins, untied):.3f} over the {untied} untied piece(s).", "",
-              "Caution (I157): the packet states the features the discriminant measures and the loop revises toward "
-              "the discriminant, so a discriminant win is a win on the measure the arm was optimised for. It is not "
-              "evidence of voice until the author's blind picks agree, or the discriminant is computed from a second, "
-              "independent reference.", ""]
+                  f"p = {p_sign:.3f} over the {untied} untied piece(s).", ""]
+    if pre and not pre.get("late"):
+        met = p_sign <= float(pre["max_p"]) and wins > untied - wins and wins >= int(pre.get("min_wins", 0))
+        lines += [f"Preregistered threshold: p at most {pre['max_p']}"
+                  + (f" and {pre['min_wins']} wins or more" if pre.get("min_wins") else "")
+                  + f". {'Met' if met else 'Not met'}.", ""]
+    if grading.get("independent"):
+        lines += [f"The drafts were graded against {grading['grade_reference']}, which the packet and the loop never saw; "
+                  f"the loop revised toward {grading['loop_reference']} (I157).", ""]
+    else:
+        lines += ["Caution (I157): the drafts were graded against the reference the loop revised toward, so a "
+                  "discriminant win is a win on the measure the arm was optimised for. It is not evidence of voice until "
+                  "the author's blind picks agree, or the run is graded with --grade-reference.", ""]
     if picks:
         key = json.load(open(os.path.join(run_dir, "pairs-key.json")))
         chose_packet = sum(1 for i, p in picks.items() if p in ("A", "B") and key[i][p] == "packet")
@@ -206,7 +260,8 @@ def main(argv=None) -> int:
     ap.add_argument("run")
     ap.add_argument("--holdout")
     ap.add_argument("--fingerprint")
-    ap.add_argument("--reference")
+    ap.add_argument("--reference", help="the reference the packet and the loop revise toward")
+    ap.add_argument("--grade-reference", help="an independent reference the drafts are graded against (I157)")
     ap.add_argument("--samples")
     ap.add_argument("--surface", default="email")
     ap.add_argument("--runner")

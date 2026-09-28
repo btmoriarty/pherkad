@@ -661,5 +661,89 @@ class DetectTask(ReviseTask):
         pass  # covered by ReviseTask
 
 
+class AuthorPilot(unittest.TestCase):
+    """I157: graded against an independent reference; the bare arm revised once and told about dashes."""
+
+    def setUp(self):
+        import contextlib
+        import io
+        import random
+        import tempfile
+        sys.path.insert(0, study.TOOLS)
+        import author_pilot
+        import fingerprint
+        import samples
+        self.ap, self.fp_mod = author_pilot, fingerprint
+        self.tmp = tempfile.TemporaryDirectory()
+        d = self.tmp.name
+        self.saved_runs = author_pilot.RUNS
+        author_pilot.RUNS = os.path.join(d, "runs")
+        short = ["The shed leaked.", "Forty bags, all wet.", "Nobody came.", "We counted them.", "It rained again.", "I sent the bill."]
+        rng = random.Random(3)
+        sdir = os.path.join(d, "samples")
+        with contextlib.redirect_stdout(io.StringIO()):
+            for i in range(14):
+                p = os.path.join(d, f"s{i}.md")
+                open(p, "w").write("\n\n".join(" ".join(rng.choice(short) for _ in range(14)) for _ in range(5)) + "\n")
+                samples.main(["add", p, "--dir", sdir, "--provenance", "hand", "--surface", "email"])
+            self.fp = os.path.join(d, "fp.json")
+            fingerprint.main(["build", "--samples", sdir, "--out", self.fp])
+            self.refs = []
+            for name, sent in (("loop", "Because the storage facility had not been inspected in several months, the bags stored inside were damaged. "),
+                               ("grade", "Although the committee reviewed the proposal carefully over several weeks, the funding decision was delayed. ")):
+                rdir = os.path.join(d, "ref-" + name)
+                os.makedirs(rdir)
+                for i in range(20):
+                    open(os.path.join(rdir, f"{name}{i}.md"), "w").write((sent * 8 + "\n\n") * 3)
+                rp = os.path.join(d, name + ".json")
+                fingerprint.main(["build-reference", *sorted(os.path.join(rdir, f) for f in os.listdir(rdir)), "--out", rp, "--name", name])
+                self.refs.append(rp)
+        self.hold = os.path.join(d, "holdout")
+        os.makedirs(self.hold)
+        for i in range(2):
+            open(os.path.join(self.hold, f"h{i}.md"), "w").write("\n\n".join(" ".join(rng.choice(short) for _ in range(12)) for _ in range(4)) + "\n")
+        self.sdir = sdir
+        self.runner = os.path.join(d, "runner.py")
+        open(self.runner, "w").write(
+            "import sys\np = sys.stdin.read()\n"
+            "if 'list the facts' in p: print('- shed leaked\\n- forty bags wet')\n"
+            "elif 'Revise this' in p: print('REVISED. ' + 'The shed leaked. We counted them. ' * 20)\n"
+            "elif 'Write a email' in p: print('Because the storage facility had not been inspected, the bags were damaged. ' * 12)\n"
+            "else: print('The shed leaked. Forty bags, all wet. Nobody came. ' * 20)\n")
+
+    def tearDown(self):
+        self.ap.RUNS = self.saved_runs
+        self.tmp.cleanup()
+
+    def run_pilot(self, run, *extra):
+        import contextlib
+        import io
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            code = self.ap.main([run, "--holdout", self.hold, "--fingerprint", self.fp, "--reference", self.refs[0],
+                                 "--samples", self.sdir, "--surface", "email", "--runner", f"{sys.executable} {self.runner}", *extra])
+        return code, out.getvalue()
+
+    def test_independent_grading_and_an_even_bare_arm(self):
+        code, out = self.run_pilot("p1", "--grade-reference", self.refs[1])
+        run_dir = os.path.join(self.ap.RUNS, "p1")
+        grading = json.load(open(os.path.join(run_dir, "grading.json")))
+        self.assertEqual((grading["loop_reference"], grading["grade_reference"], grading["independent"]), ("loop", "grade", True))
+        self.assertTrue(open(os.path.join(run_dir, "bare", "h0.md")).read().startswith("REVISED."), "the bare arm is revised once")
+        self.assertIn("Do not use em or en dashes", self.ap.BARE_PROMPT)
+        results = open(os.path.join(run_dir, "results.md")).read()
+        self.assertIn("EXPLORATORY", results, "no prereg.json, no verdict")
+        self.assertIn("which the packet and the loop never saw", results)
+
+    def test_a_prereg_written_first_gives_a_verdict(self):
+        run_dir = os.path.join(self.ap.RUNS, "p2")
+        os.makedirs(run_dir)
+        json.dump({"max_p": 0.05, "min_wins": 2}, open(os.path.join(run_dir, "prereg.json"), "w"))
+        code, out = self.run_pilot("p2")
+        results = open(os.path.join(run_dir, "results.md")).read()
+        self.assertNotIn("EXPLORATORY", results)
+        self.assertIn("Preregistered threshold: p at most 0.05 and 2 wins or more", results)
+        self.assertIn("graded against the reference the loop revised toward", results)
+
+
 if __name__ == "__main__":
     unittest.main()
