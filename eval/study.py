@@ -82,6 +82,16 @@ def _ensure(*paths):
 
 
 def _blind_id(*parts):
+    """A random id. It used to be an unsalted hash of the run, writer, condition,
+    and case, all of which can be listed, so anyone could recompute which blind
+    item was which and unblind a pending sheet (I027). The parts are kept in the
+    signature so call sites read as before; they no longer shape the id."""
+    import secrets
+    return "item-" + secrets.token_hex(4)
+
+
+def _legacy_blind_id(*parts):
+    """The old derived id, for scoring runs planned before 0.5.38."""
     h = hashlib.sha1("|".join(parts).encode()).hexdigest()[:8]
     return "item-" + h
 
@@ -533,7 +543,7 @@ def score(args):
     key = {it["blind_id"]: it for it in manifest["items"]}
     if manifest.get("task") == "detect":
         import detect
-        return detect.score(run_dir, manifest)
+        return detect.score(run_dir, manifest, exploratory=getattr(args, "exploratory", False))
     csv_path = os.path.join(run_dir, "ratings.csv")
     if not os.path.exists(csv_path):
         sys.exit("no ratings.csv; run sheet and fill it in first")
@@ -805,6 +815,11 @@ def run_items(args):
     if not todo:
         print("nothing to run: every item with a prompt is done (use --force to redo)")
         return 0
+    if task == "detect":
+        import detect
+        problem = detect.prereg_problem(run_dir, manifest)
+        if problem:
+            sys.exit(f"run: {problem}. No verdict is collected before the plan is frozen (I163).")
     _require_isolated(args.runner, os.path.join(run_dir, "canary.json"), args.skip_canary, args.timeout)
 
     stop = threading.Event()
@@ -999,6 +1014,12 @@ def _write(p, text):
         fh.write(text)
 
 
+def freeze(args):
+    import detect
+    manifest = _load_manifest(args.run)
+    return detect.freeze(args, os.path.join(RUNS, args.run), manifest)
+
+
 def main(argv):
     ap = argparse.ArgumentParser(description="Pherkad voice-authoring evaluation harness")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -1021,6 +1042,7 @@ def main(argv):
     s.add_argument("--reference", help="detect task: the reference profile for the fingerprint condition (fingerprint.py build-reference)")
     s.set_defaults(fn=prompts)
     s = sub.add_parser("sheet"); s.add_argument("run")
+    s.add_argument("--force", action="store_true", help="regenerate even when the reader has filled answers (a timestamped copy is kept)")
     s.add_argument("--format", choices=["rating", "forcedchoice"], default="rating")
     s.set_defaults(fn=sheet)
     s = sub.add_parser("run", help="execute the planned prompts through a runner command; resumable")
@@ -1048,7 +1070,12 @@ def main(argv):
     s.add_argument("--force", action="store_true")
     s.add_argument("--dry-run", action="store_true")
     s.set_defaults(fn=flatten)
-    s = sub.add_parser("score"); s.add_argument("run"); s.set_defaults(fn=score)
+    s = sub.add_parser("score"); s.add_argument("run")
+    s.add_argument("--exploratory", action="store_true", help="detect task: score a run whose prereg.md is not frozen; results.md says so")
+    s.set_defaults(fn=score)
+    s = sub.add_parser("freeze", help="record prereg.md's hash in the manifest; prompts, run, and score need it")
+    s.add_argument("run"); s.add_argument("--force", action="store_true", help="record a changed prereg.md (results.md will say so)")
+    s.set_defaults(fn=freeze)
     args = ap.parse_args(argv)
     _ensure(DATA, WRITERS, BRIEFS, RUNS)
     return args.fn(args) or 0

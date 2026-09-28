@@ -59,6 +59,8 @@ One ordered list, drawn from `docs/priority-fixes.md` (what is still wrong) and 
 
 The pilot found the prose profile adds nothing the judge does not get from polish. The profile is rebuilt from the author's hand-written samples as numbers first.
 
+Note (2026-09-27): that pilot does not stand as measured. Its runners could see the author's profile (fixed in 0.5.37), 139 of its verdicts fail the current validator, and one control rejected nearly everything. Rescored under 0.5.38, the correct-profile lift is +0.03 against flattened text and +0.46 against impostors, down from +0.26 and +0.83. Both pilot runs are exploratory until they are rerun with isolated runners and a frozen preregistration.
+
 | # | Item | Depends on | Done when | Effort |
 |---|---|---|---|---|
 | 20 | Done, 0.5.27. **Samples with provenance**: a private samples folder and manifest (`hand`, `captured`, `approved`; surface; date; hash); importers for a mailbox export and the saga captures; nothing enters unlabelled. | nothing | A sample cannot be built from without a provenance the author gave it. | 1 |

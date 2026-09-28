@@ -258,6 +258,7 @@ class RunItems(ReviseTask):
         DetectTask._setup_detect(self)
         self._run(["plan", "d1", "--task", "detect", "--writers", "brian,rosa", "--repeats", "1",
                    "--conditions", "correct,none"])
+        DetectTask._freeze(self, "d1")
         self._run(["prompts", "d1"])
         return os.path.join(study.RUNS, "d1")
 
@@ -398,6 +399,7 @@ class DetectTask(ReviseTask):
         code, out = self._run(["plan", "d2", "--task", "detect", "--writers", "brian", "--repeats", "1",
                                "--conditions", "correct,linter,fingerprint"])
         self.assertEqual(code, 0, out)
+        self._freeze("d2")
         with self.assertRaises(SystemExit):
             self._run(["prompts", "d2"])  # the condition needs the two profiles
         code, out = self._run(["prompts", "d2", "--fingerprint", fpp, "--reference", rp])
@@ -418,7 +420,15 @@ class DetectTask(ReviseTask):
                 open(os.path.join(run_dir, it["verdict"]), "w").write('{"rating": 4, "verdict": "PASS", "evidence": ["x"]}')
         code, out = self._run(["score", "d2"])
         self.assertEqual(code, 0, out)
-        self.assertIn("fingerprint margins", open(os.path.join(run_dir, "results.md")).read())
+        self.assertIn("floor: fingerprint margin", open(os.path.join(run_dir, "results.md")).read())
+
+    def _freeze(self, run):
+        # a complete prereg, then frozen: prompts, run, and score need both (I163)
+        p = os.path.join(study.RUNS, run, "prereg.md")
+        text = open(p).read().replace("TODO", "set for the test")
+        open(p, "w").write(text)
+        code, out = self._run(["freeze", run])
+        self.assertEqual(code, 0, out)
 
     def test_plan_prompts_sheet_score(self):
         self._setup_detect()
@@ -429,14 +439,20 @@ class DetectTask(ReviseTask):
         m = json.load(open(os.path.join(run_dir, "manifest.json")))
         self.assertEqual(m["task"], "detect")
         brian = [it for it in m["items"] if it["target"] == "brian"]
-        # 6 cases x 5 conditions x 2 repeats
-        self.assertEqual(len(brian), 6 * 5 * 2)
+        self.assertEqual(len(brian), 6 * 5 * 2)  # 6 cases x 5 conditions x 2 repeats
         self.assertEqual({it["case_type"] for it in brian}, {"authentic", "atypical", "flattened", "impostor", "override"})
-        self.assertTrue(os.path.exists(os.path.join(run_dir, "profiles", "brian-shuffled.md")))
-        self.assertIn("TODO", open(os.path.join(run_dir, "prereg.md")).read())
+        shuffled = open(os.path.join(run_dir, "profiles", "brian-shuffled.md")).read()
+        self.assertTrue(shuffled.startswith("# Voice profile\n"), "the shuffled control is not labelled a control (I161)")
         wrong = [it for it in brian if it["condition"] == "wrong"][0]
         self.assertEqual(wrong["profile"], "rosa")
+        self.assertEqual(wrong["profile_sha256"], study._profile_sha("rosa"), "the hash of the profile actually used (I162)")
+        self.assertEqual([it for it in brian if it["condition"] == "none"][0]["profile_sha256"], "")
+        self.assertEqual(len({it["blind_id"] for it in m["items"]}), len(m["items"]))
 
+        with self.assertRaises(SystemExit) as cm:
+            self._run(["prompts", "d1", "--model", "judge-1"])
+        self.assertIn("TODO", str(cm.exception), "nothing is collected before the plan is complete and frozen")
+        self._freeze("d1")
         code, out = self._run(["prompts", "d1", "--model", "judge-1"])
         self.assertEqual(code, 0, out)
         m = json.load(open(os.path.join(run_dir, "manifest.json")))
@@ -444,60 +460,91 @@ class DetectTask(ReviseTask):
         floor = [it for it in brian if it["condition"] == "linter"]
         self.assertTrue(all(os.path.exists(os.path.join(run_dir, it["verdict"])) for it in floor), "linter floor written")
         fl2 = [it for it in floor if it["case"] == "shed.2"][0]
-        v = json.load(open(os.path.join(run_dir, fl2["verdict"])))
-        self.assertEqual(v["verdict"], "REVISE", "a banned phrase makes the floor say REVISE")
+        self.assertEqual(json.load(open(os.path.join(run_dir, fl2["verdict"])))["verdict"], "REVISE")
         judged = [it for it in brian if it["condition"] != "linter"]
-        self.assertTrue(all(it["model"] == "judge-1" and it.get("prompt_sha256") for it in judged))
-        prompt = open(os.path.join(run_dir, "prompts", judged[0]["blind_id"] + ".txt")).read()
-        self.assertIn("=== PASSAGE ===", prompt)
-        self.assertIn('"rating"', prompt)
 
-        # synthetic judge: the correct profile separates; the controls do not; one repeat wobbles
+        # a synthetic judge with asymmetric controls (I178): wrong discriminates a little,
+        # shuffled and none accept everything and so are degenerate (I165)
+        table = {
+            "correct":  {"authentic": 5, "atypical": 4, "override": 5, "flattened": 2, "impostor": 2},
+            "wrong":    {"authentic": 4, "atypical": 4, "override": 4, "flattened": 2, "impostor": 3},
+            "shuffled": {"authentic": 4, "atypical": 4, "override": 4, "flattened": 3, "impostor": 3},
+            "none":     {"authentic": 3, "atypical": 3, "override": 3, "flattened": 3, "impostor": 3},
+        }
+        verdict_for = {5: "PASS", 4: "PASS", 3: "light REVISE", 2: "REVISE"}
+
         def judge(it):
-            ct, cond, rep = it["case_type"], it["condition"], it["repeat"]
-            if cond == "correct":
-                rating = {"authentic": 5, "atypical": 4, "override": 5, "flattened": 2, "impostor": 2}[ct]
-                verdict = {5: "PASS", 4: "light REVISE", 2: "REVISE"}[rating]
-                if ct == "impostor" and rep == 2:
-                    rating, verdict = 4, "PASS"  # a severe wobble
-                markers = ["marker one", "marker two"] if ct in ("authentic", "override") else ["marker one"]
-            else:
-                rating, verdict, markers = 3, "light REVISE", []
-            return {"rating": rating, "verdict": verdict, "positive_register": ct != "flattened",
+            rating = table[it["condition"]][it["case_type"]]
+            if it["condition"] == "correct" and it["case_type"] == "impostor" and it["repeat"] == 2:
+                rating = 4  # a severe wobble
+            markers = ["marker one", "marker two"] if it["case_type"] in ("authentic", "override") else ["marker one"]
+            return {"rating": rating, "verdict": verdict_for[rating], "positive_register": True,
                     "markers": markers, "evidence": ["x"]}
         for it in judged:
             json.dump(judge(it), open(os.path.join(run_dir, it["verdict"]), "w"))
+        # a stale verdict the current validator rejects is dropped and counted (I022)
+        stale = [it for it in brian if it["condition"] == "none" and it["case_type"] == "override"][0]
+        open(os.path.join(run_dir, stale["verdict"]), "w").write('{"rating": 3, "verdict": "light REVISE"}')
 
         code, out = self._run(["sheet", "d1"])
         self.assertEqual(code, 0, out)
         import csv
         pairs = list(csv.DictReader(open(os.path.join(run_dir, "pairs.csv"))))
         self.assertEqual(len(pairs), 2, "two flattenings of shed pair with the shed holdout")
+        self.assertEqual({p["sheet"] for p in pairs}, {"1", "2"}, "one sheet per flattening round (I156)")
+        for k in (1, 2):
+            text = open(os.path.join(run_dir, f"pairs-sheet-{k}.md")).read()
+            self.assertEqual(text.count("The shed leaked. Forty bags, all wet."), 1, "the authentic text appears once per sheet")
         keyd = json.load(open(os.path.join(run_dir, "pairs-key.json")))
         labels = list(csv.DictReader(open(os.path.join(run_dir, "findings-labels.csv"))))
-        self.assertTrue(any(r["rule_id"] == "soft.rhymes-with" for r in labels), "the override's finding is there to label")
-        # the reader: right on pair 1, 'same' on pair 2; labels: rhymes-with is FP
-        for r in pairs:
-            r["pick"] = keyd[r["pair_id"]] if r["pair_id"] == pairs[0]["pair_id"] else "same"
+        self.assertTrue(any(r["rule_id"] == "soft.rhymes-with" for r in labels))
+        for r in pairs:  # the reader: right on the first pair, 'same' on the second
+            r["pick"] = keyd[r["pair_id"]]["authentic_is"] if r is pairs[0] else "same"
         with open(os.path.join(run_dir, "pairs.csv"), "w", newline="") as fh:
-            w = csv.DictWriter(fh, fieldnames=["pair_id", "writer", "pick"]); w.writeheader(); w.writerows(pairs)
+            w = csv.DictWriter(fh, fieldnames=["pair_id", "sheet", "writer", "pick"]); w.writeheader(); w.writerows(pairs)
         for r in labels:
             r["label"] = "FP" if r["rule_id"] == "soft.rhymes-with" else "TP"
         with open(os.path.join(run_dir, "findings-labels.csv"), "w", newline="") as fh:
             w = csv.DictWriter(fh, fieldnames=list(labels[0].keys())); w.writeheader(); w.writerows(labels)
+        with self.assertRaises(SystemExit):
+            self._run(["sheet", "d1"])  # regenerating would blank the reader's answers (I147)
 
         code, out = self._run(["score", "d1"])
         self.assertEqual(code, 0, out)
         res = open(os.path.join(run_dir, "results.md")).read()
-        self.assertIn("prereg.md still has TODO", res)
+        self.assertNotIn("EXPLORATORY", res)
+        self.assertIn("| none | 2/2 | 2/2 | 4/4 | 2/2 | 1/2 | 1 |", res, "planned versus scored, the stale verdict dropped")
         self.assertIn("| correct | +3.00 |", res, "authentic 5 minus flattened 2 on the one usable pair")
-        self.assertIn("| none | +0.00 |", res)
-        self.assertIn("flattened +3.00", res, "lift over the flat controls")
-        self.assertIn("authentic accepted", res)
-        self.assertIn("exact 5/6, adjacent 0/6, severe 1/6", res, "the impostor wobble is severe movement")
-        self.assertIn("told authentic from flattened on 1/1 decided pair(s); 1 pair(s) marked same", res)
+        self.assertIn("| shuffled (degenerate) |", res)
+        self.assertIn("| none (degenerate) |", res)
+        self.assertIn("| wrong | +1.00", res, "correct minus wrong, paired by case")
+        self.assertIn("| shuffled (degenerate: not pooled) | +2.00", res)
+        self.assertIn("authentic versus flattened: mean +1.00 over 1 writer(s)", res,
+                      "pooled over wrong only; the old mean of all three controls said +2.00")
+        self.assertIn("atypical accepted", res)
+        self.assertIn("exact 4/5, adjacent 0/5, severe 1/5", res, "the excluded pair is out of stability too")
+        self.assertIn("2 pair(s) read: 1 marked same and 0 where the reader heard the flattening", res)
+        self.assertIn("| correct | 1/1 |", res)
+        self.assertIn("| none | 0/1 |", res, "none rates both 3: no preference, so it disagrees with the reader")
         self.assertIn("| soft.rhymes-with | 0 | 1 | 0.00 |", res)
-        self.assertIn("linter-only floor", res)
+        self.assertIn("floor: linter margin", res)
+
+        # a reader who hears the flattening as the writer: that pair leaves the model's scores (I164)
+        for r in pairs:
+            key = keyd[r["pair_id"]]["authentic_is"]
+            r["pick"] = ("B" if key == "A" else "A") if r is pairs[0] else "same"
+        with open(os.path.join(run_dir, "pairs.csv"), "w", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=["pair_id", "sheet", "writer", "pick"]); w.writeheader(); w.writerows(pairs)
+        self._run(["score", "d1"])
+        res = open(os.path.join(run_dir, "results.md")).read()
+        self.assertIn("| correct | n/a |", res, "no flattened pair is left to score")
+        self.assertIn("1 where the reader heard the flattening as the writer", res)
+        # a pick that is not A, B, or same stops the score (I166)
+        pairs[0]["pick"] = "maybe"
+        with open(os.path.join(run_dir, "pairs.csv"), "w", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=["pair_id", "sheet", "writer", "pick"]); w.writeheader(); w.writerows(pairs)
+        with self.assertRaises(SystemExit):
+            self._run(["score", "d1"])
 
     def test_generic_arm_is_required(self):
         self._setup_writer()
