@@ -14,6 +14,7 @@ marker, JSON output, --strict, exit codes, invalid config, and line/column
 accuracy. It is not exhaustive; the judgment layer is not tested here.
 """
 import json
+import re
 import os
 import subprocess
 import sys
@@ -478,6 +479,45 @@ class Evasion(unittest.TestCase):
         self.assertNotIn("loaded-adverb", self.ids("He left quietly\nthrough the side door."))
         self.assertIn("loaded-adverb", self.ids("He left quietly\n\nNext paragraph."))
         self.assertIn("loaded-adverb", self.ids("He left quietly."))
+
+
+class RuleFalsePositives(unittest.TestCase):
+    """Wave 5 part 5: rules that erred on literal uses or missed their own family."""
+
+    def ids(self, text):
+        return {f.rule_id for f in voicelint.check(text, DEFAULT)}
+
+    def test_ranges_are_not_dashes(self):  # I056
+        for text in ("Open 9am–5pm.", "Costs $10–$20.", "Up 10%–20%.", "Jan–Mar and Monday–Friday.",
+                     "Q1–Q3 results.", "pages 10 – 12"):
+            self.assertNotIn("dash", self.ids(text), text)
+        self.assertIn("dash", self.ids("We left – late."))
+        self.assertIn("dash", self.ids("In 2020 — 2021 was worse."), "an em dash is never a range")
+
+    def test_honest_framing_family(self):  # I057
+        for text in ("Here is the most honest answer.", "Here is the honest, simple answer.", "Honest take: it failed.",
+                     "It gave a brutally honest read."):
+            self.assertIn("honest-framing", self.ids(text), text)
+
+    def test_honest_framing_literal_uses(self):  # I058
+        for text in ("She is the honest one of the three.", "They were honest people.", "He acted as an honest broker.",
+                     "It was an honest mistake.", "This honest man is that kind of neighbour."):
+            self.assertNotIn("honest-framing", self.ids(text), text)
+        self.assertIn("honest-framing", self.ids("The honest problem is that nobody asked."))
+
+    def test_load_bearing_wall_of_an_argument(self):  # I109
+        fs = [f for f in voicelint.check("That claim is the load-bearing wall of the argument.", DEFAULT)
+              if f.rule_id == "load-bearing-context"]
+        self.assertEqual([f.severity for f in fs], ["warning"])
+        for text in ("They removed a load-bearing wall in the kitchen.", "The load-bearing wall of the house cracked.",
+                     "A load-bearing beam runs east."):
+            self.assertNotIn("load-bearing-context", self.ids(text), text)
+
+    def test_clean_fixtures_are_near_misses(self):  # I091
+        for e in voicelint.rule_entries(DEFAULT, "soft_phrases"):
+            if e["id"] in ("soft.earns-nothing", "soft.on-its-face", "soft.leaves-out-is-most-of", "soft.is-the-check"):
+                words = set(re.findall(r"\w+", e["pattern"].lower())) - {"re", "b", "the", "is", "of", "its"}
+                self.assertTrue(any(words & set(re.findall(r"\w+", c.lower())) for c in e["clean"]), e["id"])
 
 
 class OverlaysAndIds(unittest.TestCase):

@@ -190,7 +190,8 @@ class Ledger(unittest.TestCase):
         import shutil
         base = os.path.join(self.tmp.name, "voice_config.json")
         shutil.copy(corrections.voicelint.DEFAULTS_PATH, base)
-        rid = self.add("connections worth a look", "connections worth reviewing", rationale="a stock phrase")
+        rid = self.add("connections worth a look", "connections worth reviewing", rationale="a stock phrase",
+                       clean="The connections are worth reviewing.")
         run("trial", rid, self.corpus, "--ledger", self.ledger)
         # promote into a copy: it is not the shipped file, so it goes under add_
         run("promote", rid, "--ledger", self.ledger, "--overlay", base, "--broad")
@@ -201,7 +202,8 @@ class Ledger(unittest.TestCase):
         self.assertTrue(os.path.samefile(corrections.voicelint.DEFAULTS_PATH, corrections.voicelint.DEFAULTS_PATH))
 
     def test_templated_matcher(self):
-        rid = self.add("worth [word] than", "", kind="templated", context="It was worth more than the rest.")
+        rid = self.add("worth [word] than", "", kind="templated", context="It was worth more than the rest.",
+                       clean="It was worth the rest.")
         r = self.records()[0]
         self.assertEqual(r["matcher"], "worth [word] than")
         code, out, _ = run("trial", rid, self.corpus, "--ledger", self.ledger)
@@ -223,7 +225,7 @@ class Guards(unittest.TestCase):
         self.assertEqual(run("list", "--ledger", self.ledger)[0], 2)
 
     def test_promote_refusals(self):  # I185, I184
-        rid = self.add("connections worth a look", "connections worth reviewing")
+        rid = self.add("connections worth a look", "connections worth reviewing", clean="The connections are worth reviewing.")
         run("trial", rid, self.corpus, "--ledger", self.ledger)
         code, _, err = run("promote", rid, "--ledger", self.ledger, "--overlay", self.overlay, "--broad")
         self.assertEqual(code, 2)
@@ -240,12 +242,18 @@ class Guards(unittest.TestCase):
         self.assertIn("changed after its trial", err)
 
     def test_one_word_rule_needs_confirm_and_slow_regex_is_refused(self):  # I036, I185
-        rid = self.add("connections", "links", rationale="house word")
+        rid = self.add("connections", "links", rationale="house word", clean="The connected links held.")
         run("trial", rid, self.corpus, "--ledger", self.ledger)
         code, _, err = run("promote", rid, "--ledger", self.ledger, "--overlay", self.overlay, "--broad")
         self.assertIn("--confirm", err)
         self.assertTrue(corrections._slow_regex(r"(a+)+$"))
         self.assertFalse(corrections._slow_regex(r"\bworth a look\b"))
+
+    def test_a_trial_needs_a_near_miss(self):  # I091
+        rid = self.add("connections worth a look", "cut", rationale="a stock phrase")
+        code, out, _ = run("trial", rid, self.corpus, "--ledger", self.ledger)
+        self.assertEqual(code, 1)
+        self.assertIn("no clean example", out)
 
     def test_a_swapped_fact_is_factual(self):  # I036
         self.assertEqual(corrections.classify("on Tuesday", "on Wednesday"), "factual")

@@ -77,6 +77,29 @@ _LOAD_BEARING_PHYSICAL = {
     "assembly", "assemblies", "footing", "footings", "pier", "piers",
 }
 
+# What a load-bearing wall can be "of" or "in" and stay a wall (I109).
+_BUILDINGS = {
+    "house", "houses", "home", "building", "buildings", "bridge", "bridges", "structure", "structures",
+    "barn", "church", "garage", "basement", "cellar", "kitchen", "room", "rooms", "tower", "roof", "floor",
+    "floors", "apartment", "flat", "hall", "office", "school", "stadium", "wing", "extension", "cottage",
+    "cabin", "shed", "warehouse", "factory", "mill", "castle", "fort", "attic", "storey",
+    "renovation", "tenement", "farmhouse", "station",
+}
+
+_MONTHS_DAYS = (r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|"
+                r"sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|"
+                r"mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:r(?:s(?:day)?)?)?|fri(?:day)?|"
+                r"sat(?:urday)?|sun(?:day)?|q[1-4])")
+_RANGE_LEFT = re.compile(r"(?:\$?\d[\d,.]*(?:%|\s?[ap]\.?m\.?)?|\b" + _MONTHS_DAYS + r")\s?$", re.I)
+_RANGE_RIGHT = re.compile(r"^\s?(?:\$?\d|" + _MONTHS_DAYS + r"\b)", re.I)
+
+
+def _is_range(text: str, i: int) -> bool:
+    """Is the en or figure dash at ``i`` a range between two numbers, amounts,
+    percentages, times, months, weekdays or quarters (I056)?"""
+    return bool(_RANGE_LEFT.search(text[max(0, i - 24):i]) and _RANGE_RIGHT.match(text[i + 1:i + 24]))
+
+
 # Config fields whose value is a list of strings, and which support
 # add_<field> / remove_<field> override keys in a user config.
 _LIST_FIELDS = (
@@ -795,10 +818,10 @@ def check_counting(text: str, cfg: dict):
         spans.append((i, i + 1))
 
     # em / en / figure dash / horizontal bar / two- and three-em dash. An en or figure dash
-    # between digits is a range (pages 10–12, 1914–18), which the prose rules allow (I104).
+    # in a range is allowed by the prose rules: pages 10–12, 1914–18, $10–$20, 10%–20%,
+    # 9am–5pm, Jan–Mar, Monday–Friday, Q1–Q3 (I056, I104).
     dash_hits = [m for m in _iter(r"[‒–—―⸺⸻]", text, flags=0)
-                 if not (m.group(0) in "–‒" and m.start() > 0 and text[m.start() - 1].isdigit()
-                         and m.end() < len(text) and text[m.end()].isdigit())]
+                 if not (m.group(0) in "–‒" and _is_range(text, m.start()))]
     if cfg.get("no_dashes", True):
         for m in dash_hits:
             add(m, "error", "dash", "em/en dash; use a comma, colon, or full stop")
@@ -819,7 +842,14 @@ def check_counting(text: str, cfg: dict):
         for m in _iter(r"\bload[-\s]?bearing\b", text):  # \b on the left: "workload bearing on" is not it
             nxt = re.match(r"\s+([^\W\d_]+)", text[m.end():])  # next alphabetic word
             word = nxt.group(1).lower() if nxt else ""
-            if word in _LOAD_BEARING_PHYSICAL:
+            # a structural noun is literal unless "of" or "in" hangs something other than a
+            # building on it: "the load-bearing wall of the argument" is the metaphor (I109)
+            owner = re.match(r"\s+[^\W\d_]+\s+(?:of|in)\s+(?:(?:the|a|an|this|that|his|her|their|our|its)\s+)?"
+                             r"([^\W\d_]+)(?:\s+([^\W\d_]+))?", text[m.end():])
+            # the owner is the first word after the determiner, or the second when the first is
+            # an adjective ("of the old house")
+            figurative = owner and not {w.lower() for w in owner.groups() if w} & _BUILDINGS
+            if word in _LOAD_BEARING_PHYSICAL and not figurative:
                 continue  # literal structural use
             add(m, "warning", "load-bearing-context",
                 "'load-bearing' with a non-structural object; confirm this is literal, not metaphor")
@@ -838,11 +868,22 @@ def check_counting(text: str, cfg: dict):
     # object (broker, axis, accounting, assessment) are subject matter and do not fire; the copular
     # form "[det] honest NOUN is that" fires whatever the noun, because the shape is the tic.
     if cfg.get("no_honest_framing", True):
+        # "one" left the nouns: "the honest one of the three" is a person (I058). A degree
+        # adverb before "honest" and a comma between the adjectives are the same tic
+        # ("the most honest answer", "the honest, simple answer"), and so is a heading-style
+        # "Honest take:" (I057). Subject-matter nouns never fill a slot, and the copular form
+        # needs "is that" and a clause after it, so "an honest broker" and "honest people"
+        # are left alone (I058).
         nouns = (r"(?:answer|answers|version|limit|limits|truth|read|reading|take|look|note|notes|"
-                 r"framing|thing|part|case|move|position|summary|one|assessment\s+is\s+that)")
-        pat = (rf"\b{_DET}\s+honest\s+(?:\w+\s+)?{nouns}\b"
-               rf"|\b{_DET}\s+honest\s+(?:\w+\s+)?\w+\s+is\s+(?:that|this)\b")
-        for m in _iter(pat, text):
+                 r"framing|thing|part|case|move|position|summary|assessment\s+is\s+that)")
+        subject = (r"(?!(?:broker|brokers|people|person|persons|man|men|woman|women|folk|folks|dealer|dealers|"
+                   r"mistake|mistakes|living|wage|wages|day|work|effort|citizen|citizens|john|abe)\b)")
+        adv = r"(?:(?:most|more|very|totally|fully|brutally|\w+ly)\s+)?"
+        slot = rf"(?:{subject}\w+\s*,?\s+)?"
+        pat = (rf"\b{_DET}\s+{adv}honest\s*,?\s+{slot}{subject}{nouns}\b"
+               rf"|\b{_DET}\s+{adv}honest\s+{slot}{subject}\w+\s+is\s+that\s+\w"
+               rf"|(?:^|(?<=[.!?:]\s))(?:brutally\s+)?honest\s+(?:answer|take|read|note|version|truth|assessment)\s*:")
+        for m in _iter(pat, text, flags=re.IGNORECASE | re.MULTILINE):
             add(m, "error", "honest-framing",
                 "'the honest X' performs candour instead of exercising it; cut it and say the thing")
 

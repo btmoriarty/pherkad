@@ -197,10 +197,10 @@ def propose(r: dict) -> dict:
                 # reports it instead of passing on the phrase alone (I186).
                 r["fires"] = [ctx] if ctx and r["before"].lower() in ctx.lower() else ([] if ctx else [r["before"]])
         if not r.get("clean"):
+            # the context with the author's fix in it is a near-miss; the bare after-text
+            # ("cut", "and stops there.") tested nothing, so there is no fallback to it (I091)
             if ctx and r["before"].lower() in ctx.lower() and r.get("after"):
                 r["clean"] = [re.sub(re.escape(r["before"]), r["after"], ctx, count=1, flags=re.I)]
-            elif r.get("after"):
-                r["clean"] = [r["after"]]
             else:
                 r["clean"] = []
     return r
@@ -253,6 +253,8 @@ def examples_hold(r: dict, cfg: dict) -> list[str]:
     problems = []
     if not r.get("fires"):
         problems.append("no fires example: the phrase is not in the context it was recorded with")
+    if not r.get("clean"):
+        problems.append("no clean example: give a near-miss sentence that must not fire (add --clean)")
     for text in r.get("fires", []):
         if rid not in {f.rule_id for f in voicelint.check(text, cand)}:
             problems.append(f"fires example does not fire: {text!r}")
@@ -276,6 +278,10 @@ def cmd_add(args) -> int:
          "surface": args.surface or "", "kind": kind, "rationale": (args.rationale or "").strip(),
          "status": "pending", "rule_id": "", "supersedes": args.supersedes or "", "history": []}
     if kind in RULE_KINDS:
+        if args.fires:
+            r["fires"] = list(args.fires)
+        if args.clean:
+            r["clean"] = list(args.clean)
         if args.severity:
             r["severity"] = args.severity
         if args.field:
@@ -734,6 +740,8 @@ def main(argv=None) -> int:
     pa.add_argument("--field", choices=list(voicelint._LIST_FIELDS))
     pa.add_argument("--matcher", help="override the proposed pattern (a phrase, [word] slots, or re:)")
     pa.add_argument("--supersedes", default="", help="the id this replaces")
+    pa.add_argument("--fires", action="append", default=[], help="a sentence the rule must fire on (repeatable)")
+    pa.add_argument("--clean", action="append", default=[], help="a near-miss the rule must not fire on (repeatable)")
     pa.set_defaults(fn=cmd_add)
 
     pm = sub.add_parser("mine", help="the author's edits of a draft as ledger candidates")

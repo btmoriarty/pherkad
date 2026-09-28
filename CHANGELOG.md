@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.5.44 (2026-09-28)
+
+Rules that erred on literal uses now leave them alone, and rules that missed their own family now catch it. This is Wave 5 of the 2026-09-27 review, part 5, the last: false positives in the rules.
+
+- **Ranges are not dashes.** An en or figure dash between amounts, percentages, times, months, weekdays or quarters is a range, as one between digits already was: $10–$20, 10%–20%, 9am–5pm, Jan–Mar, Monday–Friday, Q1–Q3. An em dash is never a range (I056).
+- **Honest framing** catches the shapes it missed: a degree adverb (`the most honest answer`, `a brutally honest read`), a comma between the adjectives (`the honest, simple answer`), and a heading-style `Honest take:`. It no longer errors on a person or a subject: `the honest one of the three`, `honest people`, `an honest broker`, `an honest mistake`. The copular form now needs "is that" and a clause after it (I057, I058).
+- **`load-bearing wall of the argument`** warns. A structural noun is literal unless "of" or "in" hangs something other than a building on it; `the load-bearing wall of the house` and `a load-bearing wall in the kitchen` stay literal (I109).
+- **`it's worth [verb]`** and **`it is worth [verb]`** no longer fire on the conditional "if it's worth continuing", which is the fix `voice-rules.md` prescribes for "worth pushing". Both keep their ids and now carry fixtures (I111, that part).
+- **Fixtures.** The clean examples of four rules from 2026-09-17 never contained anything near their trigger; each is now a near-miss. `corrections.py` no longer takes the bare after-text as a clean example, a trial reports a record with no near-miss, and `add` takes `--fires` and `--clean` (I091).
+- **Left for the author**, because each adds a ban, edits `voice-rules.md`, or narrows a rule with no corpus evidence either way: the written bans that no rule enforces (I111), "worth pushing" and "here's the short version" as rules, and the narrowing of `landscape of` and `lands the/first/with` (I050's config half; none of the four has a hit in the saga).
+- **On the saga corpus** (202 files, 273,431 words), `corpusscan diff` shows no finding appearing or vanishing, and the linter's own count holds at 309.
+- Tests: six new in `test_voicelint.py` and `test_corrections.py`, all of which fail on 0.5.43.
+- `voice_config.json`: two rules rewritten with pinned ids and fixtures, four clean fixtures replaced. `VERSION` 0.5.44.
+
 ## v0.5.43 (2026-09-28)
 
 An overlay does what it says, and a correction shows its reason, its reach and its speed before it becomes a rule. This is Wave 5 of the 2026-09-27 review, part 4: overlays, rule ids and `corrections.py`.

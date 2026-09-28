@@ -111,8 +111,16 @@
         "He could not say anything for a minute."
       ]
     },
-    "it's worth [verb]",
-    "it is worth [verb]",
+    {"id": "soft.it-s-worth-verb",
+     "pattern": "re:(?<!\\bif\\s)\\bit's\\s+worth\\s+(?!(?:nothing|something|anything|everything|things?|during|morning|evening)\\b)\\w+ing\\b",
+     "rationale": "it's worth [verb]; the conditional 'if it's worth continuing' is the author's own fix (voice-rules.md) and does not fire",
+     "fires": ["It's worth checking who pays."],
+     "clean": ["Keep going if it's worth continuing."]},
+    {"id": "soft.it-is-worth-verb",
+     "pattern": "re:(?<!\\bif\\s)\\bit\\s+is\\s+worth\\s+(?!(?:nothing|something|anything|everything|things?|during|morning|evening)\\b)\\w+ing\\b",
+     "rationale": "it is worth [verb]; the conditional 'if it is worth continuing' does not fire",
+     "fires": ["It is worth asking who pays."],
+     "clean": ["Keep going if it is worth continuing."]},
     "i want to be plain",
     "i want to be clear",
     "i want to be honest",
@@ -245,7 +253,7 @@
         "A mark with no reason written next to it earns nothing."
       ],
       "clean": [
-        "A mark with no reason written next to there is nothing to grade."
+        "A mark with no reason written next to it earns no credit."
       ]
     },
     {
@@ -257,7 +265,7 @@
         "The eight cheat sheets run against one nine hundred row file. Each says on its face that what it leaves out is most of the tool."
       ],
       "clean": [
-        "The eight cheat sheets run against one nine hundred row file. cut"
+        "Each one says, on its first page, what it leaves out."
       ]
     },
     {
@@ -269,7 +277,7 @@
         "Everything it leaves out is most of the subject."
       ],
       "clean": [
-        "and stops there."
+        "What it leaves out is listed at the end."
       ]
     },
     {
@@ -281,7 +289,7 @@
         "The count is the check. Five boroughs means five marks."
       ],
       "clean": [
-        "Count the marks before you read the chart. Five boroughs means five marks."
+        "The count is the check-in step before the chart is read."
       ]
     }
   ],
