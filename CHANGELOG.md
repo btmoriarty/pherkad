@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.5.42 (2026-09-28)
+
+The structural checks count the constructions they name, and fewer that only look like them. This is Wave 5 of the 2026-09-27 review, part 3: `structlint`.
+
+- **Abbreviations no longer end sentences.** Each lookbehind now holds its own period. Before, they sat after the period and tested the wrong characters, so none fired and "Dr. Smith" split in two. A number marker (no., vol., pp.) is an abbreviation only before a digit, since "The answer was no." ends a sentence (I080).
+- **Two-beats.** A shared function word or pronoun is not a shared shape: "He left. He came back." shares a pronoun. A shared content word counts only in the same slot of both sentences. A new branch catches the same skeleton, as in "The count was wrong. The ledger was right." A pair counts when the paragraph holds only the pair, or when it closes a longer paragraph (I051, I085).
+- **Headings** come from `mdmask`, so setext headings count, and a leading number or emphasis is stripped before the stance checks. A subtitle is a short line standing alone under its heading, and a heading with its subtitle is one unit (I079).
+- **Stance headings** are narrower. "The real" or "the actual" plus a stance noun must end the heading or open a clause, so "The actual cost of the project" names its subject. "Where X sits" fires only for abstract subjects (I050, the `structlint` part).
+- **Frames** are advisory and never count toward density, in `structlint`, in `check`, and in the review pack. A title's medial bare "not" is a contrast foil, as in "Speed not accuracy" (I049).
+- **A list item** is its own unit, so a lead-in and its list no longer read as one staccato paragraph. A URL inside link syntax is not a citation marker (I084).
+- **Lines are numbered on newline only**, as `voicelint` and `pherkad` number them. `decide` refuses a line with no text to record against (I083).
+- **Crashes and bad config.** An `re:` pattern that does not compile, or that matches the empty string, is a config error (exit 2). The count thresholds must be at least 1. `structlint` reads files with replacement and exits 2 on an unexpected error (I086).
+- Also fixed by parts 1 and 2: directives read from code-masked text (I052), quotes folded before the long-quote mask (I113), and setext and curly-apostrophe headings (the rest of I079).
+- **On the saga corpus** (202 files, the saga's config), structural findings go from 116 to 112. Staccato drops from 103 to 99, two-beats from 12 to 11, and one advisory contrast frame appears. Testing every pair of short sentences had taken two-beats to 131, most of them deliberate pairs in the saga's narrative register, so the check stays on the closing pair.
+- Tests: twelve new or changed in `test_structlint.py`, nine of which fail on 0.5.41. The other three guard behaviour that already held: the subtitle rule, the same-skeleton pair, and the content-word branch.
+- No rule in `voice_config.json` changed. `VERSION` 0.5.42.
+
 ## v0.5.41 (2026-09-28)
 
 What counts as prose is read the way Markdown renders it. This is Wave 5 of the 2026-09-27 review, part 2: the Markdown reader.

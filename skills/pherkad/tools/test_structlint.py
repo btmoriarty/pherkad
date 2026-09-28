@@ -37,8 +37,9 @@ def rules(text, extra=()):
         raise AssertionError(f"structlint exited {proc.returncode}: {proc.stderr.strip()[-300:]}")
     out = set()
     for line in proc.stdout.splitlines():
-        if "[warning]" in line:
-            out.add(line.split("[warning]")[1].split("(")[0].strip())
+        for level in ("[warning]", "[advisory]"):  # frames are advisory since 0.5.42 (I049)
+            if level in line:
+                out.add(line.split(level)[1].split("(")[0].strip())
     return out
 
 
@@ -64,6 +65,57 @@ class Fires(unittest.TestCase):
         self.assertIn("aphorism", rules(
             "A dashboard that answers one question well is worth more than "
             "one that does not.\n"))
+
+
+class Wave5Part3(unittest.TestCase):
+    def test_abbreviations_do_not_end_sentences(self):  # I080
+        self.assertEqual(structlint._sentences("Dr. Smith met Mr. Jones at St. Mary's, e.g. on Monday."),
+                         ["Dr. Smith met Mr. Jones at St. Mary's, e.g. on Monday."])
+        self.assertEqual(len(structlint._sentences("See no. 5 on the list. The answer was no. We left.")), 3)
+        # initials used to split into a run of one-letter sentences
+        self.assertNotIn("staccato", rules("A report by J. R. R. Tolkien and C. S. Lewis on the long war.\n"))
+
+    def test_lines_are_numbered_on_newline_only(self):  # I083
+        text = "First line still first.\n\nIt finds the break. It reports the season. It flags the outages.\n"
+        self.assertEqual([f.line for f in structlint.check_text(text) if f.rule == "staccato"], [3])
+
+    def test_a_list_after_a_lead_in_is_not_one_paragraph(self):  # I084
+        text = "Three steps:\n- Open it.\n- Read it.\n- Close it.\n"
+        self.assertNotIn("staccato", rules(text))
+
+    def test_headings_are_read_whatever_their_markup(self):  # I079
+        for head in ("## 2. Where This Sits", "## **Where This Sits**", "Where This Sits\n---------------"):
+            self.assertIn("header", rules(head + "\n\nBody text here.\n"), head)
+
+    def test_a_body_line_under_a_heading_is_not_a_subtitle(self):  # I079
+        text = "".join(f"## Section {i}\nWe chose speed, not accuracy, and moved on to the next item in the plan.\n"
+                       f"More body text follows.\n\n" for i in range(8))
+        self.assertNotIn("frame", rules(text))
+
+    def test_frames_are_advisory_and_a_medial_not_is_a_foil(self):  # I049
+        titles = "".join(f"## Speed not accuracy {i}\n\nBody.\n\n" for i in range(6))
+        found = [f for f in structlint.check_text(titles) if f.rule == "frame"]
+        self.assertTrue(found)
+        self.assertTrue(all(f.severity == "advisory" for f in found))
+        self.assertFalse(any(f.rule == "density" for f in structlint.check_text(titles)))
+
+    def test_stance_headings_are_narrow(self):  # I050
+        self.assertIn("header", rules("## The Real Problem\n\nBody.\n"))
+        self.assertIn("header", rules("## The actual question is scope\n\nBody.\n"))
+        self.assertNotIn("header", rules("## The actual cost of the project\n\nBody.\n"))
+        self.assertNotIn("header", rules("## Where the tool sits\n\nBody.\n"))
+        self.assertIn("header", rules("## Where the argument sits\n\nBody.\n"))
+
+    def test_bad_regex_and_zero_thresholds_are_config_errors(self):  # I086
+        with tempfile.TemporaryDirectory() as d:
+            for bad in ({"banned_phrases": ["re:(unclosed"]}, {"banned_phrases": ["re:x*"]},
+                        {"structure": {"staccato_run": 0}}):
+                p = os.path.join(d, "o.json")
+                json.dump(bad, open(p, "w"))
+                self.assertEqual(run(["--config", p, "-"], "Text.\n").returncode, 2, bad)
+            p = os.path.join(d, "latin1.md")
+            open(p, "wb").write("Caf\xe9 text. It ran.\n".encode("latin-1"))
+            self.assertIn(run([p]).returncode, (0, 1))
 
 
 class CommentsAndSuppression(unittest.TestCase):  # I082, I096
@@ -137,7 +189,20 @@ class TwoBeatIsSyntactic(unittest.TestCase):
         self.assertIn("two-beat", rules("He had a name. She had a name.\n"))
 
     def test_repeated_content_word_same_shape(self):
+        # the content-word branch: different first and last words, a shared content word
+        self.assertIn("two-beat", rules("Rain fell on the roof. Snow fell on the car.\n"))
+
+    def test_same_skeleton(self):
         self.assertIn("two-beat", rules("The count was wrong. The ledger was right.\n"))
+
+    def test_a_shared_function_word_is_not_a_shape(self):  # I051
+        self.assertNotIn("two-beat", rules("It rained all night. It snowed by dawn.\n"))
+        self.assertNotIn("two-beat", rules("The bus was late. The rain kept on.\n"))
+
+    def test_a_closing_pair_counts(self):  # I085
+        text = ("We spent the whole of the spring on the draft, and most of the summer on the data. "
+                "None of them wrong. None of them ours.\n")
+        self.assertIn("two-beat", rules(text))
 
 
 class SpansAreMaskedNotLines(unittest.TestCase):

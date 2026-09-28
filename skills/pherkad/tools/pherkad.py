@@ -287,13 +287,14 @@ def context_hash(text: str, line: int, paragraph: bool = False) -> str:
     if not 1 <= line <= len(lines):
         return ""
     if not paragraph:
-        return _hash(" ".join(lines[line - 1].split()))
+        return _hash(" ".join(lines[line - 1].split())) if lines[line - 1].strip() else ""
     block = []
     for ln in lines[line - 1:]:
         if not ln.strip():
             break
         block.append(ln)
-    return _hash(" ".join(" ".join(block).split()))
+    # an empty block has nothing to key a decision on; decide refuses it (I083)
+    return _hash(" ".join(" ".join(block).split())) if block else ""
 
 
 def _scope(f: dict) -> bool:
@@ -438,7 +439,7 @@ def run_text(text: str, cfg: dict, structure: bool = True, density: bool = True)
             out.append(dict(vars(f), engine="structure"))
     out.sort(key=lambda f: (f["line"], f["col"]))
     if density:
-        d = density_finding(out, text, cfg)
+        d = density_finding([f for f in out if f["rule"] != "frame"], text, cfg)  # I049
         if d:
             out.append(d)
     return out, suppressed
@@ -930,7 +931,8 @@ def build_pack(path: str, surface: str, config: str | None, decisions_path: str 
     else:
         for f in findings:
             f["decision"] = None
-    live = [f for f in findings if not f["decision"]]
+    # a document-level frame is not a per-100-words construction, as in check (I049)
+    live = [f for f in findings if not f["decision"] and f["rule"] != "frame"]
     d = density_finding(live, text, cfg)
     if d:
         d["decision"] = None
@@ -1267,6 +1269,9 @@ def cmd_decide(args) -> int:
         for rid, fs in by_rule.items():
             para = _scope(fs[0])
             ctx = _document_context(fs[0]) or context_hash(text, line, para)
+            if not ctx:
+                sys.stderr.write(f"pherkad: {path}:{line} has no text to record a decision against\n")
+                return 2
             # The record is keyed on the text (the line, or the paragraph for a
             # structural finding, or the quoted units for a document-level one),
             # so it covers every place in the file with that text.

@@ -100,6 +100,8 @@ _STRUCTURE_KEYS = frozenset({"short_chars", "two_beat_diff", "staccato_run",
                              "frame_sentence_min", "frame_sentence_share",
                              "frame_closer_min", "frame_closer_share"})
 
+_STRUCTURE_AT_LEAST_ONE = frozenset({"interrogative_min", "staccato_run", "frame_heading_min",
+                                     "frame_sentence_min", "frame_closer_min", "short_chars"})
 _KNOWN_KEYS = frozenset(
     _LIST_FIELDS
     + tuple("add_" + f for f in _LIST_FIELDS)
@@ -258,6 +260,15 @@ def _validate(cfg: dict) -> None:
                         _fail(f"config field '{key}' rule '{sk}' must be a string")
             if not key.startswith("remove_"):
                 rule_entries({key: v}, key if key in _LIST_FIELDS else key[4:])  # duplicate-id check
+                for x in v:  # a regex that does not compile, or matches nothing at all, is a config error (I086)
+                    pat = x if isinstance(x, str) else x.get("pattern", "")
+                    if pat.startswith("re:"):
+                        try:
+                            rx = re.compile(pat[3:])
+                        except re.error as exc:
+                            _fail(f"config field '{key}' pattern {pat!r} is not a valid regex: {exc}")
+                        if rx.search(""):
+                            _fail(f"config field '{key}' pattern {pat!r} matches the empty string, so it would match everywhere")
     if "watch_words" in cfg:
         ww = cfg["watch_words"]
         if not isinstance(ww, dict) or not all(
@@ -288,6 +299,8 @@ def _validate(cfg: dict) -> None:
                       f"known: {', '.join(sorted(_STRUCTURE_KEYS))}")
             if not isinstance(v, (int, float)) or isinstance(v, bool) or v < 0:
                 _fail(f"config field 'structure.{k}' must be a non-negative number")
+            if k in _STRUCTURE_AT_LEAST_ONE and v < 1:  # a zero here divides by zero in structlint (I086)
+                _fail(f"config field 'structure.{k}' must be at least 1")
     for key in cfg:
         if key.startswith("_"):
             continue  # comment/metadata keys

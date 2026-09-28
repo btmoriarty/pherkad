@@ -117,7 +117,9 @@ FRAMES = {
     # is almost always the foil) and a strict one for running sentences.
     # "X, not Y" / "X rather than Y" / "not X but Y" / "X is not Y": the contrastive foil
     "contrast": {
-        "title": re.compile(r",\s*(?:and\s+)?not\b|\brather than\b|\b(?:is|are|was|were)\s+not\b|\bnot\b.*\bbut\b", re.I),
+        # a medial bare "not" in a title is the foil too: "Clarity not cleverness" (I049)
+        "title": re.compile(r",\s*(?:and\s+)?not\b|\brather than\b|\b(?:is|are|was|were)\s+not\b|\bnot\b.*\bbut\b"
+                            r"|^\S.{0,40}\bnot\s+\w", re.I),
         "sentence": re.compile(
             r",\s*(?:and\s+)?not\s+(?:a|an|the|as|merely|only|about|just|one|some|because|of|to|in|by|that|what|whether)\b"
             r"|\brather than\b"
@@ -179,8 +181,11 @@ HEADER_STANCE = [
     r"^here'?s\s+(the|what|why)\b",
     # "The real problem", "The actual question": a stance noun after the
     # adjective. "The actual results" names its subject and is left alone.
+    # The stance noun ends the heading or opens a clause ("The Real Problem", "The
+    # actual question is scope"); "The actual cost of the project" names a subject (I050).
     r"^(the real|the actual)\s+(problem|question|issue|reason|cost|point|story|answer|"
-    r"lesson|risk|danger|work|win|fix|test|challenge|trick|secret|lever|tell)\b",
+    r"lesson|risk|danger|work|win|fix|test|challenge|trick|secret|lever|tell)"
+    r"\s*(?:$|[:?!.,;]|\s+(?:is|was|isn't|wasn't|here|lies|remains)\b)",
     r"^what\s+.{0,40}\s+is\s+really\b",
     r"\bis\s+the\s+(point|moment|whole|tell)\b",
     # An abstract subject that "carries" an abstract object. Literal and
@@ -194,9 +199,9 @@ HEADER_STANCE = [
     # The subject has to be an abstraction or a pointer: "Where this sits",
     # "Where Stage 3 Sits", "Where the argument stands". "Where the chair sits"
     # is a chair.
+    # Abstract subjects only: a tool, a course or a paper has a real place to sit (I050).
     r"^where\s+(this|that|it|we|you|each|the\s+(?:\w+\s+)?(?:stage|step|phase|work|argument|"
-    r"claim|decision|method|tool|course|project|lab|study|paper|idea|risk|value|cost|"
-    r"reader|user|field|line)|(?:stage|step|phase|week|round|part|section)\s+\w+)"
+    r"claim|decision|method|idea|risk|value|cost)|(?:stage|step|phase|week|round|part|section)\s+\w+)"
     r"\s+(sits|fits|stands|belongs)\b",
     # A header that poses the definition as a question instead of naming the
     # thing: "What Counts as Working", "What Makes a Prompt Analytical". The
@@ -215,10 +220,16 @@ HEADER_LINE = mdmask.HEADING
 # A period is not always a sentence boundary. Initials ("W. H."), common
 # abbreviations, and ordinals in citations all end in one, and treating them as
 # boundaries turned bibliographies into staccato runs.
-ABBREV = (r"(?<!\b[A-Z])(?<!\bvs)(?<!\bcf)(?<!\bal)(?<!\beds)(?<!\bed)(?<!\bpp)"
-          r"(?<!\bno)(?<!\bvol)(?<!\bArt)(?<!\bFig)(?<!\bapprox)(?<!\best)"
-          r"(?<!\bDr)(?<!\bMr)(?<!\bMs)(?<!\bSt)(?<!\betc)(?<!\bi\.e)(?<!\be\.g)")
-SENT_SPLIT = re.compile(ABBREV + r"(?<=[.!?])\s+")
+# Each lookbehind holds its own period and has a fixed width; before 0.5.42 they
+# sat after the period and tested the wrong characters, so none of them fired and
+# "Dr. Smith" split into two sentences (I080). A number marker (no., vol., pp.,
+# art., fig.) is an abbreviation only when a digit follows it, since "The answer
+# was no." ends a sentence.
+ABBREV = (r"(?<!\b[A-Z]\.)(?<!\bvs\.)(?<!\bcf\.)(?<!\bal\.)(?<!\beds\.)(?<!\bed\.)(?<!\bapprox\.)"
+          r"(?<!\best\.)(?<!\bDr\.)(?<!\bMr\.)(?<!\bMs\.)(?<!\bMrs\.)(?<!\bSt\.)(?<!\betc\.)"
+          r"(?<!\bi\.e\.)(?<!\be\.g\.)")
+NUMBER_MARK = r"(?:(?<!\b[Nn]o\.)(?<!\b[Vv]ol\.)(?<!\bpp\.)(?<!\b[Aa]rt\.)(?<!\b[Ff]ig\.)|(?!\s+\d))"
+SENT_SPLIT = re.compile(r"(?<=[.!?])" + ABBREV + NUMBER_MARK + r"\s+")
 FIELD_LINE = mdmask.FIELD_LINE
 # A bibliographic entry is punctuation-dense by convention: a year in
 # parentheses, a DOI, a URL, or a volume-and-article run. Its rhythm is the
@@ -319,10 +330,14 @@ def _mask_spans(ln: str) -> str:
 
 
 def _is_bibliographic(ln: str) -> bool:
-    return bool(_BIB_LINE.match(ln)) or len(CITATION.findall(ln)) >= 2
+    # a link's destination is where the link goes, not a citation in the line (I084)
+    return bool(_BIB_LINE.match(ln)) or len(CITATION.findall(re.sub(r"\]\([^)\n]*\)", "]", ln))) >= 2
 
 
-_STOP = frozenset("a an the of to in on at for and or but is are was were be it its this that these those".split())
+# function words, the personal pronouns among them: "He left. He came back." shares
+# a pronoun, not a shape (I051)
+_STOP = frozenset(("a an the of to in on at for and or but is are was were be it its this that these those "
+                   "i me my we us our you your he him his she her they them their that's it's there").split())
 _NEG = re.compile(r"\b(?:not|no|never|none|nothing|nobody|nor)\b|n[o’']t\b", re.I)
 
 
@@ -338,14 +353,22 @@ def _parallel(a: str, b: str) -> bool:
     tb = re.findall(r"[\w'’]+", b.lower())
     if not ta or not tb:
         return False
-    if ta[0] == tb[0]:
+    # a shared function word ("It rained. It stopped.") is not a shared shape (I051)
+    if ta[0] == tb[0] and ta[0] not in _STOP:
         return True
-    if ta[-1] == tb[-1]:
+    if ta[-1] == tb[-1] and ta[-1] not in _STOP:
         return True
     if _NEG.search(a) and _NEG.search(b):
         return True
-    shared = (set(ta) & set(tb)) - _STOP
-    return abs(len(ta) - len(tb)) <= 1 and len(shared) >= 1
+    # the same skeleton: function words in the same slots, content words anywhere
+    # ("The count was wrong. The ledger was right." is "the _ was _" twice)
+    skel = lambda ts: [w if w in _STOP else "_" for w in ts]  # noqa: E731
+    if len(ta) >= 3 and skel(ta) == skel(tb) and sum(w in _STOP for w in ta) >= 2:  # one shared pronoun is not a shape
+        return True
+    # a content word in the same slot of both ("Rain fell on the roof. Snow fell on the
+    # car."); the same word in another slot is a repetition, not a parallel
+    same_slot = any(x == y and x not in _STOP for x, y in zip(ta, tb))
+    return abs(len(ta) - len(tb)) <= 1 and same_slot
 
 
 def load_thresholds(config_path: str | None) -> dict:
@@ -367,6 +390,27 @@ def load_thresholds(config_path: str | None) -> dict:
         if k in t:
             t[k] = v
     return t
+
+
+_SETEXT_RULE = re.compile(r"^ {0,3}(?:=+|-+)[ \t]*$")
+
+
+def _headings(lines: list[str]) -> dict[int, str]:
+    """1-indexed line -> heading text, for ATX and setext headings alike, with a
+    leading number ("2.", "Part 3:") and emphasis stripped, so "## 2. **Where
+    This Sits**" is read as its words (I079). The underline of a setext
+    heading is marked with empty text: a heading line, but no second heading."""
+    kinds = mdmask.line_kinds("\n".join(lines))
+    out: dict[int, str] = {}
+    for i, (ln, k) in enumerate(zip(lines, kinds), 1):
+        if k != "heading":
+            continue
+        text = mdmask.heading_text(ln)
+        if text is None:
+            text = "" if _SETEXT_RULE.match(ln) else ln.strip()
+        text = re.sub(r"^(?:(?:part|section|chapter|step)\s+)?\d+(?:\.\d+)*[.):]?\s+", "", text, flags=re.I)
+        out[i] = text.strip("*_ ").strip()
+    return out
 
 
 def _suppressed(lines: list[str]) -> dict[int, set[str]]:
@@ -409,14 +453,19 @@ def check_frames(lines: list[str], heads: list[tuple[int, str]], paras: list[tup
     # units: headings, plus the short line right under a heading (a slide's
     # subtitle or section tagline, where the deck frames lived); sentences of
     # every prose paragraph; the last sentence of every long paragraph
-    titles: list[tuple[int, str]] = list(heads)
-    for i, _h in heads:
+    # A subtitle is one short line standing alone under its heading (a blank line or
+    # the end after it), not the first line of a body paragraph; a heading and its
+    # subtitle are one unit, so a frame in both counts once (I079).
+    titles: list[tuple[int, str]] = []
+    for i, h in heads:
+        unit = h
         if i < len(lines):
             nxt = lines[i].strip()
-            if nxt and len(nxt.split()) <= 14 and not nxt.isupper() and not LIST_ITEM.match(nxt) \
-                    and not TABLE_ROW.match(nxt) and not HEADER_LINE.match(nxt):
-                titles.append((i + 1, nxt))
-    titles.sort()
+            alone = i + 1 >= len(lines) or not lines[i + 1].strip()
+            if nxt and alone and len(nxt.split()) <= 14 and not nxt.isupper() and not LIST_ITEM.match(nxt) \
+                    and not TABLE_ROW.match(nxt) and not HEADER_LINE.match(nxt) and not _SETEXT_RULE.match(nxt):
+                unit = h + " / " + nxt
+        titles.append((i, unit))
     sentences: list[tuple[int, str]] = []
     closers: list[tuple[int, str]] = []
     for i, body in paras:
@@ -447,7 +496,7 @@ def check_frames(lines: list[str], heads: list[tuple[int, str]], paras: list[tup
                                f"{n}/{total} {kind}s: {quoted}",
                                f"the '{name}' frame recurs across {n} of {total} {kind}s; "
                                f"no one is wrong, the repetition is the tell",
-                               rule_id=f"structure.frame.{name}.{kind}"))
+                               severity="advisory", rule_id=f"structure.frame.{name}.{kind}"))
     return out
 
 
@@ -457,7 +506,10 @@ def check_text(raw: str, thresholds: dict | None = None) -> list[Finding]:
     SHORT, STACCATO_RUN = int(t["short_chars"]), int(t["staccato_run"])
     # the same one-for-one fold voicelint reads, so a curly quote or a no-break space
     # does not hide a quoted span or a "here's" header from the checks below (I096)
-    lines = mdmask.fold(raw).splitlines()
+    # newline only, as voicelint and pherkad number lines; splitlines() also broke on
+    # U+2028, form feeds and lone CRs, and the line numbers disagreed (I083)
+    lines = [ln[:-1] if ln.endswith("\r") else ln for ln in mdmask.fold(raw).split("\n")]
+    heading = _headings(lines)
     skip = _suppressed(lines)
     lines = _strip_code(lines)
     found: list[Finding] = []
@@ -476,11 +528,13 @@ def check_text(raw: str, thresholds: dict | None = None) -> list[Finding]:
 
     for i, ln in enumerate(lines, 1):
         if (not ln.strip() or BLOCKQUOTE.match(ln)
-                or HEADER_LINE.match(ln) or FIELD_LINE.match(ln)
+                or i in heading or FIELD_LINE.match(ln)
                 or TABLE_ROW.match(ln) or BRACKET_PLACEHOLDER.match(ln)
                 or _is_bibliographic(ln)):
             flush()
         else:
+            if LIST_ITEM.match(ln):
+                flush()  # each item is its own unit; a lead-in and its list are not one paragraph (I084)
             if not buf:
                 start = i
             buf.append(_mask_spans(ln))
@@ -488,9 +542,8 @@ def check_text(raw: str, thresholds: dict | None = None) -> list[Finding]:
         if not ln.strip() or BLOCKQUOTE.match(ln):
             continue
 
-        hm = HEADER_LINE.match(ln)
-        if hm:
-            h = hm.group(1).strip()
+        if heading.get(i):
+            h = heading[i]
             for pat in HEADER_STANCE:
                 if re.search(pat, h, re.I):
                     found.append(Finding(i, "header", h[:70],
@@ -514,13 +567,21 @@ def check_text(raw: str, thresholds: dict | None = None) -> list[Finding]:
             # voice-rules says may be clipped.
             continue
 
-        # two-beat: a clipped balanced parallel standing alone on the line
-        if len(sents) == 2 and all(len(s) <= SHORT for s in sents):
-            a, b = sents
+        # two-beat: a clipped balanced parallel pair of short sentences. A paragraph of
+        # exactly two, or the closing pair of a longer one, which is where the tell sits
+        # (I085). Every pair anywhere took the saga from 12 two-beats to 131, most of them
+        # deliberate pairs in its plain narrative register. The pair must stand alone: a
+        # pair inside a longer run of short sentences is the staccato check's.
+        short = [len(s_) <= SHORT for s_ in sents]
+        for k in range(max(0, len(sents) - 2), len(sents) - 1):
+            a, b = sents[k], sents[k + 1]
+            if not (short[k] and short[k + 1]) or (k > 0 and short[k - 1]) or (k + 2 < len(sents) and short[k + 2]):
+                continue
             if (abs(len(a) - len(b)) <= int(t["two_beat_diff"]) and a[:1].isupper()
                     and b[:1].isupper() and _parallel(a, b)):
-                found.append(Finding(i, "two-beat", ln.strip()[:80],
+                found.append(Finding(i, "two-beat", (a + " " + b).strip()[:80],
                                      "clipped balanced parallel; the symmetry is the tell"))
+                break
 
         # aphorism: comparative plus an elliptical negation tail, in one sentence
         for s_ in sents:
@@ -545,9 +606,8 @@ def check_text(raw: str, thresholds: dict | None = None) -> list[Finding]:
     for i, ln in enumerate(lines, 1):
         if i in skip:
             continue
-        hm = HEADER_LINE.match(ln)
-        if hm:
-            heads.append((i, hm.group(1).strip()))
+        if heading.get(i):
+            heads.append((i, heading[i]))
     if len(heads) >= int(t["interrogative_min"]):
         q = [(i, h) for i, h in heads
              if INTERROGATIVE_HEAD.match(h) and not h.rstrip().endswith("?")]
@@ -563,10 +623,11 @@ def check_text(raw: str, thresholds: dict | None = None) -> list[Finding]:
                                  f"{pct:.0f}% of headings open with a question word; "
                                  f"name the sections instead"))
 
-    found.extend(check_frames(lines, heads, paras, t))
+    frames = check_frames(lines, heads, paras, t)
 
     # A suppressed line keeps its place in its paragraph, so the sentences around it read
     # as written; what it silences is a finding reported on it (I082).
+    frames = [f for f in frames if not (skip.get(f.line) and ("*" in skip[f.line] or f.rule in skip[f.line]))]
     found = [f for f in found if not (skip.get(f.line) and ("*" in skip[f.line] or f.rule in skip[f.line]))]
     words = len(re.findall(r"\b\w+\b", "\n".join(lines)))
     cap = float(t["density_per_100"])
@@ -575,7 +636,9 @@ def check_text(raw: str, thresholds: dict | None = None) -> list[Finding]:
         if per100 > cap:
             found.append(Finding(0, "density", f"{len(found)} hits / {words} words",
                                  f"{per100:.1f} per 100 words, over the {cap} cap"))
-    return found
+    # a frame is a document-level recurrence, reported at advisory level and never a
+    # per-100-words construction (I049)
+    return found + frames
 
 
 def main() -> int:
@@ -590,7 +653,7 @@ def main() -> int:
     total, payload = 0, {}
     for path in args.files:
         try:
-            raw = sys.stdin.read() if path == "-" else open(path, encoding="utf-8").read()
+            raw = sys.stdin.read() if path == "-" else open(path, encoding="utf-8", errors="replace").read()
         except OSError as exc:
             sys.stderr.write(f"structlint: cannot read {path}: {exc}\n")
             return 2
@@ -611,4 +674,10 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except SystemExit:
+        raise
+    except Exception as exc:  # never exit 1 (looks like findings) on a crash (I086)
+        sys.stderr.write(f"structlint: unexpected error: {exc}\n")
+        sys.exit(2)
