@@ -146,7 +146,7 @@ def score(draft: str, fp: dict, surface: str, reference: dict | None, cfg: dict)
     findings, _ = pherkad.run_text(draft, cfg, structure=True, density=True)
     errors = [f for f in findings if f["severity"] == "error"]
     warnings = [f for f in findings if f["severity"] == "warning"]
-    res = fpm.compare(draft, fp, surface, 2.0, reference)
+    res = fpm.compare(draft, fp, surface, reference=reference)
     disc = (res.get("discriminant") or {}).get("score")
     return {"errors": errors, "warnings": warnings, "discriminant": disc, "shape_distance": res.get("shape_distance"),
             "flagged": res.get("flagged", []), "words": res.get("words", 0)}
@@ -158,7 +158,7 @@ def feedback_text(sc: dict) -> str:
         lines.append(f"- Remove or recast {f['match']!r}: {f['message']}")
     for d in sc["flagged"][:4]:
         more = "more" if d["z"] > 0 else "less"
-        lines.append(f"- {d['feature']} is {more} than the author by {abs(d['z']):.1f} of the author's standard deviations "
+        lines.append(f"- {d['family']}: {d['feature']} is {more} than the author by {abs(d['z']):.1f} of the author's standard deviations "
                      f"(yours {d['value']}, the author's {d['author_mean']}); for example {d['quote']!r}")
     if sc.get("discriminant") is not None and sc["discriminant"] < 0:
         lines.append(f"- The draft reads nearer generic polished prose than the author (discriminant {sc['discriminant']:+.2f}); "
@@ -203,6 +203,8 @@ def author_loop(packet: dict, runner: str, rounds: int, fp: dict, surface: str, 
                         "discriminant": sc["discriminant"], "shape_distance": sc["shape_distance"], "draft": draft})
         if _better(sc, best_sc):
             best, best_sc = draft, sc
+        # a flag is a feature family at FDR 0.05 (I189), so a draft as the author writes clears
+        # them about 19 times in 20; under the old 2.0 cut over 183 features almost none could
         if rnd == rounds or (not sc["errors"] and not sc["warnings"] and not sc["flagged"] and (sc["discriminant"] is None or sc["discriminant"] > 0.15)):
             break
         prompt = render(packet, feedback_text(sc), draft)
@@ -210,5 +212,8 @@ def author_loop(packet: dict, runner: str, rounds: int, fp: dict, surface: str, 
         if draft is None:
             history.append({"round": rnd + 1, "error": err})
             break
-    return {"draft": best, "score": {k: (v if k not in ("errors", "warnings", "flagged") else len(v)) for k, v in best_sc.items()},
+    # the flagged families keep their quotes, so the record shows what was unlike the author, not only how many (I037)
+    kept = {k: (v if k not in ("errors", "warnings") else len(v)) for k, v in best_sc.items()}
+    kept["flagged"] = [{k: d.get(k) for k in ("family", "feature", "z", "p_family", "quote")} for d in best_sc["flagged"]]
+    return {"draft": best, "score": kept,
             "rounds": len(history) - 1, "history": history}

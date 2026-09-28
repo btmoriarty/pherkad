@@ -1,6 +1,6 @@
 {
   "tool": "pherkad",
-  "version": "0.5.38",
+  "version": "0.5.39",
   "schema": 1,
   "generated": "2026-09-27",
   "required": [
@@ -12,7 +12,7 @@
     "voice_config.json"
   ],
   "files": {
-    "pherkad.py": "f303cea7192299f315e367fe19e8f51b49506f2a5f03fd827e174c0611d3d5cd",
+    "pherkad.py": "76ca44fe86bdb4a77610352f7819c5cf665319190d17510ad310e4c90d4900e4",
     "voicelint.py": "1268e6557034204df99179b02c10dca80063270b61760c9faa5d3e0f2d80053f",
     "structlint.py": "b7f782422a9fb294bed9399fd03fa8f2345eb8f60168158d43d22886b7dbc950",
     "mdmask.py": "a6bc483a2bccc0559d8bbfd408c471b14d45b345fc47aad91ca9cdec250bfe41",
@@ -22,9 +22,9 @@
     "replycheck-hook.py": "e43bb0ee0d066f3b5e8b1bd5c79498aa3f1255a2a0f8d8ee2a23c582e4fa94d3",
     "corpusscan.py": "36c3b46488919c819943ae8fdb1d795b93cde285195d12ceb36c94549bd1bed0",
     "corrections.py": "4ae4a1a37663cae0e5d220bfa224b17b8999d294b80cd1c9b1577a9adebda3fb",
-    "samples.py": "424c67f566c31fbbc48b03f3325a54407b47694d20eb66f7dfa7063fb5a75234",
-    "fingerprint.py": "4bc04a79f4347d031ea79959be8f3ca3a31f1025fc929dec65845444f6507244",
-    "author.py": "96d9fd30e2155a127670e1727362c69ea4e648c6bafaac7b407b846ebcb0606b",
+    "samples.py": "8875c5ceffca0d78b98c7e74c1172b25822a44ef00e68fe1ccee9e7ab7b86375",
+    "fingerprint.py": "8764759bdb5da212aa848d74c482a8fe88c9b183f638320b44909e01bce97754",
+    "author.py": "0b13164f18a800f0cbff77010fd77f28ced95c64e915d8edee41edd759bdfbdc",
     "runner.py": "47045bf38b130c0fa34cfac13f99237f436fed66dc9b741e0523b20004842430",
     "surfaces/assistant-chat.json": "5b09680e12757b96e188d0f30cec763ffb165ef7b88358776f1a2e62c8a9fc74",
     "surfaces/email.json": "25d23c7f262a00f698377edde3da75008cc9016797227baab431e886d8cd6cac",

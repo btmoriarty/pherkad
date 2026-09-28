@@ -18,7 +18,7 @@ Stdlib, deterministic, from the samples alone. Per surface and pooled:
 - Paragraph shape: sentences per paragraph, share of one-sentence paragraphs, share of paragraphs that end on a short sentence.
 - Openers: sentence-initial word classes (first person, conjunction, article, subordinator, number), and the twenty most frequent first words.
 - Closers: paragraph-final sentence length relative to the paragraph; document-final sentence patterns.
-- Function words: relative frequency of the 150 most common English function words, the standard stylometric signature, with the author's per-sample variance so a deviation is measured in his own units.
+- Function words: relative frequency of about 150 closed-class English words (determiners, pronouns, prepositions, conjunctions, auxiliaries and modals, focusing particles), with the author's per-piece variance so a deviation is measured in his own units. The first list was Fry's instant words, which carried content words such as water and people (0.5.39).
 - Punctuation: commas, colons, semicolons, parentheses, quotation marks, dashes per sentence; contraction rate; question rate.
 - Constructions: the rates of the shipped tells (candour announcements, contrast frames, pointers, staccato, mystery tails), hedges, intensifiers, passive-shaped verb phrases, sentence-initial And, But, So.
 - Distinctive vocabulary: words and bigrams over-represented against a plain reference (the flattenings and the impostor texts already in the eval corpus serve as the first reference; a public general-English frequency list later).
@@ -28,11 +28,17 @@ Output: `fingerprint.json` with the sample ids it was built from, their hashes, 
 
 ## Recognition (`fingerprint.py compare`)
 
-A text is compared to the fingerprint feature by feature: each feature's deviation in the author's own standard-deviation units, the features that deviate most, and a quoted example for each. `pherkad.py check --fingerprint F` adds these as `voice.<feature>` findings (advisory by default), and the detect harness gets a `fingerprint` condition: a verdict from distance alone, no model. That gives a number nobody can argue with: does the measured profile tell the author from flattened text and from impostors better than the model judge did (+0.26 and +0.83 lift over the pilot's controls)?
+A text is measured against the author's own single-document pieces of the size nearest its length (100, 200, 400 or 800 words); under 100 words it is not measured. A piece never mixes two documents, because a compared text is one document. Chunks pooled across short emails hid the variation between emails, and flagged a third of his own held-out mail.
+
+Each feature gets a prediction t, floored at one occurrence's worth so a habit he never shows is not a certain deviation. The features fall into seven families: sentence length, paragraphs, openers, punctuation, constructions, vocabulary, and function words. A family's statistic is its largest |t|. Its p-value is that statistic's rank among the same statistic for each of his pieces against the others, a conformal test that holds whatever the features' skew. Benjamini-Hochberg at a 5% false discovery rate decides which families are reported, one finding per family with the passage behind it. In a split-half test (built on half his mail, compared on the other half), 5 of 425 of his own messages had a family flagged.
+
+`pherkad.py check --fingerprint F` adds these as `voice.<feature>` findings (advisory by default), and the detect harness gets a `fingerprint` condition: a verdict from the discriminant alone, no model. That gives a number nobody can argue with: does the measured profile tell the author from flattened text and from impostors better than the model judge did (+0.26 and +0.83 lift over the pilot's controls)?
 
 ## What the first mail test taught (2026-09-17)
 
 Distance to the author's mean cannot recognise the author: a flattening is generic, generic sits near everyone's mean, and on eight held-out emails the flattening was nearer than the original on 15 of 16 pairs. Recognition needs a second profile of what the author is not. `build-reference` makes one from flattenings or from other writers, and the discriminant over the features where the two profiles part company put the held-out email above its flattening 16 of 16 times, with the reference built from other emails' flattenings each time. The same score does not tell the author from six cohort notes, because the reference was flattenings, so what it learned is hand-typed mail against machine prose. Each reference answers one question; the next is a reference of other writers' mail.
+
+The family flags do not catch flattening either: none of the 46 flattenings in the eval corpus had a family flagged in 0.5.39. Recognition is the discriminant's job. Since 0.5.39 it is nearest shrunken centroids, with the shrinkage chosen by cross-validation grouped by document, the score Platt-calibrated to a log-odds, and the cross-validated AUC reported beside it. It refuses a reference of fewer than 50 pieces. The reference behind the 16 of 16 result had 14 chunks, so that result stands as exploratory until a larger reference is built.
 
 ## Prose from numbers (`fingerprint.py prose`)
 

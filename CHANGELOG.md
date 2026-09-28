@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.5.39 (2026-09-27)
+
+The measured profile's flags now mean what they say, and each one says how much it rests on. This is Wave 4 of the 2026-09-27 review. A split-half test on the author's own mail shows the size of the change: the profile was built on one half of his mail by id and compared on the 425 messages of 100 words or more in the other. Under 0.5.38's rule, 373 of the 425 had a shape feature past two standard deviations, and all 425 had a function word past it. Under this release, 5 of 425 have a family flagged.
+
+**Counting** (`fingerprint.py`):
+- Curly apostrophes and quotation marks count as straight ones. "don’t" was no contraction and “this” no quotation, so mail from any client that curls them read as having neither. The evidence still quotes the author's own characters, and the leakage check sees a curly copy as a copy (I119).
+- The function words are about 150 closed-class words: determiners, pronouns, prepositions, conjunctions, auxiliaries and modals, and focusing particles. The old list was Fry's instant words, which included water, people and animal. The distance over them is renamed `fw_distance`, a within-author mean |t|; it was never Burrows's Delta (I191).
+- `type_token` is a moving-average ratio over 50-word windows, so it no longer falls as a text grows (I188).
+- Every shape feature keeps a quoted passage, including sentence spread, short-after-long, paragraphs, openers, function words and vocabulary. A flag quotes the first feature in its family that has a passage. A word the draft never uses is shown by the author's own use of it (I037).
+
+**Comparing** (`fingerprint.py compare`, `pherkad.py check --fingerprint`):
+- A text is measured against the author's single-document pieces of the size nearest its length (100, 200, 400 or 800 words); under 100 words it is not measured. A piece never mixes two documents. Chunks pooled across short emails had hidden the variation between emails (I188).
+- Each feature gets a prediction t from the sample SD, floored at one occurrence's worth. A habit the author never shows is no longer an automatic three standard deviations (I189).
+- The features fall into seven families, and one habit is one finding. A family's p-value is the rank of its largest |t| among the author's own pieces, each left out in turn. That test is exact whatever the features' skew or correlation. Benjamini-Hochberg at `--fdr` (default 0.05) replaces the fixed 2.0 threshold; `--fingerprint-threshold` is now `--fingerprint-fdr`. When a profile has too few pieces at a size to reach the cut, the result says so (I187, I189).
+- A surface with no profile of its own is still measured against the pooled profile, but the finding names the basis and its mix. A user surface map entry may set `"basis"`. A text the profile cannot measure gets a `voice.unmeasured` finding instead of silence (I192).
+
+**The discriminant** (I190):
+- It is now nearest shrunken centroids, with the shrinkage chosen by 5-fold cross-validation grouped by document. The score is a Platt-calibrated log-odds, reported with `p_author`, the cross-validated AUC, and a passage for each feature that pulls it.
+- It refuses a reference under 50 pieces. The current `reference-flattened.json` has 14 chunks and no per-piece vectors, so the discriminant is off until the reference is rebuilt. `detect.py prompts` refuses the fingerprint condition up front, and names any case under 100 words, instead of writing a floor verdict with a made-up zero.
+- The score's scale changed. The detect cutoffs (+0.40, +0.15, 0, -0.15) were set on the old scale and wait on the preregistered thresholds being set again.
+
+**Building and importing** (`fingerprint.py build`, `samples.py`):
+- `build` exits 2 on an unknown provenance, on an `--exclude` id missing from the manifest, and on `approved` without `--allow-approved`, which is recorded in the output. Nothing weighted `captured` below `hand`, so both docstrings now say so (I149).
+- Mail is read in the charset it is actually in. A latin-1 or ascii label on Windows-1252 or UTF-8 bytes is not believed, and bytes no charset can read are counted and warned about (I119).
+- `import-mbox` needs `--from` (repeatable, +tags ignored), `--provenance` and `--surface`, and stores the sender on each record. It skips auto-replies, bulk and list mail, calendar invitations, and forwarded message parts, read from the headers as well as the body. It cuts HTML mail at the first quoted thread, recognises reply attributions in more forms and languages, keeps the author's lines in an interleaved reply, and drops a trailing signature block. A message that cannot be read is counted and skipped, and the manifest is saved even if the loop stops (I142, I143, I195).
+- `import-captured` takes only Verbatim blocks and the capture sweep's drop entries, once each, and no longer takes bold quotations inside the assistant's analysis. It lists the candidates and writes only the ids given to `--accept` (I193, I194).
+
+**Tests:**
+- Twenty-one tests, new or rewritten, in `test_fingerprint.py`, `test_samples.py`, `test_pherkad.py` and `test_study.py`. All 21 fail on 0.5.38 and pass here.
+- The fixtures are larger, because a profile now needs 5 pieces, a flag needs enough pieces to resolve, and the discriminant needs 50 reference pieces.
+- The fixture that quoted a real saga item now uses invented text.
+- No rule in `voice_config.json` changed. `VERSION` 0.5.39. The fingerprints in voice-profile are not rebuilt; that waits on the author.
+
 ## v0.5.38 (2026-09-27)
 
 The eval harness scores what it claims to, and refuses to score a measure against its own inputs. Wave 3 of the 2026-09-27 review, part 2. Rescored under this release as exploratory, detect-01's correct-profile lift falls from +0.26 / +0.83 to +0.03 / +0.46; `docs/ROADMAP.md` says so beside the finding it undercuts.

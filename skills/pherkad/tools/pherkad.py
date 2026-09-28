@@ -214,8 +214,10 @@ def resolve_surface(name: str, map_path: str | None = None, cwd: bool = True) ->
         pth = e if os.path.isabs(e) else os.path.join(base_dir, e)
         excerpts.append({"path": pth, "exists": os.path.exists(pth)})
     guidance = " ".join(x for x in (meta.get("guidance", ""), entry.get("guidance", "")) if x).strip()
+    # the fingerprint profile this surface is measured against; the surface's own name unless the map says otherwise
+    basis = entry.get("basis") or meta.get("basis") or (None if is_path else name)
     return {"name": name, "overlay": overlay, "speaker": speaker, "positive_register": register,
-            "guidance": guidance, "excerpts": excerpts, "from_map": bool(entry)}
+            "guidance": guidance, "excerpts": excerpts, "from_map": bool(entry), "basis": basis}
 
 
 def load_layers(surface: str | None, config: str | None, map_path: str | None = None,
@@ -494,16 +496,20 @@ def to_sarif(results: list[tuple[str, list[dict]]], cfg: dict, advisory: list[st
                       "results": sarif_results}]}
 
 
-def voice_findings(text: str, fp: dict, surface_name: str | None, threshold: float, ref: dict | None = None) -> list[dict]:
-    """Advisory findings from the measured profile: one per feature that sits
-    past `threshold` of the author's own standard deviations, quoting the
+def voice_findings(text: str, fp: dict, surface_name: str | None, fdr: float = 0.05, ref: dict | None = None) -> list[dict]:
+    """Advisory findings from the measured profile: one per feature family
+    that deviates from the author at false discovery rate `fdr`, quoting the
     text's sentence and the author's; with a reference profile, the
-    discriminant (nearer the author or nearer the reference) as well.
-    Never counted in density; never an error."""
+    discriminant (nearer the author or nearer the reference) as well. A text
+    the profile cannot measure gets one voice.unmeasured finding saying why,
+    never silence. Never counted in density; never an error."""
     import fingerprint as fpm
-    res = fpm.compare(text, fp, surface_name, threshold, ref)
+    res = fpm.compare(text, fp, surface_name, fdr, ref)
     if "error" in res:
-        return []
+        return [{"line": 0, "col": 0, "severity": "advisory", "rule": "voice", "rule_id": "voice.unmeasured",
+                 "match": res["error"][:160], "message": f"not measured against the fingerprint: {res['error']}",
+                 "engine": "fingerprint"}]
+    note = "".join(f"; {res[k]}" for k in ("basis_note", "resolution_note") if res.get(k))
     lines = text.split("\n")
     out = []
     for d in res["flagged"]:
@@ -513,24 +519,31 @@ def voice_findings(text: str, fp: dict, surface_name: str | None, threshold: flo
         out.append({"line": line, "col": 1, "severity": "advisory", "rule": "voice",
                     "rule_id": "voice." + d["feature"],
                     "match": quote[:160] or d["feature"],
-                    "message": f"{d['feature']} {more} than the author by {abs(d['z']):.1f} sd ({d['value']} against "
-                               f"{d['author_mean']} ± {d['author_sd']}, basis {res['basis']})"
+                    "message": f"{d['family']}: {d['feature']} {more} than the author, t {d['z']:+.1f} "
+                               f"(family p {d['p_family']:.2g} at FDR {res['fdr']}; {d['value']} against "
+                               f"{d['author_mean']} ± {d['author_sd']}, basis {res['basis']} at {res['scale']} words{note})"
+                               + (f"; also {', '.join(d['also'])}" if d.get("also") else "")
                                + (f"; the author: {d['author_quote'][:80]!r}" if d.get("author_quote") else ""),
                     "engine": "fingerprint"})
     out.append({"line": 0, "col": 0, "severity": "advisory", "rule": "voice", "rule_id": "voice.distance",
-                "match": f"Delta {res['delta']}, shape {res['shape_distance']}",
-                "message": f"distance from the author's fingerprint: Delta {res['delta']} over function words, "
-                           f"shape {res['shape_distance']} (mean |z| over the shape features); basis {res['basis']}",
+                "match": f"function words {res['fw_distance']}, shape {res['shape_distance']}",
+                "message": f"distance from the author's fingerprint, as within-author mean |t|: {res['fw_distance']} over "
+                           f"function words, {res['shape_distance']} over {res['n_families']} shape families; "
+                           f"basis {res['basis']} at {res['scale']} words{note}",
                 "engine": "fingerprint"})
     if res.get("discriminant"):
         d = res["discriminant"]
-        side = "nearer the author" if d["score"] > 0 else "nearer the reference"
+        if d["score"] is None:
+            msg, match = f"discriminant not computed: {d['error']}", f"not computed against {d['reference']}"
+        else:
+            side = "nearer the author" if d["score"] > 0 else "nearer the reference"
+            match = f"{d['score']:+.2f} against {d['reference']}"
+            msg = (f"{side}: log-odds {d['score']:+.2f} (p author {d['p_author']:.2f}), cross-validated AUC "
+                   f"{d['cv_auc']:.2f} over {d['features_used']} features"
+                   + (f"; for the author: {', '.join(d['for_author'])}" if d["for_author"] else "")
+                   + (f"; for the reference: {', '.join(d['for_reference'])}" if d["for_reference"] else ""))
         out.append({"line": 0, "col": 0, "severity": "advisory", "rule": "voice", "rule_id": "voice.discriminant",
-                    "match": f"{d['score']:+.2f} against {d['reference']}",
-                    "message": f"{side}: {d['score']:+.2f} over {d['features_used']} separating features"
-                               + (f"; for the author: {', '.join(d['for_author'])}" if d["for_author"] else "")
-                               + (f"; for the reference: {', '.join(d['for_reference'])}" if d["for_reference"] else ""),
-                    "engine": "fingerprint"})
+                    "match": match, "message": msg, "engine": "fingerprint"})
     return out
 
 
@@ -580,7 +593,7 @@ def cmd_check(args) -> int:
             d["decision"] = None
             findings.append(d)
         if fp:
-            for v in voice_findings(text, fp, surface["name"] if surface else None, args.fingerprint_threshold, ref):
+            for v in voice_findings(text, fp, surface.get("basis") if surface else None, args.fingerprint_fdr, ref):
                 v["decision"] = None
                 findings.append(v)
         results.append((path, findings))
@@ -1388,7 +1401,8 @@ def main(argv=None) -> int:
     pc.add_argument("--format", choices=["text", "json", "sarif"], default="text")
     pc.add_argument("--strict", action="store_true", help="warnings fail too")
     pc.add_argument("--fingerprint", metavar="FILE", help="the measured profile (fingerprint.py build); adds advisory voice.* findings")
-    pc.add_argument("--fingerprint-threshold", type=float, default=2.0, help="standard deviations before a feature is reported")
+    pc.add_argument("--fingerprint-fdr", type=float, default=0.05,
+                    help="false discovery rate across the fingerprint's feature families before one is reported")
     pc.add_argument("--reference", metavar="FILE", help="a fingerprint.py build-reference profile; adds the voice.discriminant finding")
     pc.add_argument("--advisory", action="append", metavar="PREFIX",
                     help="rule ids under this prefix are reported but never counted (repeatable), e.g. structure.")

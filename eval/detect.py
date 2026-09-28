@@ -225,11 +225,15 @@ def _fingerprint_verdict(text: str, surface: str, fp: dict, ref: dict) -> dict:
     """The measured floor: a verdict from the fingerprint discriminant alone, no
     model. The mapping is the pilot's, fixed before the run: a score above
     +0.15 is PASS (5 above +0.40), 0 to +0.15 light REVISE, -0.15 to 0 REVISE,
-    below that REWRITE."""
+    below that REWRITE. Since 0.5.39 the score is a calibrated log-odds, not
+    the old mean per-feature ratio, so these cutoffs wait on the prereg
+    thresholds being set again on the new scale."""
     sys.path.insert(0, study.TOOLS)
     import fingerprint  # noqa: WPS433
-    res = fingerprint.compare(text, fp, surface, 2.0, ref)
-    d = res.get("discriminant") or {"score": 0.0, "features_used": 0, "for_author": [], "for_reference": []}
+    res = fingerprint.compare(text, fp, surface, reference=ref)
+    d = res.get("discriminant") or {}
+    if d.get("score") is None:
+        sys.exit(f"detect: the fingerprint condition cannot score this case: {d.get('error') or res.get('error', 'no discriminant')}")
     sc = d["score"]
     if sc >= 0.40:
         rating, verdict = 5, "PASS"
@@ -263,6 +267,17 @@ def prompts(args, run_dir, manifest):
         if leaks:
             sys.exit("prompts: the fingerprint condition would score the cases against themselves (I158):\n  "
                      + "\n  ".join(leaks[:8]) + "\nBuild the reference and the fingerprint from pieces outside this run's cases.")
+        unfit = fpm.fit_discriminant(fp["pooled"], ref).get("error")
+        if unfit:
+            sys.exit(f"prompts: the fingerprint condition has no discriminant to score with: {unfit} (I190)")
+        short = []
+        for c in cases:
+            got = (fpm.features(fpm.prose_paragraphs(study._read(c))) or {"f": {"_words": 0}})["f"]["_words"]
+            if got < fpm.MIN_COMPARE_WORDS:
+                short.append(f"{os.path.relpath(c, study.DATA)} ({got} words)")
+        if short:
+            sys.exit(f"prompts: the fingerprint condition cannot measure a case under {fpm.MIN_COMPARE_WORDS} words of prose (I188):\n  "
+                     + "\n  ".join(short[:12]) + "\nDrop the condition, or take these cases out of the plan.")
     for it in manifest["items"]:
         text = study._read(os.path.join(study.DATA, it["text"])).strip()
         if it["condition"] == "linter":

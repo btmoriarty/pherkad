@@ -30,7 +30,7 @@ class Packet(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         d = self.tmp.name
         self.sdir = os.path.join(d, "samples")
-        for i in range(5):
+        for i in range(12):
             p = os.path.join(d, f"s{i}.md")
             body = prose(i) if i else "The shed leaked and the bags got wet. We counted forty. I sent the bill to the landlord on Monday. " * 5 + "\n"
             open(p, "w").write(body)
@@ -39,7 +39,7 @@ class Packet(unittest.TestCase):
         fingerprint.main(["build", "--samples", self.sdir, "--out", self.fp])
         rdir = os.path.join(d, "ref")
         os.makedirs(rdir)
-        for i in range(4):
+        for i in range(20):  # a reference needs MIN_REFERENCE_CHUNKS chunks before the discriminant is fit (I190)
             open(os.path.join(rdir, f"r{i}.md"), "w").write((LONG * 8 + "\n\n") * 3)
         self.ref = os.path.join(d, "ref.json")
         fingerprint.main(["build-reference", rdir, "--out", self.ref, "--name", "generic"])
@@ -77,7 +77,7 @@ class Packet(unittest.TestCase):
         # a runner that answers in the author's short register the first time and in long generic prose after
         runner = os.path.join(self.tmp.name, "runner.py")
         open(runner, "w").write("import sys\np=sys.stdin.read()\nprint(('%s' if 'PREVIOUS DRAFT' not in p else '%s'))\n"
-                                % (prose(9, 3, 8).replace("\n", "\\n"), (LONG * 6).replace("\n", "\\n")))
+                                % (prose(9, 5, 10).replace("\n", "\\n"), (LONG * 6).replace("\n", "\\n")))
         cfg = voicelint.load_config(None)
         res = author.author_loop(packet, f"{sys.executable} {runner}", 1, fp, "email", ref, cfg)
         self.assertEqual(res["rounds"], 1)

@@ -462,10 +462,13 @@ class DetectTask(ReviseTask):
         import fingerprint
         import samples
         self._setup_detect()
+        w = os.path.join(study.WRITERS, "brian")
+        cases = [os.path.join(w, sub, f) for sub in ("holdout", "flattened", "impostors", "override")
+                 for f in sorted(os.listdir(os.path.join(w, sub)))]
         sdir = os.path.join(self.tmp.name, "fsamples")
         rng = random.Random(1)
         short = ["The shed leaked.", "Forty bags.", "All wet.", "Nobody came.", "We counted.", "It rained."]
-        for i in range(4):
+        for i in range(8):
             p = os.path.join(self.tmp.name, f"m{i}.md")
             open(p, "w").write("\n\n".join(" ".join(rng.choice(short) for _ in range(14)) for _ in range(5)) + "\n")
             samples.main(["add", p, "--dir", sdir, "--provenance", "hand", "--surface", "email"])
@@ -476,6 +479,10 @@ class DetectTask(ReviseTask):
         long = "Because the storage facility had not been inspected in several months, the bags stored inside were found to be damaged by water when the team arrived. "
         for i in range(4):
             open(os.path.join(rdir, f"r{i}.md"), "w").write((long * 8 + "\n\n") * 3)
+        small = os.path.join(self.tmp.name, "ref-small.json")
+        fingerprint.main(["build-reference", rdir, "--out", small, "--name", "generic"])
+        for i in range(4, 20):  # a reference needs MIN_REFERENCE_CHUNKS chunks before the discriminant is fit (I190)
+            open(os.path.join(rdir, f"r{i}.md"), "w").write((long * 8 + "\n\n") * 3)
         rp = os.path.join(self.tmp.name, "ref.json")
         fingerprint.main(["build-reference", rdir, "--out", rp, "--name", "generic"])
         code, out = self._run(["plan", "d2", "--task", "detect", "--writers", "brian", "--repeats", "1",
@@ -484,6 +491,13 @@ class DetectTask(ReviseTask):
         self._freeze("d2")
         with self.assertRaises(SystemExit):
             self._run(["prompts", "d2"])  # the condition needs the two profiles
+        with self.assertRaises(SystemExit):
+            self._run(["prompts", "d2", "--fingerprint", fpp, "--reference", small])  # too small to fit on, refused up front
+        with self.assertRaises(SystemExit):
+            self._run(["prompts", "d2", "--fingerprint", fpp, "--reference", rp])  # one-line cases are too short to measure
+        for c in cases:  # each case grown past MIN_COMPARE_WORDS, in its own words
+            body = open(c).read().strip()
+            open(c, "w").write("\n\n".join([body] * (fingerprint.MIN_COMPARE_WORDS // len(body.split()) + 1)) + "\n")
         code, out = self._run(["prompts", "d2", "--fingerprint", fpp, "--reference", rp])
         self.assertEqual(code, 0, out)
         run_dir = os.path.join(study.RUNS, "d2")

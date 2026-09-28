@@ -835,9 +835,9 @@ class Fingerprint(unittest.TestCase):
         import samples
         with tempfile.TemporaryDirectory() as tmp:
             sdir = os.path.join(tmp, "samples")
-            for i in range(4):
+            for i in range(8):
                 p = os.path.join(tmp, f"s{i}.md")
-                open(p, "w").write(("The dog sat. It rained. We left. Nobody spoke. " * 12 + "\n\n") * 5)
+                open(p, "w").write(f"Note {i} of eight. " + ("The dog sat. It rained. We left. Nobody spoke. " * 12 + "\n\n") * 5)
                 samples.main(["add", p, "--dir", sdir, "--provenance", "hand", "--surface", "note"])
             fp = os.path.join(tmp, "fp.json")
             fingerprint.main(["build", "--samples", sdir, "--out", fp])
@@ -848,15 +848,16 @@ class Fingerprint(unittest.TestCase):
             self.assertEqual(code, 0, err)
             fs = json.loads(out)["files"][draft]
             ids = [f["rule_id"] for f in fs if f["engine"] == "fingerprint"]
-            self.assertIn("voice.sent_mean", ids)
+            self.assertTrue(any(i.startswith("voice.sent_") for i in ids), ids)  # one finding per family (I187)
             self.assertIn("voice.distance", ids)
             self.assertTrue(all(f["severity"] == "advisory" for f in fs if f["engine"] == "fingerprint"))
-            sm = next(f for f in fs if f["rule_id"] == "voice.sent_mean")
+            sm = next(f for f in fs if f["rule_id"].startswith("voice.sent_"))
             self.assertTrue(sm["match"].startswith("Because"))
-            self.assertIn("more than the author", sm["message"])
+            self.assertIn("sentence length", sm["message"])
+            self.assertIn("than the author", sm["message"])
             # text output prints them and the summary counts them as advisory, not warnings
             code, out, err = run(["check", "--fingerprint", fp, draft])
-            self.assertIn("[advisory] voice (voice.sent_mean)", out)
+            self.assertIn("[advisory] voice (voice.sent_", out)
             self.assertIn("0 warning(s)", out)
 
 

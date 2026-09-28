@@ -45,6 +45,18 @@ class Units(unittest.TestCase):
         self.assertIn("fw_the", f)
         self.assertEqual(fe["ev"]["sent_short_share"], ["We really should."])
 
+    def test_curly_quotes_count_as_straight_and_evidence_keeps_them(self):
+        """I119: a mail client's curly apostrophes and quotes are counted, and quoted as written."""
+        straight = fingerprint.features(["I don't think it's done. She said \"wait\" and we'll see."])
+        curly = fingerprint.features(["I don’t think it’s done. She said “wait” and we’ll see."])
+        for k in ("con_contraction", "punct_quote", "open_first_person", "fw_i", "_sentences"):
+            self.assertEqual(curly["f"][k], straight["f"][k], k)
+        self.assertGreater(curly["f"]["con_contraction"], 0)
+        self.assertIn("’", curly["ev"]["con_contraction"][0])
+        # a sentence opening on a curly quote still splits off
+        self.assertEqual(fingerprint.features(["It ended. “Go,” he said."])["f"]["_sentences"], 2)
+        self.assertEqual(fingerprint.containment("we don’t know what it’s for", "we don't know what it's for"), 1.0)
+
     def test_chunks_keep_paragraphs_whole(self):
         paras = ["word " * 90] * 5
         runs = fingerprint.chunks(paras, size=200)
@@ -55,7 +67,7 @@ class BuildCompare(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.dir = os.path.join(self.tmp.name, "samples")
-        for i in range(4):
+        for i in range(60):
             p = os.path.join(self.tmp.name, f"s{i}.md")
             open(p, "w").write(prose(SHORT, 6, 12, i))
             samples.main(["add", p, "--dir", self.dir, "--provenance", "hand", "--surface", "note"])
@@ -68,7 +80,7 @@ class BuildCompare(unittest.TestCase):
         code = fingerprint.main(["build", "--samples", self.dir, "--out", self.fp_path])
         self.assertEqual(code, 0)
         fp = json.load(open(self.fp_path))
-        self.assertEqual(len(fp["samples"]), 4)
+        self.assertEqual(len(fp["samples"]), 60)
         self.assertIn("note", fp["surfaces"])
         p = fp["pooled"]
         self.assertGreaterEqual(p["chunks"], 3)
@@ -83,6 +95,29 @@ class BuildCompare(unittest.TestCase):
         fingerprint.main(["build", "--samples", self.dir, "--out", self.fp_path])
         fp = json.load(open(self.fp_path))
         self.assertEqual({s["provenance"] for s in fp["samples"]}, {"hand"})
+        self.assertFalse(fp["allow_approved"])
+
+    def test_approved_is_refused_unless_allowed_and_then_recorded(self):
+        """I149: asking for approved text is an error without --allow-approved."""
+        p = os.path.join(self.tmp.name, "ai.md")
+        open(p, "w").write(prose(LONG, 6, 6, 9))
+        samples.main(["add", p, "--dir", self.dir, "--provenance", "approved", "--surface", "note"])
+        for prov in ("hand,approved", "hand,typo"):
+            with self.assertRaises(SystemExit) as cm:
+                fingerprint.main(["build", "--samples", self.dir, "--out", self.fp_path, "--provenance", prov])
+            self.assertEqual(cm.exception.code, 2)
+        self.assertFalse(os.path.exists(self.fp_path))
+        fingerprint.main(["build", "--samples", self.dir, "--out", self.fp_path, "--provenance", "hand,approved", "--allow-approved"])
+        fp = json.load(open(self.fp_path))
+        self.assertTrue(fp["allow_approved"])
+        self.assertIn("approved", {s["provenance"] for s in fp["samples"]})
+
+    def test_an_unknown_exclude_id_is_an_error(self):
+        """I149: a mistyped held-out id would hold nothing out."""
+        with self.assertRaises(SystemExit) as cm:
+            fingerprint.main(["build", "--samples", self.dir, "--out", self.fp_path, "--exclude", "note-00000000"])
+        self.assertEqual(cm.exception.code, 2)
+        self.assertFalse(os.path.exists(self.fp_path))
 
     def test_compare_flags_long_sentences_against_a_short_sentence_author(self):
         fingerprint.main(["build", "--samples", self.dir, "--out", self.fp_path])
@@ -90,14 +125,79 @@ class BuildCompare(unittest.TestCase):
         same = fingerprint.compare(prose(SHORT, 5, 12, 99), fp)
         other = fingerprint.compare(prose(LONG, 5, 4, 99), fp)
         self.assertLess(same["shape_distance"], other["shape_distance"])
-        flagged = {d["feature"]: d for d in other["flagged"]}
-        self.assertIn("sent_mean", flagged)
-        self.assertGreater(flagged["sent_mean"]["z"], 2)
-        self.assertTrue(flagged["sent_long_share"]["quote"].startswith(("Because", "Although", "When")))
-        self.assertTrue(flagged["sent_long_share"]["author_quote"])
+        self.assertEqual(same["flagged"], [], "the author's own kind of text flags no family")
+        # one flag per family: sentence length is one property, not five deviations (I187)
+        fams = {d["family"]: d for d in other["flagged"]}
+        self.assertEqual(len(fams), len(other["flagged"]))
+        lead = fams["sentence length"]
+        self.assertIn("sent_mean", [lead["feature"]] + lead["also"])
+        self.assertGreater(lead["z"], 2)
+        self.assertLess(lead["p_family"], 0.05)
+        self.assertTrue(lead["quote"])
+        self.assertTrue(lead["author_quote"])
+        # each text is compared at the available size nearest its length (I188)
+        prof = {"scales": {"100": {}, "200": {}, "800": {}}}
+        self.assertEqual([fingerprint._scale_for(prof, w)[0] for w in (120, 300, 600, 5000)], [100, 200, 800, 800])
+        self.assertEqual(same["scale"], 200)
         text = fingerprint.render(other, "x.md")
-        self.assertIn("sent_mean", text)
+        self.assertIn("sentence length", text)
         self.assertIn("more than the author", text)
+
+    def test_spread_is_the_sample_sd_and_never_zero(self):
+        """I189: sample SD, floored at one occurrence, and a t with n - 1 df."""
+        fingerprint.main(["build", "--samples", self.dir, "--out", self.fp_path])
+        fp = json.load(open(self.fp_path))
+        sc = fp["pooled"]["scales"]["200"]
+        self.assertGreaterEqual(sc["n"], fingerprint.MIN_CHUNKS)
+        # the SHORT pool never hedges: sd 0 in the profile, yet one hedge is not a certain deviation
+        self.assertEqual(sc["features"]["con_hedge"]["sd"], 0.0)
+        res = fingerprint.compare(prose(SHORT, 5, 12, 99) + "\nPerhaps it rained.\n", fp)
+        hedge = [d for d in res["flagged"] if d["feature"] == "con_hedge" or "con_hedge" in d["also"]]
+        self.assertEqual(hedge, [])
+        with self.assertRaises(ValueError):
+            fingerprint.compare("x", fp, fdr=2.0)  # a caller still passing the old 2.0 threshold fails loudly
+        short = fingerprint.compare("The dog sat. It rained.", fp)
+        self.assertIn("at least", short["error"])
+
+    def test_a_surface_without_a_profile_says_so(self):
+        """I192: no silent fallback to the pooled profile."""
+        fingerprint.main(["build", "--samples", self.dir, "--out", self.fp_path])
+        fp = json.load(open(self.fp_path))
+        res = fingerprint.compare(prose(SHORT, 5, 12, 99), fp, surface="paper")
+        self.assertEqual(res["basis"], "pooled")
+        self.assertIn("no paper profile", res["basis_note"])
+        self.assertIn("note 100%", res["basis_note"])
+        self.assertNotIn("basis_note", fingerprint.compare(prose(SHORT, 5, 12, 99), fp, surface="note"))
+
+    def test_every_measured_number_has_a_passage(self):
+        """I037: each shape feature the author shows is quoted, and so is each flagged family and function word."""
+        fingerprint.main(["build", "--samples", self.dir, "--out", self.fp_path])
+        fp = json.load(open(self.fp_path))
+        p = fp["pooled"]
+        for k, st in p["features"].items():
+            if st["mean"] > 0 and not k.startswith("fw_"):
+                self.assertTrue(p["evidence"].get(k), f"{k} has no passage")
+        self.assertTrue(p["evidence"].get("fw_the"))
+        res = fingerprint.compare(prose(LONG, 5, 4, 99), fp)
+        self.assertTrue(res["flagged"])
+        for d in res["flagged"] + res["function_words_flagged"]:
+            # a word the text never uses has no passage in the text; the author's use of it stands for the gap
+            self.assertTrue(d["quote"] or (d["z"] < 0 and d["author_quote"]), d["feature"])
+
+    def test_type_token_is_steady_with_length(self):
+        """I188: the plain ratio fell with length; the moving average does not."""
+        rng = random.Random(3)
+        vocab = [f"w{i}" for i in range(300)]
+        ws = [rng.choice(vocab) for _ in range(2000)]
+        self.assertAlmostEqual(fingerprint._mattr(ws[:200]), fingerprint._mattr(ws), delta=0.03)
+        self.assertLess(len(set(ws)) / len(ws), len(set(ws[:200])) / 200 - 0.2)
+
+    def test_function_words_are_closed_class(self):
+        """I191: no content words in the list."""
+        for w in ("word", "people", "water", "animal", "picture", "sentence", "very", "really"):
+            self.assertNotIn(w, fingerprint.FUNCTION_WORDS)
+        for w in ("the", "of", "and", "would", "whom", "although"):
+            self.assertIn(w, fingerprint.FUNCTION_WORDS)
 
     def test_reference_and_discriminant_take_sides(self):
         fingerprint.main(["build", "--samples", self.dir, "--out", self.fp_path])
@@ -108,18 +208,31 @@ class BuildCompare(unittest.TestCase):
             open(os.path.join(rdir, f"r{i}.md"), "w").write(prose(LONG, 6, 4, 50 + i))
         rp = os.path.join(self.tmp.name, "ref.json")
         self.assertEqual(fingerprint.main(["build-reference", rdir, "--out", rp, "--name", "long"]), 0)
+        small = json.load(open(rp))
+        # I190: a reference under MIN_REFERENCE_CHUNKS is refused, with the reason, not fit on
+        d = fingerprint.compare(prose(SHORT, 5, 12, 99), fp, reference=small)["discriminant"]
+        self.assertIsNone(d["score"])
+        self.assertIn("needs 50", d["error"])
+        self.assertIn("not computed", fingerprint.render(fingerprint.compare(prose(SHORT, 5, 12, 99), fp, reference=small)))
+        for i in range(4, 30):
+            open(os.path.join(rdir, f"r{i}.md"), "w").write(prose(LONG, 6, 4, 50 + i))
+        self.assertEqual(fingerprint.main(["build-reference", rdir, "--out", rp, "--name", "long"]), 0)
         ref = json.load(open(rp))
         self.assertEqual(ref["name"], "long")
         self.assertIn("sent_mean", ref["features"])
+        self.assertEqual(len(ref["vectors"]["rows"]), ref["chunks"])
+        self.assertGreaterEqual(ref["chunks"], fingerprint.MIN_REFERENCE_CHUNKS)
         mine = fingerprint.compare(prose(SHORT, 5, 12, 99), fp, reference=ref)["discriminant"]
         theirs = fingerprint.compare(prose(LONG, 5, 4, 99), fp, reference=ref)["discriminant"]
         self.assertGreater(mine["score"], 0)
         self.assertLess(theirs["score"], 0)
-        self.assertGreater(mine["features_used"], 5)
+        self.assertGreater(mine["p_author"], 0.5)
+        self.assertGreater(mine["cv_auc"], 0.9, "two pools this different separate under cross-validation")
+        self.assertGreater(mine["features_used"], 0)
         self.assertEqual(mine["reference"], "long")
-        self.assertIn("sent_short_share", theirs["for_reference"] + mine["for_author"])
         text = fingerprint.render(fingerprint.compare(prose(LONG, 5, 4, 99), fp, reference=ref), "x.md")
         self.assertIn("nearer the reference", text)
+        self.assertIn("cross-validated AUC", text)
 
     def test_exclude_holds_samples_out(self):
         # a held-out piece with its own content: excluded by id, and nothing else goes with it
@@ -135,7 +248,7 @@ class BuildCompare(unittest.TestCase):
         own = next(s["id"] for s in fp["samples"] if s["words"] < 150)
         fingerprint.main(["build", "--samples", self.dir, "--out", self.fp_path, "--exclude", own])
         fp = json.load(open(self.fp_path))
-        self.assertEqual(len(fp["samples"]), 4)
+        self.assertEqual(len(fp["samples"]), 60)
         self.assertEqual(fp["excluded"], [own])
         self.assertEqual(fp["excluded_near_duplicates"], [])
 
@@ -203,7 +316,7 @@ class Leakage(unittest.TestCase):
         flat = self.write("email-aaaa1111.2.md", "There was a leak in the shed and the bags got wet.\n")
         other = self.write("email-bbbb2222.md", "An unrelated note about the budget meeting next week.\n")
         body = " ".join(["The storage facility had not been inspected in several months, so the bags were damaged."] * 60)
-        refsrc = [self.write(f"r{i}.md", body + "\n") for i in range(3)] + [flat]
+        refsrc = [self.write(f"r{i}.md", body + "\n") for i in range(5)] + [flat]
         ref = fingerprint.build_reference(refsrc, "test")
         self.assertIn("email-aaaa1111", ref["stems"])
         problems = fingerprint.leakage([held, other], None, ref)

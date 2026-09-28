@@ -60,7 +60,7 @@ One page, every mode, what to say, what you get: [docs/CHEATSHEET.md](docs/CHEAT
 ## What Pherkad is and is not
 
 - It validates against one voice: yours. A passage can be fully human-written and still fail because it does not sound like you, and an assisted passage can pass because it does.
-- It never returns a bare score. Every number carries a quoted passage as evidence.
+- It never returns a bare score. Every flag quotes a passage, from the draft or, when the draft lacks one of your habits, from your own writing.
 - It flags and fixes specific sentences rather than rewriting your piece.
 - It does not police other people's text, and it is not a detector for grading student work.
 
