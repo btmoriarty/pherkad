@@ -653,6 +653,43 @@ class ReviewPack(unittest.TestCase):
         self.assertEqual(code, 0, err)
         return json.loads(out)
 
+    def test_the_packet_is_guarded_and_never_says_run_a_tool(self):  # I041, I043
+        prompt = pherkad.render_prompt(pherkad.build_pack(self.draft, "email", None, None, self.d, self.prof, None))
+        self.assertNotIn("review-pack", prompt)
+        begin = next(ln for ln in prompt.splitlines() if ln.startswith("BEGIN DRAFT-"))
+        self.assertIn("END " + begin[6:], prompt)
+        self.assertLess(prompt.index(begin), prompt.index("=== OUTPUT ==="), "the schema comes after the draft")
+
+    def test_the_packet_names_what_it_left_out(self):  # I044
+        os.remove(os.path.join(self.prof, "voice-rules.md"))
+        pack = pherkad.build_pack(self.draft, "email", None, None, self.d, self.prof, None, inline_profile=False)
+        prompt = pherkad.render_prompt(pack)
+        self.assertIn("Voice_Profile.md (not inlined; read", prompt)
+        self.assertIn("voice-rules.md MISSING", prompt)
+
+    def test_fiction_is_not_judged_by_the_personal_profile(self):  # I042
+        pack = pherkad.build_pack(self.draft, "fiction", None, None, self.d, self.prof, None)
+        self.assertEqual(pack["profile"]["files"], {})
+        self.assertIn("own voice document", pherkad.render_prompt(pack))
+
+    def test_the_working_folder_profile_comes_before_the_repository(self):  # I042
+        cwd = os.getcwd()
+        try:
+            os.chdir(self.prof)
+            saved = os.environ.pop("PHERKAD_PROFILE", None)
+            self.assertEqual(os.path.realpath(pherkad._profile_dir(None)), os.path.realpath(self.prof))
+        finally:
+            os.chdir(cwd)
+            if saved is not None:
+                os.environ["PHERKAD_PROFILE"] = saved
+
+    def test_density_needs_150_words_and_3_findings(self):  # I039
+        cfg = DEFAULT
+        many = [{"rule": "x"}] * 3
+        self.assertIsNone(pherkad.density_finding(many, "word " * 149, cfg))
+        self.assertIsNotNone(pherkad.density_finding(many * 3, "word " * 150, cfg))
+        self.assertIsNone(pherkad.density_finding(many[:2], "word " * 150, cfg))
+
     def test_bundle_shape(self):
         p = self.pack()
         for k in ("tool", "version", "generated", "depth", "surface", "config_sha256", "profile", "source",
@@ -822,14 +859,14 @@ class DecisionStore(unittest.TestCase):
         draft = self.write("d.md", "That is the point of it.\n\nAgain that is the point of it.\n")
         ambiguous = self.write("t1.md", "| rule_ref | quote | decision | rationale |\n|---|---|---|---|\n"
                                         "| soft.is-the-point | `is the point of it` | intentional | refrain |\n")
-        code, out, _ = run(["review-import", ambiguous, "--file", draft, "--decisions", self.dec])
+        code, out, _ = run(["review-import", ambiguous, "--file", draft, "--decisions", self.dec, "--confirmed"])
         self.assertIn("give the row its line", out)
         by_line = self.write("t2.md", "| rule_ref | line | quote | decision | rationale |\n|---|---|---|---|---|\n"
                                       "| soft.is-the-point | 3 | `is the point of it` | **Intentional.** | refrain \\| once |\n"
                                       "| judgment (5c) | 1 | `That is` | intentional | first |\n"
                                       "| judgment (5c) | 1 | `the point` | intentional | second |\n"
                                       "| broken row |\n")
-        code, out, err = run(["review-import", by_line, "--file", draft, "--decisions", self.dec])
+        code, out, err = run(["review-import", by_line, "--file", draft, "--decisions", self.dec, "--confirmed"])
         recs = json.load(open(self.dec))
         mech = [r for r in recs if r["rule_id"] == "soft.is-the-point"]
         self.assertEqual([r["line"] for r in mech], [3])
@@ -894,7 +931,13 @@ class ReviewImport(unittest.TestCase):
         self.tmp.cleanup()
 
     def do_import(self):
-        return run(["review-import", self.table, "--file", self.draft, "--decisions", self.dec, "--surface", "email"])
+        return run(["review-import", self.table, "--file", self.draft, "--decisions", self.dec, "--surface", "email", "--confirmed"])
+
+    def test_nothing_is_recorded_without_the_authors_confirmation(self):  # I043
+        code, _, err = run(["review-import", self.table, "--file", self.draft, "--decisions", self.dec, "--surface", "email"])
+        self.assertEqual(code, 2)
+        self.assertIn("--confirmed", err)
+        self.assertFalse(os.path.exists(self.dec))
 
     def test_parse_table_rows(self):
         rows = pherkad.parse_review_table(self.TABLE)

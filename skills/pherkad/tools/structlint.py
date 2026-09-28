@@ -647,7 +647,7 @@ def check_text(raw: str, thresholds: dict | None = None) -> list[Finding]:
     found = [f for f in found if not (skip.get(f.line) and ("*" in skip[f.line] or f.rule in skip[f.line]))]
     words = len(re.findall(r"\b\w+\b", "\n".join(lines)))
     cap = float(t["density_per_100"])
-    if words >= 100:
+    if words >= 150 and len(found) >= 3:  # the floor references/full_mode.md states (I039)
         per100 = len(found) * 100.0 / words
         if per100 > cap:
             found.append(Finding(0, "density", f"{len(found)} hits / {words} words",

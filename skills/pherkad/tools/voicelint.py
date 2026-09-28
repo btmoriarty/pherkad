@@ -843,7 +843,7 @@ def check_counting(text: str, cfg: dict):
         cap = float(cfg.get("dash_density_cap", 0) or 0)
         words = len(re.findall(r"\w+", text))
         # A rate per 100 words is meaningless on a short passage. Match the
-        # judgment layer's floor (SKILL.md Step 4): at least 150 words and at
+        # judgment layer's floor (references/full_mode.md Step 4): at least 150 words and at
         # least 3 dash hits before a density warning fires.
         if cap > 0 and words >= 150 and len(dash_hits) >= 3:
             allowed = int(cap * words / 100)

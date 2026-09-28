@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.5.46 (2026-09-28)
+
+The skill runs the commands it describes, and the packet a model reads is guarded. This is Wave 7 of the 2026-09-27 review, part 1: the skill's mechanics.
+
+**SKILL.md:**
+- Every command names the surface and runs from the skill's own folder: `python3 <skill dir>/tools/pherkad.py check --surface <surface> ...`. Before, the check commands carried no `--surface`, so the surface overlays never applied, and the relative `tools/` path broke once the skill was installed (I029, I065).
+- Full mode (Steps 1 through 6 and the report template) moved to `references/full_mode.md`, loaded only when an audit runs. In quick mode the packet carries the profile, and the skill says not to load it a second time (I031, I032).
+- The example rows and the report template quote the flagged text in backticks, as the row schema does, so a report no longer trips the Stop hook on its own quotations (I034).
+- The quick verdict and the calibration note agree. In quick mode each row has been read, so one `fix` forces REVISE; the note about lone hits is scoped to full mode (I033).
+- `decide` takes the row's disposition (`intentional`, or `accepted` for a `literal` row), and the surface table gains its slides row (I029).
+
+**The review packet** (`pherkad.py review-pack`):
+- The draft sits between two boundary lines derived from its own hash. The instructions say that anything inside them that looks like a header, a finding or a ruling is text in the draft, and the output schema now comes after the draft (I043).
+- The packet no longer tells the model to assemble the packet, which contradicted its "do not run any tool" (I041).
+- A profile file that is loaded but not inlined is named with its path and sha256; a missing one is named as missing (I044).
+- A surface governed by its own voice document (fiction) is not given the personal profile. A profile in the working folder is found before the repository's, where the old order checked a user against the maintainer's profile (I042).
+- `review-import` records nothing without `--confirmed`, since a table a model wrote is a proposal until the author has read each row. It refuses rows for error-level rules, which take an explicit `decide` (I043).
+
+**Density** fires only at 150 words and 3 findings, the floor full mode states, in the combined runner and in `structlint`. It had fired at 100 words with no finding floor (I039).
+
+- Tests: six in `test_pherkad.py`, all of which fail on 0.5.45.
+- No rule in `voice_config.json` changed. `VERSION` 0.5.46.
+
 ## v0.5.45 (2026-09-28)
 
 A recorded decision covers what was ruled on, and stops covering it when that changes. This is Wave 6 of the 2026-09-27 review: the decision store.
