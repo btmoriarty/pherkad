@@ -12,6 +12,12 @@ that carries the chat-specific rules, with one verdict line and an exit code.
     replycheck.py --json -                   # machine-readable
     replycheck.py --strict -                 # warnings fail too
     replycheck.py --no-structure -           # voicelint only
+    replycheck.py --question q.txt draft.md  # scale the length budget to the question
+
+Length is advisory. The surface's ``length_budget`` sets a prose word budget
+(code masked), scaled to the question when one is given; a reply over it gets
+an advisory line and never a FIX, because a full printout the author asked for
+is sometimes long and must not be cut to pass.
 
 Verdict: PASS when there is no error-level finding (or no warning under
 --strict), else FIX. Exit 0 on PASS, 1 on FIX, 2 when the check could not run.
@@ -79,11 +85,45 @@ def unshield(text: str) -> tuple[str, list[dict]]:
     return _BLOCKQUOTE.sub(r"\1", text), findings
 
 
-def check_reply(text: str, surface: str = DEFAULT_SURFACE, structure: bool = True, cwd: bool = True) -> dict:
+_WORD = re.compile(r"[A-Za-z0-9][\w'’-]*")
+
+
+def prose_words(text: str) -> int:
+    """Words a reader has to read: code spans and fences are masked out."""
+    return len(_WORD.findall(mdmask.mask(text, ("code",))))
+
+
+def length_check(text: str, budget: dict | None, question: str | None) -> dict | None:
+    """The reply's prose word count against the surface's advisory budget.
+    None when the surface sets no budget. Never part of the verdict."""
+    if not budget:
+        return None
+    words = prose_words(text)
+    if question is None:
+        limit, q = int(budget.get("default", 250)), None
+    else:
+        q = prose_words(question)
+        limit = min(int(budget.get("max", 600)),
+                    int(budget.get("base", 150)) + int(budget.get("per_question_word", 4)) * q)
+    return {"words": words, "budget": limit, "question_words": q, "over": words > limit}
+
+
+def length_note(length: dict | None) -> str | None:
+    if not length or not length["over"]:
+        return None
+    basis = f"a {length['question_words']}-word question" if length["question_words"] is not None else "no question given"
+    return f"length: {length['words']} words against a budget of {length['budget']} ({basis}); cut the wrapper, keep the work"
+
+
+def check_reply(text: str, surface: str = DEFAULT_SURFACE, structure: bool = True, cwd: bool = True,
+                question: str | None = None) -> dict:
     """Run both scanners over ``text`` and return the result as a dict:
-    surface, verdict, errors, warnings, findings (voicelint), structure (structlint).
+    surface, verdict, errors, warnings, findings (voicelint), structure (structlint),
+    length (the advisory word budget, or None when the surface sets none).
+    ``question`` is the message being answered; the budget scales with it.
     cwd=False ignores a surfaces.json in the working directory (the Stop hook)."""
     cfg, info = pherkad.load_layers(surface, None, cwd=cwd)
+    length = length_check(text, (info or {}).get("length_budget"), question)
     shield_findings = []
     if (info or {}).get("speaker") == "assistant":
         text, shield_findings = unshield(text)
@@ -102,6 +142,7 @@ def check_reply(text: str, surface: str = DEFAULT_SURFACE, structure: bool = Tru
         "suppressed": suppressed,
         "findings": findings,
         "structure": structural,
+        "length": length,
     }
 
 
@@ -117,6 +158,9 @@ def render(result: dict, strict: bool = False) -> str:
         lines.append(f"{f['line']}:{f['col']} [{f['severity']}] {f['rule_id']}: {f['message']}  ->  {f['match']!r}")
     for f in result["structure"]:
         lines.append(f"{f['line']}:{f['col']} [advisory] {f['rule_id']}: {f['message']}  ->  {f['match']!r}")
+    note = length_note(result.get("length"))
+    if note:
+        lines.append(f"[advisory] {note}")
     v = verdict(result, strict)
     n_struct = len(result["structure"])
     tail = f", {n_struct} structural advisory" if n_struct else ""
@@ -132,6 +176,7 @@ def main(argv=None) -> int:
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     ap.add_argument("--strict", action="store_true", help="warnings make the verdict FIX")
     ap.add_argument("--no-structure", action="store_true", help="skip the structural (advisory) checks")
+    ap.add_argument("--question", help="the message being answered, as text or a file path; scales the length budget")
     args = ap.parse_args(argv)
 
     try:
@@ -139,8 +184,12 @@ def main(argv=None) -> int:
     except OSError as exc:
         sys.stderr.write(f"replycheck: {exc}\n")
         return 2
+    question = args.question
+    if question is not None and os.path.isfile(question):
+        with open(question, encoding="utf-8", errors="replace") as fh:
+            question = fh.read()
 
-    result = check_reply(text, args.surface, structure=not args.no_structure)
+    result = check_reply(text, args.surface, structure=not args.no_structure, question=question)
     result["verdict"] = verdict(result, args.strict)
     if args.json:
         print(json.dumps(result, indent=2, ensure_ascii=False))

@@ -219,7 +219,8 @@ def resolve_surface(name: str, map_path: str | None = None, cwd: bool = True) ->
     # the fingerprint profile this surface is measured against; the surface's own name unless the map says otherwise
     basis = entry.get("basis") or meta.get("basis") or (None if is_path else name)
     return {"name": name, "overlay": overlay, "speaker": speaker, "positive_register": register,
-            "guidance": guidance, "excerpts": excerpts, "from_map": bool(entry), "basis": basis}
+            "guidance": guidance, "excerpts": excerpts, "from_map": bool(entry), "basis": basis,
+            "length_budget": entry.get("length_budget") or meta.get("length_budget")}
 
 
 def load_layers(surface: str | None, config: str | None, map_path: str | None = None,

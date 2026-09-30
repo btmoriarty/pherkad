@@ -307,6 +307,62 @@ class StopHook(unittest.TestCase):
                 t = self.transcript(self.user("go"), self.assistant({"type": "text", "text": text}))
                 self.assertEqual(self.run_hook({"transcript_path": t, "stop_hook_active": False}).returncode, 0)
 
+    def test_a_long_reply_passes_with_a_length_notice(self):
+        t = self.transcript(self.user("status?"), self.assistant({"type": "text", "text": LONG}))
+        p = self.run_hook({"transcript_path": t, "stop_hook_active": False})
+        self.assertEqual(p.returncode, 0)
+        self.assertIn("length: 240 words against a budget of 154 (a 1-word question)",
+                      json.loads(p.stdout)["systemMessage"])
+
+    def test_the_budget_scales_with_the_question_and_ignores_reminders(self):
+        ask = " ".join(["word"] * 30) + " <system-reminder>" + " ".join(["noise"] * 200) + "</system-reminder>"
+        t = self.transcript(self.user(ask), self.assistant({"type": "text", "text": LONG}))
+        p = self.run_hook({"transcript_path": t, "stop_hook_active": False})
+        self.assertEqual((p.returncode, p.stdout), (0, ""))  # 150 + 4 * 30 = 270 >= 240
+
+    def test_the_length_notice_can_be_turned_off(self):
+        t = self.transcript(self.user("status?"), self.assistant({"type": "text", "text": LONG}))
+        p = self.run_hook({"transcript_path": t, "stop_hook_active": False}, env={"REPLYCHECK_LENGTH": "0"})
+        self.assertEqual((p.returncode, p.stdout), (0, ""))
+
+
+# 20 clean sentences of 12 words: 240 prose words
+LONG = " ".join(["The build finished and the suite ran on the first try today."] * 20)
+
+
+class Length(unittest.TestCase):
+    def test_prose_words_masks_code(self):
+        self.assertEqual(replycheck.prose_words("Run `make test now please` then\n```\na b c d\n```\ncommit."), 3)
+
+    def test_default_budget_without_a_question(self):
+        code, out, _ = run(["--no-structure", "-"], LONG)
+        self.assertEqual(code, 0)
+        self.assertNotIn("length:", out)  # 240 is under the default 250
+
+    def test_over_budget_is_advisory_never_fix(self):
+        code, out, _ = run(["--no-structure", "--question", "status?", "-"], LONG)
+        self.assertEqual(code, 0)
+        self.assertIn("[advisory] length: 240 words against a budget of 154 (a 1-word question)", out)
+        code, out, _ = run(["--no-structure", "--strict", "--question", "status?", "-"], LONG)
+        self.assertEqual(code, 0)  # strict makes warnings fail, not length
+
+    def test_budget_is_capped(self):
+        r = replycheck.length_check("x", {"base": 150, "per_question_word": 4, "max": 600}, " ".join(["q"] * 500))
+        self.assertEqual(r["budget"], 600)
+
+    def test_question_may_be_a_file(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as fh:
+            fh.write("status?")
+        try:
+            out = run(["--no-structure", "--question", fh.name, "-"], LONG)[1]
+        finally:
+            os.unlink(fh.name)
+        self.assertIn("budget of 154", out)
+
+    def test_json_carries_the_length(self):
+        r = json.loads(run(["--json", "--no-structure", "-"], LONG)[1])
+        self.assertEqual(r["length"], {"words": 240, "budget": 250, "question_words": None, "over": False})
+
 
 if __name__ == "__main__":
     unittest.main()

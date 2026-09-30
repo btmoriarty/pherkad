@@ -19,6 +19,8 @@ replycheck: FIX (2 error(s), 0 warning(s), 1 structural advisory; surface assist
 
 `PASS` exits 0, `FIX` exits 1, a check that could not run exits 2. `--strict` makes warnings fail; `--json` gives the same as a document; `--no-structure` skips structlint.
 
+`--question <text or file>` gives the message being answered, which scales the length budget: 150 prose words plus 4 per word of the question, capped at 600, or 250 without a question. The budget lives in the surface's `_surface.length_budget`. A reply over it gets an `[advisory] length:` line and never a `FIX`, because a full printout the author asked for is sometimes long.
+
 ## The surface
 
 `tools/surfaces/assistant-chat.json` is an overlay on the shipped rule set, so everything voicelint already bans still applies (the honest-X error, dashes, the phrase bans, filler, the watch words). On top, the families the author has flagged in chat specifically:
@@ -41,8 +43,8 @@ A rule that only matters in chat goes here, never into the shipped defaults, so 
 For any reply longer than a line or two:
 
 1. Write the reply to a file in the scratchpad.
-2. Run `replycheck.py` on it.
-3. While it says `FIX`, revise the file and run it again, at most three times.
+2. Run `replycheck.py --question "<the message being answered>"` on it.
+3. While it says `FIX`, revise the file and run it again, at most three times. A length advisory is not a `FIX`, but trim the wrapper before sending.
 4. Send the exact text of the buffer that passed.
 5. A check that failed to run (exit 2) is not a pass. Say so, or fix the cause, rather than sending unchecked.
 6. Keep the check output out of the reply.
@@ -53,7 +55,7 @@ The one habit the check will keep catching: quoting a banned phrase as an exampl
 
 `tools/replycheck-hook.py` is a Claude Code `Stop` hook. When a reply ends, Claude Code hands the hook the transcript path; the hook takes the assistant text since the last human message, runs the same check, and on an error-level finding exits 2 with the findings on stderr, which makes the assistant continue and send a corrected follow-up. The reply has already been displayed by then, so this is enforcement rather than interception; the recipe above is the pre-send half.
 
-Repair is bounded: Claude Code marks the continuation with `stop_hook_active`, and the hook lets that run through, so a reply gets exactly one enforced revision and cannot loop. Warnings never block unless `REPLYCHECK_STRICT=1`; structural findings never block from the hook. A hook that cannot read its input exits 0 with a note, because a broken hook must not wedge a session.
+Repair is bounded: Claude Code marks the continuation with `stop_hook_active`, and the hook lets that run through, so a reply gets exactly one enforced revision and cannot loop. Warnings never block unless `REPLYCHECK_STRICT=1`; structural findings never block from the hook, and neither does length. A passing reply over its budget, scaled to the user message that opened the turn, is reported to the person as a `systemMessage`; `REPLYCHECK_LENGTH=0` turns that off. A hook that cannot read its input exits 0 with a note, because a broken hook must not wedge a session.
 
 Install in the user settings (`/Users/moriarty/.claude/settings.json`), beside the existing hooks:
 

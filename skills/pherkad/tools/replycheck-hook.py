@@ -29,7 +29,10 @@ that to once per turn. A ``surfaces.json`` in the session's working folder is
 not read, so no project folder can redirect or disable the check.
 
 Errors block. Warnings block too under REPLYCHECK_STRICT=1. Structural
-findings never block from here.
+findings never block from here, and neither does length: a passing reply over
+the surface's word budget (scaled to the user message that opened the turn)
+is reported to the person as a ``systemMessage``. REPLYCHECK_LENGTH=0 turns
+that notice off.
 
 Install (user settings, ~/.claude/settings.json):
 
@@ -41,6 +44,7 @@ REPLYCHECK_SURFACE selects the surface (default assistant-chat).
 from __future__ import annotations
 import json
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -59,6 +63,26 @@ def last_turn(transcript_path: str) -> tuple[str, str | None]:
     the user message that opened it (``human``, ``sdk``, ... or None when the
     transcript does not record one). Meta rows (a skill body, an image note)
     sit inside a turn and are not its boundary."""
+    text, origin, _ = last_exchange(transcript_path)
+    return text, origin
+
+
+_REMINDER = re.compile(r"<system-reminder>.*?</system-reminder>", re.DOTALL)
+
+
+def _user_text(content) -> str:
+    if isinstance(content, str):
+        parts = [content]
+    elif isinstance(content, list):
+        parts = [b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"]
+    else:
+        parts = []
+    return _REMINDER.sub("", "\n".join(parts)).strip()
+
+
+def last_exchange(transcript_path: str) -> tuple[str, str | None, str | None]:
+    """``last_turn`` plus the text of the user message that opened the turn
+    (None when there is none), which scales the length budget."""
     rows = []
     with open(transcript_path, encoding="utf-8", errors="replace") as fh:
         for line in fh:
@@ -70,7 +94,7 @@ def last_turn(transcript_path: str) -> tuple[str, str | None]:
             except json.JSONDecodeError:
                 continue
     texts: list[str] = []
-    origin = None
+    origin = question = None
     for d in reversed(rows):
         t = d.get("type")
         if t not in ("user", "assistant") or d.get("isSidechain"):
@@ -83,6 +107,7 @@ def last_turn(transcript_path: str) -> tuple[str, str | None]:
                     isinstance(b, dict) and b.get("type") == "tool_result" for b in content):
                 continue  # a tool result, not the human
             origin = d.get("turnOrigin")
+            question = _user_text(content)
             break
         if isinstance(content, str):
             texts.append(content)
@@ -91,7 +116,7 @@ def last_turn(transcript_path: str) -> tuple[str, str | None]:
                 if isinstance(b, dict) and b.get("type") == "text" and b.get("text"):
                     texts.append(b["text"])
     texts.reverse()
-    return "\n\n".join(texts), origin
+    return "\n\n".join(texts), origin, question
 
 
 def _did_not_run(reason: str, revising: bool) -> int:
@@ -125,10 +150,10 @@ def check(payload: dict, revising: bool) -> int:
 
     path = payload.get("transcript_path")
     tail = (payload.get("last_assistant_message") or "").strip()
-    text, origin = "", None
+    text, origin, question = "", None, None
     if path and os.path.exists(path):
         try:
-            text, origin = last_turn(path)
+            text, origin, question = last_exchange(path)
         except OSError as exc:
             if not tail:
                 return _did_not_run(f"cannot read the transcript ({exc})", revising)
@@ -144,10 +169,14 @@ def check(payload: dict, revising: bool) -> int:
     surface = os.environ.get("REPLYCHECK_SURFACE", replycheck.DEFAULT_SURFACE)
     strict = os.environ.get("REPLYCHECK_STRICT") == "1"
     try:
-        result = replycheck.check_reply(text, surface, structure=False, cwd=False)
+        result = replycheck.check_reply(text, surface, structure=False, cwd=False, question=question)
     except SystemExit:
         return _did_not_run(f"surface or config error on '{surface}'", revising)
     if replycheck.verdict(result, strict) == "PASS":
+        # length never blocks: a rewrite to cut words costs more words; the person sees a notice
+        note = replycheck.length_note(result.get("length"))
+        if note and os.environ.get("REPLYCHECK_LENGTH") != "0":
+            print(json.dumps({"systemMessage": "replycheck: " + note}))
         return 0
     lines = [f"  {f['line']}:{f['col']} {f['rule_id']}: {f['message']}  ->  {f['match']!r}"
              for f in result["findings"] if f["severity"] == "error" or strict]

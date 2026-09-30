@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.5.52 (2026-09-30)
+
+Reply preflight now measures length. Every check so far matched phrases, so a reply could pass at 900 words.
+
+- **An advisory word budget.** The `assistant-chat` surface carries a `length_budget` in its `_surface` block: 150 words plus 4 per word of the question, capped at 600, or 250 when the question is not given. Only prose counts; code spans and fences are masked. `replycheck.py --question <text or file>` scales the budget, and a reply over it gets an `[advisory] length:` line. The numbers are a first guess, to be recalibrated from the notices.
+- **Length never blocks.** It stays out of the verdict, under `--strict` as well, because a full printout the author asked for is sometimes long, and a forced rewrite to cut words costs more words than it saves.
+- **The Stop hook reports it.** The hook now reads the user message that opened the turn (system reminders stripped), and a passing reply over budget produces a `systemMessage` to the person. `REPLYCHECK_LENGTH=0` turns the notice off. `pherkad.resolve_surface` passes `length_budget` through from the surface or the user map.
+- Tests: nine in `test_replycheck.py`.
+- No rule in `voice_config.json` changed. `VERSION` 0.5.52.
+
 ## v0.5.51 (2026-09-28)
 
 The detection study's fingerprint floor now scores against both flattened references and uses cutoffs set for the calibrated scale. The cutoffs were preregistered on the development set before the new held-out mail was scored.

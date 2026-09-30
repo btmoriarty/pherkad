@@ -7,7 +7,7 @@ The voice tools live in `skills/pherkad/tools/`. Run the suites with `python3 <a
 Before sending any reply longer than a line or two, preflight it:
 
 1. Write the reply to a file in the scratchpad.
-2. Run `python3 /Users/moriarty/Documents/kochab/pherkad/skills/pherkad/tools/replycheck.py <that file>`.
+2. Run `python3 /Users/moriarty/Documents/kochab/pherkad/skills/pherkad/tools/replycheck.py --question "<the message being answered>" <that file>`. A `length:` advisory is not a FIX, but trim the wrapper before sending.
 3. While it says `FIX`, revise and rerun, at most three times.
 4. Send the exact text that passed. Keep the check output out of the reply.
 5. If the check could not run (exit 2), that is not a pass; fix the cause or say the reply is unchecked.
