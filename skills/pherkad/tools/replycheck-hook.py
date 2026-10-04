@@ -37,7 +37,7 @@ that notice off.
 Install (user settings, ~/.claude/settings.json):
 
     "Stop": [{"matcher": "", "hooks": [{"type": "command",
-      "command": "/Users/moriarty/Documents/kochab/pherkad/skills/pherkad/tools/replycheck-hook.py"}]}]
+      "command": "/Users/moriarty/code/pherkad/skills/pherkad/tools/replycheck-hook.py"}]}]
 
 REPLYCHECK_SURFACE selects the surface (default assistant-chat).
 """

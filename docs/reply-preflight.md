@@ -5,7 +5,7 @@ Roadmap item 2. Most of the AI-speak the author objects to arrives in chat repli
 ## The tool
 
 ```
-python3 /Users/moriarty/Documents/kochab/pherkad/skills/pherkad/tools/replycheck.py -
+python3 /Users/moriarty/code/pherkad/skills/pherkad/tools/replycheck.py -
 ```
 
 reads a drafted reply on stdin (or a file path), runs voicelint under the `assistant-chat` surface and structlint as an advisory, and prints one line per finding plus a verdict:
@@ -66,7 +66,7 @@ Install in the user settings (`/Users/moriarty/.claude/settings.json`), beside t
     "hooks": [
       {
         "type": "command",
-        "command": "/Users/moriarty/Documents/kochab/pherkad/skills/pherkad/tools/replycheck-hook.py"
+        "command": "/Users/moriarty/code/pherkad/skills/pherkad/tools/replycheck-hook.py"
       }
     ]
   }
