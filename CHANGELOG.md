@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.5.53 (2026-10-04)
+
+The state-file lock no longer waits forever. One wedged holder sat on it for two hours and twenty-one minutes, and every reply check behind it hung with no output and no error, which read as the voice checker being broken rather than as one stale process.
+
+- **A bounded wait.** `statefile.locked` now polls `flock` with `LOCK_NB` until `PHERKAD_LOCK_TIMEOUT` seconds have passed, default 10, then writes a line to stderr naming the lock file and runs the body unlocked. That is the same degradation the module already accepts on Windows, where `fcntl` is missing. Losing an interleaved write is recoverable; hanging the tool is not.
+- **Waiting forever is still available.** Set `PHERKAD_LOCK_TIMEOUT=0`, or pass `timeout=0`, for the old blocking behavior.
+- Tests: `test_statefile.py`.
+- No rule in `voice_config.json` changed. `VERSION` 0.5.53.
+
 ## v0.5.52 (2026-09-30)
 
 Reply preflight now measures length. Every check so far matched phrases, so a reply could pass at 900 words.

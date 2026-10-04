@@ -23,7 +23,9 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import sys
 import tempfile
+import time
 
 try:
     import fcntl
@@ -60,17 +62,50 @@ def write_json(path: str, obj, *, indent=2, ensure_ascii=False, sort_keys=False,
     write_text(path, text + ("\n" if newline else ""))
 
 
+LOCK_TIMEOUT = float(os.environ.get("PHERKAD_LOCK_TIMEOUT", "10"))
+
+
 @contextlib.contextmanager
-def locked(path: str):
-    """Hold an exclusive lock for one load-change-save of ``path``."""
+def locked(path: str, timeout: float | None = None):
+    """Hold an exclusive lock for one load-change-save of ``path``.
+
+    The wait is bounded. A process that takes this lock and then wedges used to
+    block every later run forever, with no output and no error: on 2026-10-04 one
+    stuck holder sat for over two hours and every reply check behind it hung, which
+    looked like the voice checker being broken rather than one stale process. After
+    ``timeout`` seconds the lock is abandoned and the body runs unlocked, which is
+    the same degradation this already accepts where ``fcntl`` is missing. Losing an
+    interleaved write is recoverable; hanging the tool is not.
+
+    Set ``PHERKAD_LOCK_TIMEOUT`` to change the bound, or 0 to wait forever.
+    """
     if fcntl is None:
         yield
         return
+    wait = LOCK_TIMEOUT if timeout is None else timeout
     lock_path = os.path.realpath(path) + ".lock"
     os.makedirs(os.path.dirname(lock_path), exist_ok=True)
     with open(lock_path, "a") as fh:
-        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        held = False
+        if wait <= 0:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+            held = True
+        else:
+            deadline = time.monotonic() + wait
+            while True:
+                try:
+                    fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    held = True
+                    break
+                except OSError:
+                    if time.monotonic() >= deadline:
+                        print(f"statefile: gave up waiting {wait:g}s for {lock_path}; "
+                              f"proceeding without the lock. A stale holder may be stuck.",
+                              file=sys.stderr)
+                        break
+                    time.sleep(0.05)
         try:
             yield
         finally:
-            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+            if held:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
