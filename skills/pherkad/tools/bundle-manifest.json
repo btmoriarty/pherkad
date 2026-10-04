@@ -1,6 +1,6 @@
 {
   "tool": "pherkad",
-  "version": "0.5.53",
+  "version": "0.5.54",
   "schema": 1,
   "generated": "2026-10-04",
   "required": [
@@ -17,7 +17,7 @@
     "structlint.py": "3564c2b5aa53f07fc71c1f5c28523ac03e77228c6f8c444e6da777a3ee5d37bd",
     "mdmask.py": "f758cefab26619844f9c53d6deb1832c5bff477b83e8d90b707269390501248e",
     "statefile.py": "907f38e9373e98733c1b5ba67d9a308e4d29dc04d0bf20e28b2bc1748f0ffffb",
-    "voice_config.json": "5b71d05a96431d6a4553517470bb7438cfd803e80c3c7cf29964f62face8de62",
+    "voice_config.json": "dc798624a41b13eec4d76b387b66c22e77de371880a7177098cfa264eb438dbd",
     "replycheck.py": "4699746f6c40cb7a88929e98b0ca19f94337c55fc8685efa6007ff2e7c2432f6",
     "replycheck-hook.py": "56eda8ee86f38f6c8c47c88f9850e2458bfaafcf782e624a641e4b8aaff6611f",
     "corpusscan.py": "36c3b46488919c819943ae8fdb1d795b93cde285195d12ceb36c94549bd1bed0",
@@ -136,6 +136,7 @@
     "soft.a-named-criterion",
     "soft.abstract-landscape",
     "soft.actually-lands",
+    "soft.and-here-is-what-to-word",
     "soft.and-what-comes-next",
     "soft.as-a-named",
     "soft.authenticity-tag",
@@ -214,6 +215,7 @@
     "soft.the-part-that",
     "soft.the-phrase-to-land",
     "soft.the-point-to-land",
+    "soft.the-question-det-word-arrives-with",
     "soft.the-short-version-is",
     "soft.the-thing-that",
     "soft.the-word-that-never-bends",

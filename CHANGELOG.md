@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.5.54 (2026-10-04)
+
+Two rules for the empty-aphorism family Brian flagged on the FA550 Week 6 deck: `the question the reader arrives with`, and `two types are over target, and here is what to change`. He expected the checker to hold these already and it did not; none of the 108 shipped soft phrases matched either one.
+
+- **`soft.and-here-is-what-to-word`.** The tail promises the content instead of giving it, so the sentence ends on a gesture rather than on the thing to change. Matcher `and here is what to [word]`.
+- **`soft.the-question-det-word-arrives-with`.** An abstract noun phrase closed by a relative clause that restates the noun, standing in for saying what the thing is. Matcher `the question [det] [word] arrives with`.
+
+Both are narrow on purpose. The broad forms were counted first and both fail the corpus test: `, and here is` fires 13 times across the course repo, the saga canon and pherkad's own docs, every one of them legitimate and followed by a concrete noun, and `arrives with` fires 15 times on sentences like "Stage 3 arrives with A4". The narrow pair fires zero times on 1,111 files and 1.1 million words, which means they catch the next instance of the same wording and will not generalise past it.
+
 ## v0.5.53 (2026-10-04)
 
 The state-file lock no longer waits forever. One wedged holder sat on it for two hours and twenty-one minutes, and every reply check behind it hung with no output and no error, which read as the voice checker being broken rather than as one stale process.
