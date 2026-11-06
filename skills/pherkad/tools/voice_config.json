@@ -36,7 +36,22 @@
     "pays for itself",
     "worth its weight",
     "worth its weight in gold",
-    "in all honesty"
+    "in all honesty",
+    {
+      "id": "banned.re-dcc80ebe",
+      "pattern": "re:\\b(?:this|that)(?: one)?(?:['’]s| is) on me\\b",
+      "rationale": "Brian: should be in banned phrases",
+      "since": "2026-11-06",
+      "fires": [
+        "Sorry for the slow reply, that one's on me.",
+        "This one's on me.",
+        "That is on me."
+      ],
+      "clean": [
+        "Lunch is on me.",
+        "The bill landed on me."
+      ]
+    }
   ],
   "engagement_bait": [
     "nobody's talking about",

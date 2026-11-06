@@ -1,8 +1,8 @@
 {
   "tool": "pherkad",
-  "version": "0.5.54",
+  "version": "0.5.55",
   "schema": 1,
-  "generated": "2026-10-04",
+  "generated": "2026-11-06",
   "required": [
     "pherkad.py",
     "voicelint.py",
@@ -17,7 +17,7 @@
     "structlint.py": "3564c2b5aa53f07fc71c1f5c28523ac03e77228c6f8c444e6da777a3ee5d37bd",
     "mdmask.py": "f758cefab26619844f9c53d6deb1832c5bff477b83e8d90b707269390501248e",
     "statefile.py": "907f38e9373e98733c1b5ba67d9a308e4d29dc04d0bf20e28b2bc1748f0ffffb",
-    "voice_config.json": "dc798624a41b13eec4d76b387b66c22e77de371880a7177098cfa264eb438dbd",
+    "voice_config.json": "39243e2fc7eb2a246f3a11b4cb866a2ddcd723db14d46a052927db880561ff63",
     "replycheck.py": "4699746f6c40cb7a88929e98b0ca19f94337c55fc8685efa6007ff2e7c2432f6",
     "replycheck-hook.py": "56eda8ee86f38f6c8c47c88f9850e2458bfaafcf782e624a641e4b8aaff6611f",
     "corpusscan.py": "36c3b46488919c819943ae8fdb1d795b93cde285195d12ceb36c94549bd1bed0",
@@ -90,6 +90,7 @@
     "banned.paradigm-shift",
     "banned.pays-for-itself",
     "banned.picture-this",
+    "banned.re-dcc80ebe",
     "banned.read-this-under",
     "banned.that-s-the-news",
     "banned.the-bottom-line-is",

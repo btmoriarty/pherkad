@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.5.55 (2026-11-06)
+
+One rule, from Brian's correction on a draft reply: `that one's on me` is now banned.
+
+- **`banned.re-dcc80ebe`.** Error severity. It catches `this` or `that`, with or without `one`, followed by `'s on me` or `is on me`. `Lunch is on me` stays clean.
+- Corpus count against the saga: 0 findings appear and 0 vanish, over 202 files and 273,431 words.
+- `VERSION` 0.5.55.
+
 ## v0.5.54 (2026-10-04)
 
 Two rules for the empty-aphorism family Brian flagged on the FA550 Week 6 deck: `the question the reader arrives with`, and `two types are over target, and here is what to change`. He expected the checker to hold these already and it did not; none of the 108 shipped soft phrases matched either one.
