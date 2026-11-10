@@ -64,6 +64,13 @@ class Units(unittest.TestCase):
         self.assertEqual(f["_sentences"], 2)
         self.assertEqual(corrections._sentences("Dr. Smith left. Then we went."), ["Dr. Smith left.", "Then we went."])
 
+    def test_quartiles_stay_inside_the_observed_lengths(self):
+        """statistics.quantiles' default (exclusive) method put Q1 of a 5- and a
+        30-word sentence at -1.25 words; the inclusive method interpolates."""
+        f = fingerprint.features(["One two three four five. Then " + " ".join(["word"] * 28) + " end."])["f"]
+        self.assertEqual(f["_sentences"], 2)
+        self.assertEqual((f["sent_q1"], f["sent_median"], f["sent_q3"]), (11.25, 17.5, 23.75))
+
     def test_chunks_keep_paragraphs_whole(self):
         paras = ["word " * 90] * 5
         runs = fingerprint.chunks(paras, size=200)

@@ -216,7 +216,9 @@ def features(paras: list[str]) -> dict:
     # sentences
     f["sent_mean"] = statistics.fmean(lens)
     f["sent_sd"] = statistics.pstdev(lens) if n > 1 else 0.0
-    q = statistics.quantiles(lens, n=4) if n >= 2 else [lens[0]] * 3
+    # inclusive: the exclusive default extrapolates past the data, so a 5- and a
+    # 30-word sentence gave a first quartile of -1.25 words
+    q = statistics.quantiles(lens, n=4, method="inclusive") if n >= 2 else [lens[0]] * 3
     f["sent_q1"], f["sent_median"], f["sent_q3"] = q[0], q[1], q[2]
     f["sent_short_share"] = sum(1 for x in lens if x < 8) / n
     f["sent_long_share"] = sum(1 for x in lens if x > 35) / n

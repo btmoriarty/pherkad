@@ -23,7 +23,7 @@
     "corpusscan.py": "36c3b46488919c819943ae8fdb1d795b93cde285195d12ceb36c94549bd1bed0",
     "corrections.py": "c33651409b40e3d659500fc212b2604b4b10c6520e7a2903925feb09e5b0f126",
     "samples.py": "8875c5ceffca0d78b98c7e74c1172b25822a44ef00e68fe1ccee9e7ab7b86375",
-    "fingerprint.py": "95a6ec371a3f9c29142bf15d5d79497217b0eaac9249e7d3a1455a9d404f8e83",
+    "fingerprint.py": "26d835512e05fb2baf3c5e3875e5d9e84655bd80313a9f3bb75c9884b068cc30",
     "author.py": "0b13164f18a800f0cbff77010fd77f28ced95c64e915d8edee41edd759bdfbdc",
     "runner.py": "47045bf38b130c0fa34cfac13f99237f436fed66dc9b741e0523b20004842430",
     "surfaces/assistant-chat.json": "5da5b0c8557acf86e51d3ca82f61b54c407edf712fdf4944319d27106f384ebf",
