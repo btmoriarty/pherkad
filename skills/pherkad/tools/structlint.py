@@ -230,18 +230,10 @@ BLOCKQUOTE = mdmask.BLOCKQUOTE
 # that is not a sentence boundary. Strip the label before splitting.
 RUNIN_LABEL = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)]\s+)?\*\*[^*]{1,90}?\*\*:?\s*")
 HEADER_LINE = mdmask.HEADING
-# A period is not always a sentence boundary. Initials ("W. H."), common
-# abbreviations, and ordinals in citations all end in one, and treating them as
-# boundaries turned bibliographies into staccato runs.
-# Each lookbehind holds its own period and has a fixed width; before 0.5.42 they
-# sat after the period and tested the wrong characters, so none of them fired and
-# "Dr. Smith" split into two sentences (I080). A number marker (no., vol., pp.,
-# art., fig.) is an abbreviation only when a digit follows it, since "The answer
-# was no." ends a sentence.
-ABBREV = (r"(?<!\b[A-Z]\.)(?<!\bvs\.)(?<!\bcf\.)(?<!\bal\.)(?<!\beds\.)(?<!\bed\.)(?<!\bapprox\.)"
-          r"(?<!\best\.)(?<!\bDr\.)(?<!\bMr\.)(?<!\bMs\.)(?<!\bMrs\.)(?<!\bSt\.)(?<!\betc\.)"
-          r"(?<!\bi\.e\.)(?<!\be\.g\.)")
-NUMBER_MARK = r"(?:(?<!\b[Nn]o\.)(?<!\b[Vv]ol\.)(?<!\bpp\.)(?<!\b[Aa]rt\.)(?<!\b[Ff]ig\.)|(?!\s+\d))"
+# A period is not always a sentence boundary: the abbreviation and number-marker
+# guards (I080) live in mdmask, shared with fingerprint and corrections.
+ABBREV = mdmask.ABBREV
+NUMBER_MARK = mdmask.NUMBER_MARK
 SENT_SPLIT = re.compile(r"(?<=[.!?])" + ABBREV + NUMBER_MARK + r"\s+")
 FIELD_LINE = mdmask.FIELD_LINE
 # A bibliographic entry is punctuation-dense by convention: a year in

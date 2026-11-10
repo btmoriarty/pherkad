@@ -57,6 +57,13 @@ class Units(unittest.TestCase):
         self.assertEqual(fingerprint.features(["It ended. “Go,” he said."])["f"]["_sentences"], 2)
         self.assertEqual(fingerprint.containment("we don’t know what it’s for", "we don't know what it's for"), 1.0)
 
+    def test_abbreviations_do_not_split_a_measured_sentence(self):
+        """I080 in the measured profile: fingerprint and corrections share structlint's guards."""
+        import corrections
+        f = fingerprint.features(["Dr. Smith met Mr. Jones at No. 5 Main St. Downtown. They talked."])["f"]
+        self.assertEqual(f["_sentences"], 2)
+        self.assertEqual(corrections._sentences("Dr. Smith left. Then we went."), ["Dr. Smith left.", "Then we went."])
+
     def test_chunks_keep_paragraphs_whole(self):
         paras = ["word " * 90] * 5
         runs = fingerprint.chunks(paras, size=200)

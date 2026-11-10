@@ -62,6 +62,31 @@ def fold(text: str) -> str:
     return text.translate(FOLD)
 
 
+# A period is not always a sentence boundary. Initials ("W. H."), common
+# abbreviations, and ordinals in citations all end in one, and treating them as
+# boundaries turned bibliographies into staccato runs.
+# Each lookbehind holds its own period and has a fixed width; before 0.5.42 they
+# sat after the period and tested the wrong characters, so none of them fired and
+# "Dr. Smith" split into two sentences (I080). A number marker (no., vol., pp.,
+# art., fig.) is an abbreviation only when a digit follows it, since "The answer
+# was no." ends a sentence. The guards are shared: structlint splits on them, and
+# so do fingerprint and corrections through SENT_BOUNDARY, which until 0.5.56
+# kept the unguarded regex and measured "Dr. Smith" as two sentences.
+ABBREV = (r"(?<!\b[A-Z]\.)(?<!\bvs\.)(?<!\bcf\.)(?<!\bal\.)(?<!\beds\.)(?<!\bed\.)(?<!\bapprox\.)"
+          r"(?<!\best\.)(?<!\bDr\.)(?<!\bMr\.)(?<!\bMs\.)(?<!\bMrs\.)(?<!\bSt\.)(?<!\betc\.)"
+          r"(?<!\bi\.e\.)(?<!\be\.g\.)")
+NUMBER_MARK = r"(?:(?<!\b[Nn]o\.)(?<!\b[Vv]ol\.)(?<!\bpp\.)(?<!\b[Aa]rt\.)(?<!\b[Ff]ig\.)|(?!\s+\d))"
+# The boundary the measuring tools split prose on: terminal punctuation that is
+# not an abbreviation, any closing quotes or brackets, whitespace, and the
+# start of a new sentence (a capital or a digit, after any opening quote).
+SENT_BOUNDARY = re.compile(r"(?<=[.!?])" + ABBREV + NUMBER_MARK + r"[\"')\]]*\s+(?=[\"'(\[]?[A-Z0-9])")
+
+
+def split_sentences(text: str) -> list[str]:
+    """The sentences of a run of prose, split at SENT_BOUNDARY, stripped, empties dropped."""
+    return [p.strip() for p in SENT_BOUNDARY.split(text) if p.strip()]
+
+
 def _indent(line: str) -> tuple[int, int]:
     """(columns of leading whitespace with tabs to the next multiple of 4, index of the first other character)."""
     col = 0

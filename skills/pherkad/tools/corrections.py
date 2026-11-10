@@ -65,6 +65,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
+import mdmask  # noqa: E402
 import voicelint  # noqa: E402
 import statefile  # noqa: E402
 import corpusscan  # noqa: E402
@@ -582,7 +583,7 @@ def cmd_retire(args) -> int:
 # ("X -> ") is a candidate too. A sentence rewritten wholesale is a judgment
 # record (no regex). Every candidate enters as pending; trial and promote
 # still need the count and the author's say.
-_SENT_END = re.compile(r"(?<=[.!?])[\"')\]]*\s+(?=[\"'(\[]?[A-Z0-9])")
+_SENT_END = mdmask.SENT_BOUNDARY  # the splitter fingerprint measures with (I080 guards)
 _TOKEN = re.compile(r"\w[\w'’-]*|[^\w\s]")
 
 

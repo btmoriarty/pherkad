@@ -68,7 +68,9 @@ FDR = 0.05
 MATTR_WINDOW = 50
 MIN_REFERENCE_CHUNKS = 50
 
-SENT_SPLIT = re.compile(r"(?<=[.!?])[\"')\]]*\s+(?=[\"'(\[]?[A-Z0-9])")
+# One sentence splitter for every measuring tool, with structlint's abbreviation
+# guards (I080): "Dr. Smith" and "No. 5" are not sentence boundaries.
+SENT_SPLIT = mdmask.SENT_BOUNDARY
 WORD = re.compile(r"[A-Za-z][A-Za-z'’-]*")
 
 # Closed-class words only: determiners, pronouns, prepositions, conjunctions,
@@ -158,7 +160,7 @@ def prose_paragraphs(text: str) -> list[str]:
 
 
 def sentences(par: str) -> list[str]:
-    return [p.strip() for p in SENT_SPLIT.split(par) if p.strip()]
+    return mdmask.split_sentences(par)
 
 
 def _sentence_pairs(par: str) -> list[tuple[str, str]]:

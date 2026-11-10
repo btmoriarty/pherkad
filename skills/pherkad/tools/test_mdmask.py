@@ -129,5 +129,25 @@ class Mask(unittest.TestCase):
         self.assertEqual(mdmask.strip_inline_code("a `b` c"), "a     c")
 
 
+class Sentences(unittest.TestCase):
+    """The splitter fingerprint and corrections measure with, carrying
+    structlint's abbreviation guards (I080)."""
+
+    def test_abbreviations_and_initials_are_not_boundaries(self):
+        self.assertEqual(mdmask.split_sentences("Dr. Smith came. W. H. Auden wrote it, e.g. Spain. We left."),
+                         ["Dr. Smith came.", "W. H. Auden wrote it, e.g. Spain.", "We left."])
+
+    def test_a_number_marker_holds_only_before_a_digit(self):
+        self.assertEqual(mdmask.split_sentences("See No. 5 and pp. 12 here. The answer was no. Then we went."),
+                         ["See No. 5 and pp. 12 here.", "The answer was no.", "Then we went."])
+
+    def test_ordinary_boundaries_still_split(self):
+        # callers fold curly quotes first (mdmask.fold), so the quotes here are straight
+        self.assertEqual(mdmask.split_sentences('It rained! Did it? "Yes," she said. 3 left.'),
+                         ["It rained!", "Did it?", '"Yes," she said.', "3 left."])
+        # a lowercase continuation is never a new sentence
+        self.assertEqual(mdmask.split_sentences("We met at 9 a.m. on Tuesday."), ["We met at 9 a.m. on Tuesday."])
+
+
 if __name__ == "__main__":
     unittest.main()
