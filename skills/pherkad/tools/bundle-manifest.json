@@ -19,7 +19,7 @@
     "statefile.py": "907f38e9373e98733c1b5ba67d9a308e4d29dc04d0bf20e28b2bc1748f0ffffb",
     "voice_config.json": "39243e2fc7eb2a246f3a11b4cb866a2ddcd723db14d46a052927db880561ff63",
     "replycheck.py": "4699746f6c40cb7a88929e98b0ca19f94337c55fc8685efa6007ff2e7c2432f6",
-    "replycheck-hook.py": "56eda8ee86f38f6c8c47c88f9850e2458bfaafcf782e624a641e4b8aaff6611f",
+    "replycheck-hook.py": "c35fd62b149845e3ac098569fbb411e57d7847bf7e41cfcda7543c4e0969543b",
     "corpusscan.py": "36c3b46488919c819943ae8fdb1d795b93cde285195d12ceb36c94549bd1bed0",
     "corrections.py": "c33651409b40e3d659500fc212b2604b4b10c6520e7a2903925feb09e5b0f126",
     "samples.py": "8875c5ceffca0d78b98c7e74c1172b25822a44ef00e68fe1ccee9e7ab7b86375",
