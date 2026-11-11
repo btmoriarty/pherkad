@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Tests for fingerprint.py. Run from anywhere: python3 /path/to/test_fingerprint.py"""
 import json
+import math
 import os
 import random
+import statistics
 import sys
 import tempfile
 import unittest
@@ -419,6 +421,118 @@ class NestedCrossValidation(unittest.TestCase):
         self.assertEqual(sorted(everything - c for c in calls[1:]), [frozenset([f]) for f in range(fingerprint.FOLDS)])
         self.assertEqual(model["cv"], "nested")
         self.assertTrue(0.0 <= model["cv_auc"] <= 1.0)
+
+
+class Statistics(unittest.TestCase):
+    """The measured profile's statistical pieces, each against a hand-worked
+    case or an independent computation (review finding 5)."""
+
+    def test_auc_is_mann_whitney_with_ties_shared(self):
+        self.assertEqual(fingerprint._auc([0.1, 0.4, 0.35, 0.8], [0, 0, 1, 1]), 0.75)
+        self.assertEqual(fingerprint._auc([1, 2, 3, 4], [0, 0, 1, 1]), 1.0)
+        self.assertEqual(fingerprint._auc([4, 3, 2, 1], [0, 0, 1, 1]), 0.0)
+        self.assertEqual(fingerprint._auc([1, 1, 2], [0, 1, 1]), 0.75)  # a tie counts half
+        self.assertEqual(fingerprint._auc([5, 5, 5, 5], [0, 1, 0, 1]), 0.5)
+        self.assertEqual(fingerprint._auc([1, 2], [1, 1]), 0.5)  # one class: no ranking to score
+
+    def test_bh_is_the_step_up_procedure(self):
+        # thresholds at q = 0.05, m = 4: 0.0125, 0.025, 0.0375, 0.05
+        self.assertEqual(fingerprint._bh([0.01, 0.04, 0.03, 0.2], 0.05), ({0}, 0.01))
+        # step-up: ranks 1 and 2 miss their thresholds, rank 4 meets its own, so all four go
+        self.assertEqual(fingerprint._bh([0.04, 0.02, 0.035, 0.03], 0.05), ({0, 1, 2, 3}, 0.04))
+        self.assertEqual(fingerprint._bh([0.5, 0.9], 0.05), (set(), 0.0))
+        self.assertEqual(fingerprint._bh([], 0.05), (set(), 0.0))
+
+    def test_conformal_p_counts_the_pieces_at_least_as_extreme(self):
+        null = [1.0, 2.0, 3.0, 4.0]
+        self.assertEqual(fingerprint._conformal_p(5.0, null), 1 / 5)
+        self.assertEqual(fingerprint._conformal_p(3.0, null), 3 / 5)  # 3 and 4 tie or beat it
+        self.assertEqual(fingerprint._conformal_p(2.9996, null), 3 / 5)  # rounded as the null was
+        self.assertEqual(fingerprint._conformal_p(0.0, null), 1.0)
+
+    def test_null_is_the_leave_one_out_family_maximum(self):
+        rng = random.Random(11)
+        per = [{"sent_mean": rng.gauss(18, 4), "sent_sd": rng.expovariate(1 / 8), "para_sents": rng.choice([1, 2, 3, 4, 6])}
+               for _ in range(12)]
+        sc = {"n": 12, "words": 200, "sentences": 10, "paragraphs": 3, "features": fingerprint._stats(per)}
+        got = fingerprint._null(per, sc)
+        want = {"sentence length": [], "paragraphs": []}
+        for i, f in enumerate(per):
+            rest = per[:i] + per[i + 1:]
+            for fam, keys in (("sentence length", ("sent_mean", "sent_sd")), ("paragraphs", ("para_sents",))):
+                ts = [abs(fingerprint._t(f[k], statistics.fmean(r[k] for r in rest), statistics.stdev([r[k] for r in rest]),
+                                         fingerprint._sd_floor(k, sc), len(rest))) for k in keys]
+                want[fam].append(round(max(ts), 3))
+        self.assertEqual(set(got), set(want))
+        for fam in want:
+            for g, w in zip(got[fam], sorted(want[fam])):
+                self.assertAlmostEqual(g, w, places=3, msg=fam)
+
+    def test_platt_recovers_a_known_log_odds_and_stays_finite_when_separated(self):
+        # scores N(+1, 1) for the author and N(-1, 1) for the reference: the true log-odds is 2 * score
+        rng = random.Random(5)
+        scores = [rng.gauss(1, 1) for _ in range(3000)] + [rng.gauss(-1, 1) for _ in range(3000)]
+        ys = [1] * 3000 + [0] * 3000
+        a, b = fingerprint._platt(scores, ys)
+        self.assertAlmostEqual(a, 2.0, delta=0.15)
+        self.assertAlmostEqual(b, 0.0, delta=0.1)
+        a, b = fingerprint._platt([-2.0, -1.0, 1.0, 2.0], [0, 0, 1, 1])
+        self.assertTrue(math.isfinite(a) and math.isfinite(b) and a > 0)
+
+    def test_nsc_fit_matches_a_hand_worked_case(self):
+        # one feature, 0 2 | 4 6: z = (x - 3) / sqrt(5), centroids -+2/sqrt(5), pooled
+        # within-class sd sqrt(0.4), s0 the same, m = sqrt(1/2 - 1/4) = 0.5, so d = +-sqrt(2)
+        fit = fingerprint._nsc_fit([[0.0, 7.0], [2.0, 7.0], [4.0, 7.0], [6.0, 7.0]], [0, 0, 1, 1])
+        self.assertAlmostEqual(fit["mu"][0], 3.0)
+        self.assertAlmostEqual(fit["sig"][0], math.sqrt(5))
+        self.assertAlmostEqual(fit["sk"][0], 2 * math.sqrt(0.4))
+        self.assertAlmostEqual(fit["m"][1], 0.5)
+        self.assertAlmostEqual(fit["d"][1][0], math.sqrt(2))
+        self.assertAlmostEqual(fit["d"][0][0], -math.sqrt(2))
+        self.assertEqual((fit["d"][0][1], fit["d"][1][1]), (0.0, 0.0))  # a constant feature carries nothing
+        self.assertAlmostEqual(fit["dmax"], math.sqrt(2))
+        # no shrinkage keeps the live feature only; shrinkage to dmax keeps none
+        self.assertEqual([j for j, _, _ in fingerprint._nsc_shrink(fit, 0.0)], [0])
+        self.assertEqual(fingerprint._nsc_shrink(fit, fit["dmax"]), [])
+        # the author's side scores positive, the reference's negative
+        active = fingerprint._nsc_shrink(fit, 0.0)
+        self.assertGreater(sum(t for t, _ in fingerprint._nsc_terms(fit, active, [6.0, 7.0])), 0)
+        self.assertLess(sum(t for t, _ in fingerprint._nsc_terms(fit, active, [0.0, 7.0])), 0)
+
+    def test_the_authors_own_pieces_are_flagged_near_the_nominal_rate(self):
+        """A new piece from the author's own distribution is flagged (any family
+        surviving BH at 5%) at or a little under 5% of the time (2.9% here, since
+        rank p-values and discrete features are conservative), with skewed and discrete
+        features and a per-document shift, the way compare() tests a text. With
+        five families a rank among n pieces can only reach p <= 0.01 once n >= 99
+        (compare's resolution_note), so the profiles here have 200 pieces."""
+        rng = random.Random(2026)
+
+        def piece(doc):
+            return {"sent_mean": doc + rng.gauss(18, 4), "sent_sd": rng.expovariate(1 / 8),
+                    "para_sents": float(rng.choice([1, 1, 2, 3, 3, 4, 6])),
+                    "punct_colon": sum(rng.random() < 0.05 for _ in range(10)) / 10.0,
+                    "punct_comma": rng.gammavariate(2, 0.6), "con_hedge": 5.0 * sum(rng.random() < 0.3 for _ in range(4)),
+                    "fw_the": rng.gauss(55, 12)}
+
+        trials = flagged = 0
+        for _ in range(30):
+            per = [piece(rng.gauss(0, 2)) for _ in range(200)]
+            sc = {"n": len(per), "words": 200, "sentences": 10, "paragraphs": 3, "features": fingerprint._stats(per)}
+            null = fingerprint._null(per, sc)
+            for _ in range(40):
+                new = piece(rng.gauss(0, 2))
+                fams = {}
+                for k, st in sc["features"].items():
+                    t = fingerprint._t(new[k], st["mean"], st["sd"], fingerprint._sd_floor(k, sc), sc["n"])
+                    fams.setdefault(fingerprint.family(k), []).append(abs(t))
+                ps = [fingerprint._conformal_p(max(ts), null[name]) for name, ts in fams.items()]
+                hit, _ = fingerprint._bh(ps, 0.05)
+                trials += 1
+                flagged += bool(hit)
+        rate = flagged / trials
+        self.assertLessEqual(rate, 0.07, f"{flagged} of {trials} of the author's own pieces flagged")
+        self.assertGreaterEqual(rate, 0.02, f"{flagged} of {trials}: far below nominal, the test has lost its power")
 
 
 if __name__ == "__main__":
