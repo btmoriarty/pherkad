@@ -73,7 +73,7 @@ def constraints(prof: dict, reference: dict | None = None) -> list[str]:
            f"Paragraphs average {m('para_sents'):.1f} sentences; {100 * m('para_one_sentence_share'):.0f}% are a single sentence.",
            f"About {100 * m('open_first_person'):.0f}% of sentences open in the first person, {100 * m('open_subordinator'):.0f}% with if, when, or because, "
            f"{100 * m('open_conjunction'):.0f}% with and, but, or so."]
-    firsts = [w for w, r in (prof.get("first_words") or [])[:6] if w and w not in ("hi", "brian")]
+    firsts = [w for w, r in (prof.get("first_words") or [])[:6] if w and w not in ("hi", os.environ.get("PHERKAD_AUTHOR_FIRST_NAME", "").strip().lower())]
     if firsts:
         out.append("Common first words: " + ", ".join(firsts) + ".")
     punct = f"Per sentence: {m('punct_comma'):.1f} commas, {m('punct_colon'):.2f} colons, {m('punct_semicolon'):.2f} semicolons."

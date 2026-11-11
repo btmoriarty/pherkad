@@ -2,7 +2,7 @@
 
 Status, end of 2026-09-18: all twenty-five items shipped, 0.5.3 through 0.5.33. What remains is the author's: the blind ratings (40 revise drafts, 14 detect pairs, 8 authoring pairs), the NeurIPS camera-ready, and a reference of other writers' mail for writer-against-writer separation.
 
-One ordered list, drawn from `docs/priority-fixes.md` (what is still wrong) and `docs/feature-review-comparison-2026-09-15.md` (what to build, and which of two reviews' designs to take). Ordered by dependency first, then by value per day. Each item names what it unblocks and how it is judged done. Effort is developer days, author review time excluded.
+One ordered list, drawn from the review `priority-fixes` (archived privately) (what is still wrong) and the review `feature-review-comparison-2026-09-15` (archived privately) (what to build, and which of two reviews' designs to take). Ordered by dependency first, then by value per day. Each item names what it unblocks and how it is judged done. Effort is developer days, author review time excluded.
 
 ## Standing rules for everything below
 
@@ -23,7 +23,7 @@ One ordered list, drawn from `docs/priority-fixes.md` (what is still wrong) and 
 
 | # | Item | Depends on | Done when | Effort |
 |---|---|---|---|---|
-| 4 | Done, 0.5.6. **structlint fixes**: syntactic parallel test for the two-beat check, mask spans rather than drop lines, tighten the header check; thresholds configurable; findings in the voicelint JSON shape with `rule_id`. | 1 | The three false-positive inputs in `docs/priority-fixes.md` rows 1 to 3 are silent; the true positives still fire. | 1.5 |
+| 4 | Done, 0.5.6. **structlint fixes**: syntactic parallel test for the two-beat check, mask spans rather than drop lines, tighten the header check; thresholds configurable; findings in the voicelint JSON shape with `rule_id`. | 1 | The three false-positive inputs in the review `priority-fixes` (archived privately) rows 1 to 3 are silent; the true positives still fire. | 1.5 |
 | 5 | Done, 0.5.7. **Shared Markdown extraction** for both tools: code, blockquotes, tables, headings, lists, directives, masked once. voicelint stops linting quoted text. | 4 | One masking function, tested once, imported by both. | 1 |
 | 6 | Done, 0.5.8. **Combined runner.** `pherkad.py check --surface X --format text|json|sarif FILE...`: both engines, one finding schema, one dedup, one density over both. | 4, 5 | `lint-voice.sh` calls one command and parses one format. | 3 |
 | 7 | Done, 0.5.9. **Decision file.** A project-owned record `{rule_id, path, context_hash, occurrence_count, rule_hash, disposition, reason}`; an accepted warning stays quiet until the text, the rule, or the count changes; new findings are reported separately; never auto-accept. | 6 | The saga's 294 advisory warnings can be triaged once and stay triaged. | 3 |
@@ -42,9 +42,9 @@ One ordered list, drawn from `docs/priority-fixes.md` (what is still wrong) and 
 | # | Item | Depends on | Done when | Effort |
 |---|---|---|---|---|
 | 12 | Done, 0.5.14. **Revision experiment** in `eval/study.py`: same drafts, arms for untouched, generic self-review (the control), mechanical feedback, judgment feedback, both; same editing model and budget; blind rating with factual preservation required; manifest carries model, prompt, config hash, repeat. | 6, 9 | A number for whether the tools beat another editing pass, with the failures quoted. | 5 |
-| 13 | Done, 0.5.15. **Detection experiment**: per-rule precision and false flags per 1,000 words for the linters; supported diagnoses, unnecessary edits, and repeat stability for the judgment layer. Protocol already in `docs/blind-eval.md`. | 12 | `docs/review-followups.md` item 2 closes. | 5 |
+| 13 | Done, 0.5.15. **Detection experiment**: per-rule precision and false flags per 1,000 words for the linters; supported diagnoses, unnecessary edits, and repeat stability for the judgment layer. Protocol already in `docs/blind-eval.md`. | 12 | the review `review-followups` (archived privately) item 2 closes. | 5 |
 
-## Phase 5: from the review of 0.5.17 (`docs/codex-features-astra-2026-09-16.md`)
+## Phase 5: from the review of 0.5.17 (the review `codex-features-astra-2026-09-16` (archived privately))
 
 | # | Item | Depends on | Done when | Effort |
 |---|---|---|---|---|
@@ -78,4 +78,4 @@ Note (2026-09-27): that pilot does not stand as measured. Its runners could see 
 
 ## Prose debt, not code
 
-The six errors the calibrated set found in the saga (`docs/priority-fixes.md` row 6) and the three warnings in this repository's README and cheat sheet (row 10) are the author's prose and wait on him.
+The six errors the calibrated set found in the saga (the review `priority-fixes` (archived privately) row 6) and the three warnings in this repository's README and cheat sheet (row 10) are the author's prose and wait on him.

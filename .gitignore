@@ -35,3 +35,5 @@ holdout*.json
 pack.json
 prompt.md
 *.author.json
+# Local agent instructions with private paths; the public CLAUDE.md is generic.
+CLAUDE.local.md

@@ -9,6 +9,7 @@ Fixes from a code review of the measured profile. Three of them change the numbe
 - **One sentence splitter.** `fingerprint.py` and `corrections.py` still split sentences with the regex that structlint fixed in 0.5.42 (I080), so `Dr. Smith`, `W. H. Auden` and `No. 5` broke a sentence in two. The abbreviation guards now live in `mdmask.py` with `SENT_BOUNDARY` and `split_sentences`, which both tools use. Sentence length, paragraph and opener features change wherever a sample has an abbreviation or an initial before a capital or a digit. structlint's own split is unchanged.
 - **Quartiles stay inside the data.** `statistics.quantiles` used its exclusive default, which extrapolates: two sentences of 5 and 30 words gave a first quartile of -1.25 words. It now uses `method="inclusive"`, which moves `sent_q1` and `sent_q3` (the median is the same either way), most in a chunk with few sentences.
 - **The drafting packet's sentence range is the sentences' own.** `author.py` told the drafter that most sentences fall within one sd of the mean, using the sd of chunk means, which is a few words wide and asked for near-uniform sentences. The packet now gives the median, the quartiles and the within-passage sentence sd.
+- **Private material out of the public tree.** The raw AI-review transcripts that drove earlier releases moved to the author's private repository, and the references to them now say so. `CLAUDE.md` is generic, with the local paths in a gitignored `CLAUDE.local.md`. The chat surface's rationale and fixtures no longer name the author or his folders, `author.py` reads the author's first name from `PHERKAD_AUTHOR_FIRST_NAME` instead of the code, and two docs use placeholders for personal paths.
 - No rule in `voice_config.json` changed. `VERSION` is 0.5.56.
 
 ## v0.5.55 (2026-11-06)
@@ -89,7 +90,7 @@ Soft phrases are errors, and a project can set a family's severity back.
 The docs describe the tool that ships, and the bundle holds only what is tracked. This is Wave 7 of the 2026-09-27 review, part 2: docs and build.
 
 - **The cheat sheet.** The HTML, which the published PDF is rendered from, described the product before quick mode. Its voice-check card now describes quick and full, with the density floor, and its CLI card describes `pherkad.py check`. It still fits one letter-landscape page: measured at the page's width, the content ends at 735 of 755 pixels, against 725 before. CI now lints the HTML with the Markdown, so the two cannot drift silently again (I017).
-- **Stale names** in `docs/ROADMAP.md` and `docs/measured-profile.md` are the commands that exist: `corpusscan.py scan` and `diff`, `pherkad.py check-overlay`, and `corrections.py mine` (there was never a `--from-diff`). `docs/priority-fixes.md` is marked as the closed record of the 2026-09-15 round (I017).
+- **Stale names** in `docs/ROADMAP.md` and `docs/measured-profile.md` are the commands that exist: `corpusscan.py scan` and `diff`, `pherkad.py check-overlay`, and `corrections.py mine` (there was never a `--from-diff`). the review `priority-fixes` (archived privately) is marked as the closed record of the 2026-09-15 round (I017).
 - **`build.sh`** builds from git with `git archive`, so only tracked files ship, and it says so when uncommitted changes under the skill are left out. Before, it zipped the working tree, caches and untracked files included (I014).
 - **`corrections.py add` and `mine`** refuse a ledger path that does not exist unless given `--init`. A mistyped path used to start a second, empty ledger that nothing read (I016).
 - **A linked ledger** (the live one is a link into the private voice repository) now says where the write landed and that the commit belongs there; nothing prompted that commit before (I008).
@@ -532,7 +533,7 @@ The repeated-frame check, the first feature from the Astra review of 0.5.17 and 
 
 ## v0.5.17 (2026-09-16)
 
-Two more defects from the Astra re-run, which again ran out of usage before it could report (`docs/codex-features-astra-2026-09-15-second-pass.md`, third attempt).
+Two more defects from the Astra re-run, which again ran out of usage before it could report (the review `codex-features-astra-2026-09-15-second-pass` (archived privately), third attempt).
 
 - **`corpusscan` runs both engines and takes `--surface`.** It ran voicelint alone, so the structural rules could not be counted or calibrated on a corpus, and it had no way to apply a surface's thresholds. `run_corpus` now goes through `pherkad.run_text` (no density), findings are the shared dicts, `scan` and `diff` accept `--surface` (applied before `--config`) and `--no-structure`. On the saga the structural rules count 103 staccato, 12 two-beat, 1 header, the same 116 the gate reports as advisory.
 - **A structural decision is keyed on its paragraph, and on the thresholds.** structlint reports a paragraph against its first line, so a decision keyed on that line survived an edit further down; and a threshold change did not change the rule's hash, so a decision made under one threshold survived another. `context_hash` takes the whole paragraph for a structural finding (the record says `scope: paragraph`), and `rule_hashes` folds the `structure` thresholds into every structural rule's hash and the density's.
@@ -541,7 +542,7 @@ Two more defects from the Astra re-run, which again ran out of usage before it c
 
 ## v0.5.16 (2026-09-15)
 
-Three defects, two of them named by a second Astra review that ran out of usage before it could finish (`docs/codex-features-astra-2026-09-15-second-pass.md`).
+Three defects, two of them named by a second Astra review that ran out of usage before it could finish (the review `codex-features-astra-2026-09-15-second-pass` (archived privately)).
 
 - **Density is computed over the findings that count.** `pherkad.py check` built its combined density over every finding, so eight advisory structural findings produced a counted density warning that blocked under `--strict`, and deciding every finding on a page left the density warning standing. `density_finding()` now runs after advisory and decisions are applied, over what remains; `run_text(density=False)` lets a caller do the same.
 - **A decision covers every line with that text.** `decide` set a record's `count` from the occurrences on the line named, so a refrain repeated eight times was decided once and reported seven times. It now counts every finding in the file whose rule and line text match.
@@ -551,7 +552,7 @@ Three defects, two of them named by a second Astra review that ran out of usage 
 
 ## v0.5.15 (2026-09-15)
 
-Item 13 of `docs/ROADMAP.md`, the detection experiment, which completes the roadmap and gives `docs/review-followups.md` item 2 its harness.
+Item 13 of `docs/ROADMAP.md`, the detection experiment, which completes the roadmap and gives the review `review-followups` (archived privately) item 2 its harness.
 
 - **`eval/detect.py`**, new, dispatched from `study.py plan --task detect`. Cases per writer from the writer's directory: authentic held-out (one may be atypical), flattenings paired to their source, matched impostors, override pieces. Five conditions: `correct`, `wrong`, `shuffled` (the profile's own lines scrambled, a control the protocol asked for), `none`, and `linter` (the mechanical verdict alone, the floor, written by the harness). `--repeats` runs every item N times under blind ids. `plan` writes `prereg.md` and `score` warns while it holds a TODO.
 - **Judging prompts** ask the model for a JSON verdict (rating, PASS / light REVISE / REVISE / REWRITE, positive register, markers cited, evidence) and record model and hashes per item. **Two reader sheets**: the pairwise authentic-versus-flattened sheet in blind order, and every mechanical finding on authentic text for TP/FP labelling.
@@ -606,7 +607,7 @@ Item 9 of `docs/ROADMAP.md`, the compact judgment mode. A change to the skill's 
 
 ## v0.5.10 (2026-09-15)
 
-Item 8 of `docs/ROADMAP.md`, the release manifest and the overlay check, which closes row 12 of `docs/priority-fixes.md` and phase 2 of the roadmap.
+Item 8 of `docs/ROADMAP.md`, the release manifest and the overlay check, which closes row 12 of the review `priority-fixes` (archived privately) and phase 2 of the roadmap.
 
 - **`tools/bundle-manifest.json`**, new, written by `pherkad.py manifest --write` at release: the version, a schema number, the sha256 of every vendored file (the five a gate needs, plus replycheck, its hook, corpusscan, and the surfaces), and every rule id the shipped base runs. `pherkad.py manifest --verify` fails when a file beside the script no longer matches, when a file is missing or unlisted, when the version differs from `VERSION`, or when the rule ids differ from the shipped config. CI runs it, so a release that edits a tool and forgets the manifest fails its own tests; the first run of the test did exactly that.
 - **`pherkad.py check-overlay OVERLAY`** loads a downstream overlay on the shipped base and reports what would silently do nothing: a `remove_<field>` naming a rule that is not here (error), an `add_<field>` duplicating a shipped rule (warning), a whole-list replacement where `add_`/`remove_` would inherit (warning), a structure key the base does not know (config error). The saga overlay checks clean; the shipped `assistant-chat` surface checks clean.
@@ -616,7 +617,7 @@ Item 8 of `docs/ROADMAP.md`, the release manifest and the overlay check, which c
 
 ## v0.5.9 (2026-09-15)
 
-Item 7 of `docs/ROADMAP.md`, the decision file, which closes row 7 of `docs/priority-fixes.md` by giving a downstream corpus a way to triage its advisory warnings once.
+Item 7 of `docs/ROADMAP.md`, the decision file, which closes row 7 of the review `priority-fixes` (archived privately) by giving a downstream corpus a way to triage its advisory warnings once.
 
 - **`pherkad.py check --decisions FILE`** hides, and stops counting, every finding the author has ruled on. A decision is a record `{rule_id, path, context_hash, rule_hash, count, disposition, reason, decided}`: the context is the whole line the finding sits on with whitespace collapsed, the rule hash is the rule's pattern, and the record covers up to `count` occurrences on that line. A changed line, a changed rule, or an extra occurrence makes the finding new again. `--show-decided` prints the hidden ones; the summary reports `N decided (a accepted, b intentional, c deferred)` so the debt stays visible; `--format json` carries each finding's decision and `--format sarif` omits decided findings. Paths are relative to `--root`, default the decision file's directory.
 - **`pherkad.py decide --decisions FILE --reason "..." path:line[:rule_id]`** is the only thing that writes a decision, and it refuses an empty reason and a location with no finding. Dispositions: `accepted` (the author's usage), `intentional` (a deliberate choice), `deferred` (known, fix later). Deciding a line covers every occurrence of that rule on it; naming a rule id covers that rule only.
@@ -638,7 +639,7 @@ Item 6 of `docs/ROADMAP.md`, the combined runner.
 
 ## v0.5.7 (2026-09-15)
 
-Item 5 of `docs/ROADMAP.md`, the shared Markdown extraction layer, which closes row 4 of `docs/priority-fixes.md`.
+Item 5 of `docs/ROADMAP.md`, the shared Markdown extraction layer, which closes row 4 of the review `priority-fixes` (archived privately).
 
 - **`tools/mdmask.py`**, new. One reading of Markdown structure for both linters: `line_kinds(text)` classifies every line (code, blockquote, table, heading, field, list, blank, prose) and `mask(text, kinds)` blanks the named kinds, and inline code spans, to same-length whitespace so offsets never move. Fences are backtick or tilde, three or more, closed by a fence of the same character at least as long, or by the end of the file; a `>` inside a fence is code.
 - **voicelint imports it** and now masks blockquotes as well as code. A quoted passage is someone else's words, which voice-rules.md exempts, and structlint already skipped it; the two tools no longer disagree on what is prose. Inline quotation marks are still linted: in fiction the dialogue is the author's voice, and adjudicating a direct quote stays with the judgment layer. On the saga corpus no finding sat on a blockquoted line, so voicelint's count is unchanged at 6 errors and 293 warnings.
@@ -649,7 +650,7 @@ Item 5 of `docs/ROADMAP.md`, the shared Markdown extraction layer, which closes 
 
 ## v0.5.6 (2026-09-15)
 
-Item 4 of `docs/ROADMAP.md`, the structlint fixes, which close rows 1, 2, 3, and 9 of `docs/priority-fixes.md`.
+Item 4 of `docs/ROADMAP.md`, the structlint fixes, which close rows 1, 2, 3, and 9 of the review `priority-fixes` (archived privately).
 
 - **The two-beat check tests shape, not length.** Two short sentences count as a parallel only when they share an opener, both carry a negation, share a closing word, or have the same token count with a repeated content word. "The meeting starts at nine. Lunch follows at noon." no longer fires; "None of them wrong. None of them ours." still does. On the saga corpus two-beats went from 31 to 12, and every one of the 19 that vanished was an ordinary pair.
 - **Spans are masked, lines are kept.** A URL, a DOI, an arXiv id, a year in parentheses, a page run, or a long quoted span is blanked in place and the rest of the line is still checked, so a staccato run beside a link is visible. A whole bibliographic entry (author-and-initial opener, or two or more markers) is still dropped as before.
@@ -665,7 +666,7 @@ Item 3 of `docs/ROADMAP.md`: the corpus scan and release diff, so the count that
 
 - **`tools/corpusscan.py`**, new. `scan DIR...` counts every rule over a corpus (hits, files, hits per 1,000 words, sorted); `--rule ID` narrows to one rule with sampled contexts; `--candidate "field:pattern"` (or a JSON rule object) tries a rule that is not in the config yet, and refuses one that already is. `diff DIR --old A.json --new B.json` runs two base rule sets under the same overlay and reports rules added, removed, and renamed (same pattern, new id), per-rule deltas, and the findings that appear and vanish, with contexts for the new ones. `--json` adds the tool version, the sha256 of every config involved, and the corpus size, which is what a dated snapshot should keep. Every number is labelled a raw hit; nothing promotes a rule.
 - **`voicelint.load_config(path, base=...)`** takes another base file, for the corpus tools only. The linter's own CLI still always runs the shipped base, so a vendored copy cannot be pointed at a stale one.
-- Today's calibration reproduced by the tool, the 0.5.1 rule set against 0.5.5 on the saga's shareable tree (202 Markdown files, 273,455 words, saga overlay, both run under the current linter so only the rule changes show): errors 6 to 6, warnings 300 to 293, 62 findings appear and 69 vanish; 15 rules added, 21 removed, 5 renamed. The hand count earlier today read 313 to 294 because it also carried the 0.5.2 and 0.5.3 code changes (overlap collapse, directive blanking). The three `named` soft phrases from `docs/priority-fixes.md` row 7 score 0 hits on the corpus and stay.
+- Today's calibration reproduced by the tool, the 0.5.1 rule set against 0.5.5 on the saga's shareable tree (202 Markdown files, 273,455 words, saga overlay, both run under the current linter so only the rule changes show): errors 6 to 6, warnings 300 to 293, 62 findings appear and 69 vanish; 15 rules added, 21 removed, 5 renamed. The hand count earlier today read 313 to 294 because it also carried the 0.5.2 and 0.5.3 code changes (overlap collapse, directive blanking). The three `named` soft phrases from the review `priority-fixes` (archived privately) row 7 score 0 hits on the corpus and stay.
 - The count command is in the repository `CLAUDE.md`, so a rule change without a count is a visible omission.
 - `tools/test_corpusscan.py`, 11 tests, in CI.
 - `VERSION` 0.5.5.
@@ -712,7 +713,7 @@ The second half of the Codex review: the rule-level bugs, then a calibration of 
 
 ## v0.5.1 (2026-09-15)
 
-A Codex review of the tools, recorded in `docs/codex-review-2026-09-15.md`, found four correctness bugs. This release fixes those four and nothing in the rule set; the calibration findings in that review wait on a separate decision.
+A Codex review of the tools, recorded in the review `codex-review-2026-09-15` (archived privately), found four correctness bugs. This release fixes those four and nothing in the rule set; the calibration findings in that review wait on a separate decision.
 
 - **The Python copy of the defaults is gone.** `voicelint.py` carried a `FALLBACK_CONFIG` that had drifted from `voice_config.json` (13 soft phrases against 115, 26 banned phrases against 34), and every `--config` was merged onto that stale copy rather than the shipped file. Any user config, however small, silently ran with a fraction of the rules. The shipped JSON beside the script is now the only base; a missing base exits 2 instead of running with less. The overlay is `--config`, or `./voice_config.json` in the working directory when it is a different file. `--print-config` prints the effective set.
 - **The `rules-file` marker is read after code masking**, and only as an HTML comment on its own line. Before, the marker inside backticks, or mentioned in a sentence, silenced the whole file.
@@ -787,7 +788,7 @@ A fourth review found the mechanical layer sound and pointed the real work at th
 - **`load-bearing` is warning-only.** A regex reading one word cannot tell `load-bearing frame of the argument` (figurative) from `load-bearing case` (a literal enclosure), so the hard-error tier is gone. A clear physical member is exempt; everything else is a soft `load-bearing-context` warning, and whether an ambiguous use is really figurative is left to the judgment layer.
 - **Provenance language removed.** The linter and docs no longer imply they detect AI authorship. README leads with "helps you review whether a draft still sounds like you"; `SKILL.md` surfaces "generic phrasing" rather than "AI-generated flatness"; `profile_builder.md` and `ai_tells.md` describe positive markers as evidence of profile match, not of how a passage was produced. A hit or a verdict is about voice fit, never about provenance.
 - **Profile holdout check.** `profile_builder.md` gains Step 4b: reserve one sample the profile never saw, then confirm the profile recognizes it, revises a flattened rewrite of it, and does not accept another writer's piece, before the profile is trusted. It catches an overfit profile that only matches its own extraction set.
-- **Blind-evaluation protocol.** New `docs/blind-eval.md`: the plan for the multi-writer blind set that would move the judgment layer from advisory to dependable, with the case types, the run method, the pass bar, and a requirement to report failures. The protocol is written; the dataset needs real samples. `docs/review-followups.md` is updated to match.
+- **Blind-evaluation protocol.** New `docs/blind-eval.md`: the plan for the multi-writer blind set that would move the judgment layer from advisory to dependable, with the case types, the run method, the pass bar, and a requirement to report failures. The protocol is written; the dataset needs real samples. the review `review-followups` (archived privately) is updated to match.
 - `VERSION` 0.4.5.
 
 ## v0.4.4 (2026-07-24)

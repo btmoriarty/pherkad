@@ -5,14 +5,14 @@ Roadmap item 2. Most of the AI-speak the author objects to arrives in chat repli
 ## The tool
 
 ```
-python3 /Users/moriarty/code/pherkad/skills/pherkad/tools/replycheck.py -
+python3 <repo>/skills/pherkad/tools/replycheck.py -
 ```
 
 reads a drafted reply on stdin (or a file path), runs voicelint under the `assistant-chat` surface and structlint as an advisory, and prints one line per finding plus a verdict:
 
 ```
 3:1 [error] honest-framing: 'the honest X' performs candour instead of exercising it; cut it and say the thing  ->  'The honest answer'
-3:41 [error] banned.markdown-link: canned phrase: 'in the desktop app a link is what Brian wants [...]; it must be relative to the working directory, so an absolute-path, ~ or http link in the target is the miss. [...]'  ->  '[the diff](/Users/me/docs/x.md)'
+3:41 [error] banned.markdown-link: canned phrase: 'in the desktop app a link is what the user wants [...]; it must be relative to the working directory, so an absolute-path, ~ or http link in the target is the miss. [...]'  ->  '[the diff](/Users/me/docs/x.md)'
 5:1 [advisory] structure.staccato: 3 short sentences in a row; merge them  ->  'Done. Tests pass. Committed.'
 replycheck: FIX (2 error(s), 0 warning(s), 1 structural advisory; surface assistant-chat)
 ```
@@ -57,7 +57,7 @@ The one habit the check will keep catching: quoting a banned phrase as an exampl
 
 Repair is bounded: Claude Code marks the continuation with `stop_hook_active`, and the hook lets that run through, so a reply gets exactly one enforced revision and cannot loop. Warnings never block unless `REPLYCHECK_STRICT=1`; structural findings never block from the hook, and neither does length. A passing reply over its budget, scaled to the user message that opened the turn, is reported to the person as a `systemMessage`; `REPLYCHECK_LENGTH=0` turns that off. A hook that cannot read its input exits 0 with a note, because a broken hook must not wedge a session.
 
-Install in the user settings (`/Users/moriarty/.claude/settings.json`), beside the existing hooks:
+Install in the user settings (`<home>/.claude/settings.json`), beside the existing hooks:
 
 ```json
 "Stop": [
@@ -66,7 +66,7 @@ Install in the user settings (`/Users/moriarty/.claude/settings.json`), beside t
     "hooks": [
       {
         "type": "command",
-        "command": "/Users/moriarty/code/pherkad/skills/pherkad/tools/replycheck-hook.py"
+        "command": "<repo>/skills/pherkad/tools/replycheck-hook.py"
       }
     ]
   }

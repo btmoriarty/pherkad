@@ -86,7 +86,7 @@ produces `pherkad.skill` (a zip of `skills/pherkad/`).
 
 ## Origins
 
-The tell catalog draws on public discussions of recurring AI-writing patterns (notably Julian Harris's 2026 thread), the Wikipedia "Signs of AI writing" page, and patterns observed in assisted drafts. The seven-dimension review and the density rule began as a private workflow for one writer. That history explains the design, but it is not public validation of the generalized skill; see [docs/review-followups.md](docs/review-followups.md) for what a blind validation set would add. The mechanical linter began as a news-brief house rule set and was generalized here.
+The tell catalog draws on public discussions of recurring AI-writing patterns (notably Julian Harris's 2026 thread), the Wikipedia "Signs of AI writing" page, and patterns observed in assisted drafts. The seven-dimension review and the density rule began as a private workflow for one writer. That history explains the design, but it is not public validation of the generalized skill; see the review review-followups (archived privately) (archived privately) for what a blind validation set would add. The mechanical linter began as a news-brief house rule set and was generalized here.
 
 ## License
 

@@ -101,12 +101,12 @@
       "id": "banned.markdown-link",
       "pattern": "re:\\[[^\\]\\n]+\\]\\((?:https?://|/Users/|~/)[^)\\n]+\\)",
       "since": "2026-09-20",
-      "rationale": "in the desktop app a link is what Brian wants (2026-09-20: 'need link'); it must be relative to the working directory, so an absolute-path, ~ or http link in the target is the miss. Terminal sessions print the absolute path instead.",
+      "rationale": "in the desktop app a link is what the user wants (2026-09-20: 'need link'); it must be relative to the working directory, so an absolute-path, ~ or http link in the target is the miss. Terminal sessions print the absolute path instead.",
       "fires": [
-        "Edit [the config](/Users/moriarty/Documents/kochab/pherkad/skills/pherkad/tools/voice_config.json) first."
+        "Edit [the config](/Users/alex/Documents/project/tools/voice_config.json) first."
       ],
       "clean": [
-        "Edit [the config](Documents/kochab/pherkad/skills/pherkad/tools/voice_config.json) first."
+        "Edit [the config](Documents/project/tools/voice_config.json) first."
       ]
     },
     {
@@ -115,10 +115,10 @@
       "since": "2026-09-15",
       "rationale": "full absolute paths, never ~",
       "fires": [
-        "Open ~/Documents/kochab and look."
+        "Open ~/Documents/project and look."
       ],
       "clean": [
-        "Open /Users/moriarty/Documents/kochab and look."
+        "Open /Users/alex/Documents/project and look."
       ]
     }
   ],
