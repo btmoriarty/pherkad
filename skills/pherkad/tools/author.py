@@ -64,10 +64,12 @@ def constraints(prof: dict, reference: dict | None = None) -> list[str]:
     """The fingerprint's numbers as instructions a writer can follow."""
     f = prof["features"]
     m = lambda k: f[k]["mean"]  # noqa: E731
-    sd = lambda k: f[k]["sd"]  # noqa: E731
-    out = [f"Sentences average {m('sent_mean'):.0f} words (most between {max(3, m('sent_mean') - sd('sent_mean')):.0f} and "
-           f"{m('sent_mean') + sd('sent_mean'):.0f}); the median is {m('sent_median'):.0f}. About {100 * m('sent_short_share'):.0f}% of "
-           f"sentences are under eight words and {100 * m('sent_long_share'):.0f}% run past 35.",
+    # The range is the sentences' own: the quartiles and the within-passage sd.
+    # The sd of sent_mean is the spread of chunk means, a few words wide; quoting
+    # it as the range of sentence lengths pushed drafts toward uniform sentences.
+    out = [f"Sentences average {m('sent_mean'):.0f} words and the median is {m('sent_median'):.0f}; half fall between "
+           f"{m('sent_q1'):.0f} and {m('sent_q3'):.0f} words, and within a passage they vary by about {m('sent_sd'):.0f} words. "
+           f"About {100 * m('sent_short_share'):.0f}% of sentences are under eight words and {100 * m('sent_long_share'):.0f}% run past 35.",
            f"Paragraphs average {m('para_sents'):.1f} sentences; {100 * m('para_one_sentence_share'):.0f}% are a single sentence.",
            f"About {100 * m('open_first_person'):.0f}% of sentences open in the first person, {100 * m('open_subordinator'):.0f}% with if, when, or because, "
            f"{100 * m('open_conjunction'):.0f}% with and, but, or so."]

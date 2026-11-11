@@ -57,6 +57,18 @@ class Packet(unittest.TestCase):
         self.assertIn("No dashes of any kind", text)
         self.assertIn("Words the author uses", text)
 
+    def test_the_sentence_range_is_the_sentences_own(self):
+        """Review finding 4: the range came from the spread of chunk means (here
+        15 +/- 1, so "between 14 and 16"), which asks for uniform sentences."""
+        prof = json.load(open(self.fp))["surfaces"]["email"]
+        f = prof["features"]
+        for k, v in (("sent_mean", 15.0), ("sent_median", 13.0), ("sent_q1", 8.0), ("sent_q3", 21.0), ("sent_sd", 9.0)):
+            f[k] = {"mean": v, "sd": 1.0}
+        first = author.constraints(prof)[0]
+        self.assertIn("half fall between 8 and 21 words", first)
+        self.assertIn("vary by about 9 words", first)
+        self.assertNotIn("between 14 and 16", first)
+
     def test_exemplars_are_nearest_in_subject(self):
         smp = fingerprint.load_samples(self.sdir, ("hand",), None)
         ex = author.nearest_exemplars("shed leaked bags wet landlord bill", smp, k=2)
