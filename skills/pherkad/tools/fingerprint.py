@@ -690,6 +690,7 @@ def _sd_floor(key: str, scale: dict) -> float:
 # model counts correlated features twice; the calibration absorbs that, and
 # the cross-validated AUC says how well it separates at all.
 _MODELS = {}
+MAX_MODELS = 8
 FOLDS = 5
 
 
@@ -816,10 +817,19 @@ def _fold(group: str) -> int:
     return int(hashlib.sha256(group.encode("utf-8")).hexdigest()[:8], 16) % FOLDS
 
 
+def _vectors_key(prof: dict) -> str:
+    """A content hash of the chunk vectors a model is fit on. An id() is reused
+    once its dict is freed, so a cache keyed on ids handed a profile built in a
+    loop another profile's model, sign-flipped and without a warning."""
+    v = prof.get("vectors") or {}
+    blob = json.dumps([v.get("keys"), v.get("groups"), v.get("rows")], separators=(",", ":"))
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
 def fit_discriminant(author: dict, reference: dict, min_reference_chunks: int = MIN_REFERENCE_CHUNKS) -> dict:
-    """The author-against-reference model, or {"error": why not}. Memoised per
-    pair of profiles, since cross-validation costs a few seconds."""
-    key = (id(author), id(reference), min_reference_chunks)
+    """The author-against-reference model, or {"error": why not}. Memoised on
+    the content of the pair of profiles, since cross-validation costs seconds."""
+    key = (_vectors_key(author), _vectors_key(reference), min_reference_chunks)
     if key in _MODELS:
         return _MODELS[key]
     a, r = author.get("vectors"), reference.get("vectors")
@@ -830,6 +840,8 @@ def fit_discriminant(author: dict, reference: dict, min_reference_chunks: int = 
                           f"needs {min_reference_chunks}, from texts disjoint from every test"}
     else:
         model = _fit(a, r)
+    if len(_MODELS) >= MAX_MODELS:
+        _MODELS.pop(next(iter(_MODELS)))  # the oldest; a content key would otherwise hold every model forever
     _MODELS[key] = model
     return model
 

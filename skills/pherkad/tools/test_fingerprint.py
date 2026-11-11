@@ -358,5 +358,43 @@ class Leakage(unittest.TestCase):
         self.assertEqual(fingerprint.shared_run(profile, "A different text entirely, about something else."), "")
 
 
+def _pool(rng, prefix, docs, per_doc, shift=0.0, p=12):
+    """Synthetic chunk vectors: a document-level effect under piece-level noise."""
+    groups, rows = [], []
+    for d in range(docs):
+        eff = [rng.gauss(0, 0.5) for _ in range(p)]
+        for _ in range(per_doc):
+            groups.append(f"{prefix}{d}")
+            rows.append([shift + eff[j] + rng.gauss(0, 1) for j in range(p)])
+    return {"vectors": {"keys": [f"k{j}" for j in range(p)], "groups": groups, "rows": rows}}
+
+
+class DiscriminantCache(unittest.TestCase):
+    def setUp(self):
+        fingerprint._MODELS.clear()
+
+    def test_a_profile_built_in_a_loop_gets_its_own_model(self):
+        """Review finding 1: the cache was keyed on id(), which CPython reuses once
+        a dict is freed, so profiles built in a loop got a stale, sign-flipped model."""
+        for seed in range(20):
+            rng = random.Random(seed)
+            a = _pool(rng, "a", 15, 2, shift=1.0 if seed % 2 else -1.0)
+            r = _pool(rng, "r", 30, 1)
+            got = fingerprint.fit_discriminant(a, r, min_reference_chunks=10)
+            want = fingerprint._fit(a["vectors"], r["vectors"])
+            self.assertEqual(got["active"], want["active"], f"seed {seed}")
+            del a, r, got
+
+    def test_equal_content_shares_a_model_and_the_cache_is_bounded(self):
+        rng = random.Random(7)
+        a, r = _pool(rng, "a", 15, 2, shift=1.0), _pool(rng, "r", 30, 1)
+        first = fingerprint.fit_discriminant(a, r, min_reference_chunks=10)
+        copy = json.loads(json.dumps(a))
+        self.assertTrue(fingerprint.fit_discriminant(copy, r, min_reference_chunks=10) is first)
+        for seed in range(fingerprint.MAX_MODELS + 3):
+            fingerprint.fit_discriminant(_pool(random.Random(seed), "a", 8, 2), r, min_reference_chunks=10)
+        self.assertLessEqual(len(fingerprint._MODELS), fingerprint.MAX_MODELS)
+
+
 if __name__ == "__main__":
     unittest.main()
