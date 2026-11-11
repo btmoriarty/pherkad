@@ -92,16 +92,9 @@ def constraints(prof: dict, reference: dict | None = None) -> list[str]:
     if avoid:
         out.append("Rare or absent, so do not reach for them: " + "; ".join(avoid) + ".")
     if reference and reference.get("features"):
-        rows = []
-        for k in f:
-            if not k.startswith("fw_"):
-                continue
-            r = reference["features"].get(k, {"mean": 0.0, "sd": 0.0})
-            ps = ((f[k]["sd"] ** 2 + r["sd"] ** 2) / 2) ** 0.5 or 1e-9
-            rows.append(((f[k]["mean"] - r["mean"]) / ps, k[3:]))
-        rows.sort()
-        more = [w for d, w in rows[::-1] if d > 0.6][:8]
-        less = [w for d, w in rows if d < -0.6][:8]
+        rows = fpm.fw_contrast(f, reference["features"])
+        more = [w for d, w, _, _ in rows[::-1] if d > 0.6][:8]
+        less = [w for d, w, _, _ in rows if d < -0.6][:8]
         if more:
             out.append("Words the author uses more than polished prose does: " + ", ".join(more) + ".")
         if less:

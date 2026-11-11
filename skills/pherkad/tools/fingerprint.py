@@ -329,9 +329,6 @@ def chunks(paras: list[str], size: int = CHUNK_WORDS) -> list[list[str]]:
     return out
 
 
-SCALAR_GROUPS = ("sent_", "short_after", "para_", "open_", "punct_", "question", "con_", "fw_", "word_len", "type_token")
-
-
 def _scalar_keys(f: dict) -> list[str]:
     return [k for k in f if not k.startswith("_")]
 
@@ -1104,6 +1101,21 @@ def _rate(prof: dict, key: str) -> tuple[float, float]:
     return st["mean"], st["sd"]
 
 
+def fw_contrast(f: dict, ref: dict) -> list[tuple[float, str, float, float]]:
+    """Each function word's rate against the reference's, as (standardised
+    difference over the pooled sd, word, author rate, reference rate), sorted
+    from most under-used to most over-used. The prose view and the drafting
+    packet both read it, each with its own cut."""
+    rows = []
+    for k in f:
+        if not k.startswith("fw_"):
+            continue
+        r = ref.get(k, {"mean": 0.0, "sd": 0.0})
+        ps = ((f[k]["sd"] ** 2 + r["sd"] ** 2) / 2) ** 0.5 or 1e-9
+        rows.append(((f[k]["mean"] - r["mean"]) / ps, k[3:], f[k]["mean"], r["mean"]))
+    return sorted(rows)
+
+
 def prose_surface(name: str, prof: dict, reference: dict | None = None) -> str:
     f = prof["features"]
     m = lambda k: _rate(prof, k)[0]  # noqa: E731
@@ -1151,13 +1163,7 @@ def prose_surface(name: str, prof: dict, reference: dict | None = None) -> str:
     # function words: the signature, against the reference if given
     fwk = [k for k in f if k.startswith("fw_")]
     if reference and reference.get("features"):
-        rows = []
-        for k in fwk:
-            a = f[k]["mean"]
-            r = reference["features"].get(k, {"mean": 0.0, "sd": 0.0})
-            ps = ((f[k]["sd"] ** 2 + r["sd"] ** 2) / 2) ** 0.5 or 1e-9
-            rows.append(((a - r["mean"]) / ps, k[3:], a, r["mean"]))
-        rows.sort()
+        rows = fw_contrast(f, reference["features"])
         more = [x for x in rows[::-1] if x[0] > 0.5][:8]
         less = [x for x in rows if x[0] < -0.5][:8]
         out += [f"### Function words, against {reference.get('name', 'the reference')}", ""]
