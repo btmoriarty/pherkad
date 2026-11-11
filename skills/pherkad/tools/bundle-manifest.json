@@ -12,7 +12,7 @@
     "voice_config.json"
   ],
   "files": {
-    "pherkad.py": "ac2261f8291eb44f7415ffd7fe11dc9db00f629e7c95e96ce800bab717adddfa",
+    "pherkad.py": "76bea4fc523a78ff6e819e60638f86a8e3726caa625d474f95c563efb589e250",
     "voicelint.py": "a12f9de284d961a56216ba8cb133269356a512de8d1fc30fe7a2c7538d0fca05",
     "structlint.py": "9a52f6eedf0b92a9344da11a5534352727c961b89044b9ed2fdb3ac9d33bd580",
     "mdmask.py": "1cedab6c0b7e0352c66f0e93c0728a3f33bb1733005594ead2248940cff07449",
@@ -23,7 +23,7 @@
     "corpusscan.py": "36c3b46488919c819943ae8fdb1d795b93cde285195d12ceb36c94549bd1bed0",
     "corrections.py": "c33651409b40e3d659500fc212b2604b4b10c6520e7a2903925feb09e5b0f126",
     "samples.py": "8875c5ceffca0d78b98c7e74c1172b25822a44ef00e68fe1ccee9e7ab7b86375",
-    "fingerprint.py": "1b6a0a606c31d2f4c0609f7efa4ae6858dba533380f8911a9fbfa4f7a62a358a",
+    "fingerprint.py": "f73d2f7fa3465a3dca80fce924aa7999e0fca1d6cd89184427c98e431e0d24c3",
     "author.py": "0b13164f18a800f0cbff77010fd77f28ced95c64e915d8edee41edd759bdfbdc",
     "runner.py": "47045bf38b130c0fa34cfac13f99237f436fed66dc9b741e0523b20004842430",
     "surfaces/assistant-chat.json": "5da5b0c8557acf86e51d3ca82f61b54c407edf712fdf4944319d27106f384ebf",

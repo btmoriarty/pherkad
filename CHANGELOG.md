@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.5.56 (2026-11-10)
+
+Fixes from a code review of the measured profile. Three of them change the numbers it reports, so a fingerprint or reference built before 0.5.56 should be rebuilt, and an AUC reported before it read as an upper bound.
+
+- **The discriminant's AUC is nested.** `cv_auc` was the best of 20 shrinkage values on the same five folds that chose it, and the Platt calibration was fit on those scores. Each outer fold is now scored by a model whose shrinkage an inner grouped cross-validation chose on the other four folds, and the AUC and the Platt fit both come from those outer scores. The deployed model is unchanged: it is still fit on everything, with the shrinkage chosen by cross-validation on everything. On 200 simulated pairs of identical classes (`eval/null_auc.py`) the reported AUC averaged 0.529 before and averages 0.494 now, against a true 0.5; the share of runs at 0.6 or more fell from 14% to 7%. The fit takes about four times as long. Output and renders say `nested cross-validated AUC`, and the model records `"cv": "nested"`.
+- **The model cache is keyed on content.** `fit_discriminant` memoised on `id()` of the two profiles. CPython reuses an id once its dict is freed, so a profile built in a loop could receive another profile's model, sign-flipped, with no warning. The key is now a SHA-256 of the chunk vectors, and the cache holds at most eight models.
+- **One sentence splitter.** `fingerprint.py` and `corrections.py` still split sentences with the regex that structlint fixed in 0.5.42 (I080), so `Dr. Smith`, `W. H. Auden` and `No. 5` broke a sentence in two. The abbreviation guards now live in `mdmask.py` with `SENT_BOUNDARY` and `split_sentences`, which both tools use. Sentence length, paragraph and opener features change wherever a sample has an abbreviation or an initial before a capital or a digit. structlint's own split is unchanged.
+- **Quartiles stay inside the data.** `statistics.quantiles` used its exclusive default, which extrapolates: two sentences of 5 and 30 words gave a first quartile of -1.25 words. It now uses `method="inclusive"`, which moves `sent_q1` and `sent_q3` (the median is the same either way), most in a chunk with few sentences.
+- No rule in `voice_config.json` changed. `VERSION` is 0.5.56.
+
 ## v0.5.55 (2026-11-06)
 
 One rule, from Brian's correction on a draft reply: `that one's on me` is now banned.

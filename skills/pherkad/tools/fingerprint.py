@@ -28,8 +28,10 @@ families (sentence length, paragraphs, openers, punctuation, constructions,
 vocabulary, function words), a family's statistic is its largest |t|, its
 p-value is that statistic's rank among the author's own pieces (a conformal
 test), and a family is flagged when it survives Benjamini-Hochberg at --fdr. With a reference,
-a nearest-shrunken-centroid discriminant, chosen and calibrated by grouped
-cross-validation, gives the log-odds that the text is the author's.
+a nearest-shrunken-centroid discriminant, its shrinkage chosen by grouped
+cross-validation and its AUC and calibration taken from a nested
+cross-validation around that choice, gives the log-odds that the text is the
+author's.
 
 Usage:
   fingerprint.py build --samples DIR --out fingerprint.json [--provenance hand,captured] [--surface S]
@@ -685,10 +687,12 @@ def _sd_floor(key: str, scale: dict) -> float:
 # Nearest shrunken centroids (Tibshirani, Hastie, Narasimhan and Chu, 2002) on
 # standardised features, equal priors. The shrinkage, which also selects the
 # features, is chosen by grouped cross-validation, so no piece of writing is
-# on both sides of a fold, and the held-out scores are Platt-calibrated, so the
-# score is a log-odds the cross-validation stands behind (I190). A diagonal
+# on both sides of a fold (I190). The AUC reported and the Platt calibration
+# come from a nested cross-validation: each outer fold is scored by a model
+# whose shrinkage an inner cross-validation chose without it, so neither the
+# AUC nor the calibration has seen the pieces it is measured on. A diagonal
 # model counts correlated features twice; the calibration absorbs that, and
-# the cross-validated AUC says how well it separates at all.
+# the nested AUC says how well the procedure separates at all.
 _MODELS = {}
 MAX_MODELS = 8
 FOLDS = 5
@@ -853,27 +857,60 @@ def _fit(a: dict, r: dict) -> dict:
     rows = [[row[j] for j in ai] for row in a["rows"]] + [[row[j] for j in ri] for row in r["rows"]]
     ys = [1] * len(a["rows"]) + [0] * len(r["rows"])
     folds = [_fold("a:" + g) for g in a["groups"]] + [_fold("r:" + g) for g in r["groups"]]
-    full = _nsc_fit(rows, ys)
-    grid = [full["dmax"] * i / 20.0 for i in range(20)]
-    cv = {i: ([], []) for i in range(len(grid))}
+    everything = list(range(len(rows)))
+    full, delta = _tune(rows, ys, folds, everything)
+    # Nested cross-validation: each outer fold is scored by a model whose
+    # shrinkage was chosen by an inner grouped cross-validation on the other
+    # folds alone, so the AUC reported, and the Platt fit on these scores, are
+    # of the whole procedure on pieces it never saw. Before 0.5.56 the AUC was
+    # the best of the grid on the folds that chose it, which on two identical
+    # classes averaged above 0.5 and reached 0.69.
+    scores, labels = [], []
     for f in range(FOLDS):
-        train = [i for i in range(len(rows)) if folds[i] != f]
-        test = [i for i in range(len(rows)) if folds[i] == f]
-        if not test or len({ys[i] for i in train}) < 2 or min(sum(ys[i] for i in train), len(train) - sum(ys[i] for i in train)) < 2:
+        train = [i for i in everything if folds[i] != f]
+        test = [i for i in everything if folds[i] == f]
+        if not test or not _trainable([ys[i] for i in train]):
+            continue
+        fit, d = _tune(rows, ys, folds, train)
+        active = _nsc_shrink(fit, d)
+        for i in test:
+            scores.append(sum(t for t, _ in _nsc_terms(fit, active, rows[i])))
+            labels.append(ys[i])
+    cv_auc = _auc(scores, labels) if scores else 0.5
+    pa, pb = _platt([_slog(x) for x in scores], labels) if scores else (1.0, 0.0)
+    return {"keys": keys, "fit": full, "delta": delta, "active": _nsc_shrink(full, delta),
+            "platt": [pa, pb], "cv_auc": round(cv_auc, 3), "cv": "nested", "author_chunks": len(a["rows"]),
+            "reference_chunks": len(r["rows"])}
+
+
+def _trainable(ys: list[int]) -> bool:
+    """Both classes, at least two pieces each: enough to fit centroids and spreads."""
+    n1 = sum(ys)
+    return min(n1, len(ys) - n1) >= 2
+
+
+def _tune(rows: list[list[float]], ys: list[int], folds: list[int], idx: list[int]) -> tuple[dict, float]:
+    """The model fit on rows idx, and its shrinkage: of a grid from no shrinkage
+    to nearly all, the most shrinkage at the best grouped cross-validated AUC
+    over the folds present in idx."""
+    full = _nsc_fit([rows[i] for i in idx], [ys[i] for i in idx])
+    grid = [full["dmax"] * k / 20.0 for k in range(20)]
+    cv = {g: ([], []) for g in range(len(grid))}
+    for f in sorted({folds[i] for i in idx}):
+        train = [i for i in idx if folds[i] != f]
+        test = [i for i in idx if folds[i] == f]
+        if not test or not _trainable([ys[i] for i in train]):
             continue
         fit = _nsc_fit([rows[i] for i in train], [ys[i] for i in train])
-        for gi, delta in enumerate(grid):
-            active = _nsc_shrink(fit, delta)
+        for g, d in enumerate(grid):
+            active = _nsc_shrink(fit, d)
             for i in test:
-                cv[gi][0].append(sum(t for t, _ in _nsc_terms(fit, active, rows[i])))
-                cv[gi][1].append(ys[i])
-    aucs = [(_auc(*cv[gi]) if cv[gi][0] else 0.5, gi) for gi in range(len(grid))]
-    best_auc = max(x for x, _ in aucs)
-    gi = max(g for x, g in aucs if x >= best_auc - 1e-9)  # the most shrinkage at the best AUC
-    pa, pb = _platt([_slog(s) for s in cv[gi][0]], cv[gi][1]) if cv[gi][0] else (1.0, 0.0)
-    return {"keys": keys, "fit": full, "delta": grid[gi], "active": _nsc_shrink(full, grid[gi]),
-            "platt": [pa, pb], "cv_auc": round(best_auc, 3), "author_chunks": len(a["rows"]),
-            "reference_chunks": len(r["rows"])}
+                cv[g][0].append(sum(t for t, _ in _nsc_terms(fit, active, rows[i])))
+                cv[g][1].append(ys[i])
+    aucs = [(_auc(*cv[g]) if cv[g][0] else 0.5, g) for g in range(len(grid))]
+    best = max(x for x, _ in aucs)
+    g = max(k for x, k in aucs if x >= best - 1e-9)  # the most shrinkage at the best AUC
+    return full, grid[g]
 
 
 def discriminant(f: dict, author: dict, reference: dict, min_reference_chunks: int = MIN_REFERENCE_CHUNKS) -> dict:
@@ -1019,7 +1056,7 @@ def render(result: dict, path: str = "") -> str:
     elif d:
         side = "nearer the author" if d["score"] > 0 else "nearer the reference"
         lines.append(f"  discriminant {d['score']:+.2f} log-odds (p author {d['p_author']:.2f}) against {d['reference']}, "
-                     f"cross-validated AUC {d['cv_auc']:.2f}, {d['features_used']} features: {side}"
+                     f"nested cross-validated AUC {d['cv_auc']:.2f}, {d['features_used']} features: {side}"
                      + (f"; for the author: {', '.join(d['for_author'])}" if d["for_author"] else "")
                      + (f"; for the reference: {', '.join(d['for_reference'])}" if d["for_reference"] else ""))
         for k, q in list((d.get("passages") or {}).items())[:3]:

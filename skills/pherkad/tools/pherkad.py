@@ -595,7 +595,7 @@ def voice_findings(text: str, fp: dict, surface_name: str | None, fdr: float = 0
         else:
             side = "nearer the author" if d["score"] > 0 else "nearer the reference"
             match = f"{d['score']:+.2f} against {d['reference']}"
-            msg = (f"{side}: log-odds {d['score']:+.2f} (p author {d['p_author']:.2f}), cross-validated AUC "
+            msg = (f"{side}: log-odds {d['score']:+.2f} (p author {d['p_author']:.2f}), nested cross-validated AUC "
                    f"{d['cv_auc']:.2f} over {d['features_used']} features"
                    + (f"; for the author: {', '.join(d['for_author'])}" if d["for_author"] else "")
                    + (f"; for the reference: {', '.join(d['for_reference'])}" if d["for_reference"] else ""))

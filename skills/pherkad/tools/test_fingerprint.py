@@ -396,5 +396,30 @@ class DiscriminantCache(unittest.TestCase):
         self.assertLessEqual(len(fingerprint._MODELS), fingerprint.MAX_MODELS)
 
 
+class NestedCrossValidation(unittest.TestCase):
+    def test_the_reported_auc_never_sees_the_fold_that_chose_the_shrinkage(self):
+        """Review finding 3: the shrinkage behind each outer fold's scores is chosen
+        by an inner cross-validation on the other folds only, and the deployed
+        model's shrinkage by a cross-validation on everything."""
+        rng = random.Random(3)
+        a, r = _pool(rng, "a", 20, 2), _pool(rng, "r", 40, 1)
+        calls, real = [], fingerprint._tune
+
+        def spy(rows, ys, folds, idx):
+            calls.append(frozenset(folds[i] for i in idx))
+            return real(rows, ys, folds, idx)
+
+        fingerprint._tune = spy
+        try:
+            model = fingerprint._fit(a["vectors"], r["vectors"])
+        finally:
+            fingerprint._tune = real
+        everything = frozenset(range(fingerprint.FOLDS))
+        self.assertEqual(calls[0], everything)
+        self.assertEqual(sorted(everything - c for c in calls[1:]), [frozenset([f]) for f in range(fingerprint.FOLDS)])
+        self.assertEqual(model["cv"], "nested")
+        self.assertTrue(0.0 <= model["cv_auc"] <= 1.0)
+
+
 if __name__ == "__main__":
     unittest.main()
