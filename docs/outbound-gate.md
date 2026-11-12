@@ -17,7 +17,7 @@ hand: 20 corrections since 2026-09-27, 19 pending, 1 promoted, and nothing asks 
 | Part | New code | Where it runs |
 |---|---|---|
 | 1. Outbound gate | `skills/pherkad/tools/gate.py` (PreToolUse and PostToolUse hook) | Every session, on the tools listed below |
-| 2. Edit capture | `skills/pherkad/tools/capture.py` plus a launchd job; four sources: chat transcripts, slides, files, Gmail | 03:30 nightly, no model call |
+| 2. Edit capture | `skills/pherkad/tools/capture.py` plus a launchd job; four sources: chat transcripts, slides and their comments, files, Gmail | 03:30 nightly, no model call; a `UserPromptSubmit` hook copies the comments out of any deck Brian attaches, at once |
 | 3. Approvals | a gatherer in `/Users/moriarty/code/overnight/bin/daily` | Section 1 of the 04:30 build |
 | 4. Counts | the same gatherer | Section 5 of the 04:30 build |
 | 5. Deck check | `skills/pherkad/tools/deckcheck.py`, called by each builder | At the end of every deck build, and in the daily sweep |
@@ -273,9 +273,42 @@ conversation's text, not reliably the original file.
    read all 33 Keynote files with no failure. PowerPoint files are read as in route 2. The before
    text is the commented file's own slide text, since that file is the deck as sent. The after
    text is the same slide, matched by word overlap, in the session's next build: the builder
-   snapshot after the comment's date, or the builder's committed output at the next commit. On
-   week 11 that pairing works: of 23 commented slides, the rebuild in commit `ace9add` ("deck
-   rebuilt from Brian's two review rounds") changed 19 and removed 3.
+   snapshot after the comment's date, or the builder's committed output at the next commit.
+
+   *Captured when attached, not overnight.* In the Code tab an upload is not a copy: the message
+   carries an `@"/Users/moriarty/Downloads/....key"` path to the file where Brian saved it, and
+   Downloads is a cleanup target. So a `UserPromptSubmit` hook (`capture.py --at-prompt`) looks
+   for `@`-paths to .key and .pptx files in Brian's message and copies every comment and every
+   slide's text into the gate folder before the turn starts. The reader takes 0.03 seconds on
+   the 44-slide week 11 deck, so the hook costs nothing noticeable, and like the gate it fails
+   open with a logged warning. The nightly pass still sweeps the folders for commented decks that
+   were never attached in the Code tab, such as the August ones sent through claude.ai.
+
+   *Edits made in the returned deck.* A returned deck is hand-saved by definition, and Brian
+   sometimes edits text in place as well as commenting ("here are the edits and a few
+   comments"). Each slide's text is diffed against the build snapshot of the deck the session
+   sent, and the changed phrases go to `corrections.py mine` with surface `slides`, like any
+   other edit.
+
+   *The two worked cases.*
+
+   | Deck | Attached | Comments | Wording | Fact | Design | Content | Next build | Commented slides changed or removed |
+   |---|---|---|---|---|---|---|---|---|
+   | Week 4, `week-04-critique-redesign-stevens-comments.key` | 2026-08-09 18:57, claude.ai | 21 | 3 | 0 | 1 | 17 | `5372fe8`, 59 minutes later, "v0.5 pass + Brian's deck markup" | 21 of 21 (18 changed, 3 removed) |
+   | Week 11, round 1, `week-11-capstone-launch-stevens.key` | 2026-11-11 12:52 EST, Code tab, "here are the edits and a few comments" | 5 | 0 | 2 | 0 | 3 | `ace9add` at 15:10, "deck rebuilt from Brian's two review rounds" | 5 of 5 (4 changed, 1 removed) |
+   | Week 11, round 2, `week-11-capstone-launch-stevens 2.key` | 2026-11-11 14:00 EST, Code tab, "lots of comments" | 23 | 8 | 2 | 0 | 13 | `ace9add` | 22 of 23 (19 changed, 3 removed) |
+
+   In both weeks the deck the session sent was an uncommitted build: the committed week 11 deck
+   before the review (`e8f819f`, 32 slides) shares almost no slide text with the 43-slide deck
+   Brian commented on, and the last committed week 4 deck before his markup dates from May. So
+   for these past cases the commented file stands in for the deck as sent, and Brian's in-place
+   edits in it cannot be separated from what the session wrote. From now on the snapshot that
+   `deckcheck.py` writes at every build supplies the deck as sent, which is what makes the
+   in-place edits minable. The two week 11 rounds are the same deck (39 of 43 slides identical),
+   so round 2 was a second, fuller pass rather than a reply to a rebuild. The same session also
+   holds chat comments on named slides that afternoon ("retro slide is worded in a way that is
+   hard to understand", "slide 32 should include enterprise size as well"), which route 4
+   captures.
 2. *Comments in .pptx files*, mainly Google Slides exports. `capture.py` reads
    `ppt/comments/comment*.xml` with `ppt/commentAuthors.xml`, and the modern
    `ppt/comments/modernComment_*.xml` with `ppt/authors.xml`, maps each comment to its slide
