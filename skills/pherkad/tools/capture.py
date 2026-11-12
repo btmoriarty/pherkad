@@ -349,7 +349,9 @@ def _chat_session(cfg, store, f, cwd, rows, since, done, snaps, stats):
         changed = [m for m in matched if m[1] < 0.999]
         if len(matched) >= 2 and changed and not fiction:
             first = matched[0][0]
-            lead_txt = full[: full.find(us[first][:40])] if us[first][:40] in full else ""
+            full_n = " ".join(norm(full).split())
+            probe = " ".join(us[first].split())[:40]
+            lead_txt = full_n[: full_n.find(probe)] if probe in full_n else ""
             lead_txt = lead_txt[-300:]
             lead = "other" if LEAD_OTHER.search(lead_txt) else "edit" if LEAD_EDIT.search(lead_txt) else "none"
             span = "\n".join(us[matched[0][0]: matched[-1][0] + 1])
@@ -429,6 +431,9 @@ def find_decks(cfg: dict) -> list[str]:
     out = []
     skip = {"node_modules", ".git", ".venv", "worktrees", "site-packages", "_to_delete", "outputs"}
     for root in cfg.get("deck_roots", []):
+        if not os.path.isdir(root):
+            continue
+        os.listdir(root)  # a root the job may not read (macOS privacy) fails the source instead of looking empty
         for dp, dn, fn in os.walk(root):
             dn[:] = [d for d in dn if d not in skip and not d.endswith((".key", ".app"))]
             if "/.claude/sessions" in dp or "/Index" in dp:
@@ -646,7 +651,7 @@ def google_results(cfg: dict) -> list[dict]:
                     continue
                 with open(f, encoding="utf-8", errors="replace") as fh:
                     head = fh.read(200_000)
-                if marker not in head:
+                if marker not in head or not _opens_with(f, marker):
                     continue
                 calls, rows = {}, []
                 with open(f, encoding="utf-8", errors="replace") as fh:
@@ -668,6 +673,22 @@ def google_results(cfg: dict) -> list[dict]:
             except OSError:
                 continue
     return out
+
+
+def _opens_with(path: str, marker: str) -> bool:
+    """Whether the session's first user message starts with the marker (a session that only
+    talks about the marker does not count)."""
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            if not _ROW.search(line):
+                continue
+            try:
+                d = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if d.get("type") == "user":
+                return _text_of((d.get("message") or {}).get("content")).lstrip().startswith(marker)
+    return False
 
 
 def _result_json(res):
