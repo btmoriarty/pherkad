@@ -407,6 +407,15 @@ also covers live Google Slides comments with no model run.
 
 ## 3. Approvals in section 1
 
+As built (2026-11-12): captured candidates do not go straight into the ledger. They stage in
+`candidates.jsonl` in the private gate folder, and section 1 lists them grouped by the message,
+deck or file they came from, with one accept and one reject command per group
+(`capture.py accept|reject --config ... GROUP`). Accept moves the group into the ledger, or into
+the private ledger when its source is private, and runs the corpus trial for each phrase-level
+record; reject drops it. This keeps a noisy backfill, and any Heron or FAccT text, out of the
+pushed ledger until Brian has looked at it. The ledger records then follow the flow below.
+
+
 A new gatherer reads both ledgers and lists each pending record under "Voice rules to approve":
 the before and after, the source, the kind, the trial count (hits per 1,000 words on the saga
 corpus, and whether its fires and clean examples hold), and the exact command:
@@ -487,8 +496,7 @@ not count, a verbatim quote with a question, a curly-quote-only change, an email
 marks, a compaction summary); the slide snapshot diff on a deck whose revision went up and on a
 renamed copy; Gmail pairing from a fixture log and a fixture mbox; the three labels; the
 private-ledger split; and the zero-not-missing source counts. For comments: a Keynote file with
-comments (a two-slide deck with two comments, made once in Keynote with neutral text and checked in as
-a fixture) read by the IWA reader
+comments (built inside the test as Keynote's own format: protobuf objects in snappy chunks in a zip) read by the IWA reader
 with its author and slide text, the after text found in a later build; a legacy and a modern
 .pptx comment part built in the test, authors other than Brian dropped, the response taken from
 the latest deck of the family, the keyword sort on the survey's real comment texts, a recorded

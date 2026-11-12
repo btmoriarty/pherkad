@@ -951,7 +951,7 @@ def report(cfg: dict, days: int = 7) -> dict:
                                 "trial": {"hits": t.get("hits"), "per_1k_words": t.get("per_1k_words"),
                                           "problems": len(t.get("example_problems") or [])} if t else None,
                                 "promote": cmd,
-                                "retire": f"python3 {os.path.join(HERE, 'corrections.py')} retire --ledger {lp} {r['id']} --reason \"...\""})
+                                "retire": f"python3 {os.path.join(HERE, 'corrections.py')} retire --ledger {lp} {r['id']} --reason \"not a rule (daily review)\""})
     today = datetime.date.today()
     per_day = []
     for k in range(days):
