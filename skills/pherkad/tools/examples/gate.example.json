@@ -1,0 +1,39 @@
+{
+  "_comment": "Example config for gate.py and capture.py; copy it outside the repository, set the paths, and pass it with --config. Server ids are your connectors' ids from their tool names (mcp__<id>__tool).",
+  "log_dir": "/Users/you/Documents/voice-profile/gate",
+  "ledger": "/Users/you/code/pherkad/corrections.jsonl",
+  "private_ledger": "/Users/you/Documents/voice-profile/gate/corrections.private.jsonl",
+  "corpus": {
+    "dirs": ["/Users/you/el_loco_lobo/canon", "/Users/you/el_loco_lobo/deliverables"],
+    "config": "/Users/you/el_loco_lobo/tools/voice_config.json",
+    "exclude": "[0-9][0-9]-*.md"
+  },
+  "servers": {
+    "2f0ca6eb-7397-4853-96dc-efb841935b03": "gmail",
+    "76d97d75-4caf-4aa7-bd81-c1bfcebea6df": "slack",
+    "f67872d2-9e26-47aa-88f8-2916353e75c1": "drive",
+    "61bc7810-4007-4231-863a-a6ec190a4fda": "gdocs",
+    "1a59c906-04da-521d-bda7-7f71b9f9e01c": "claude-docs"
+  },
+  "paths": {
+    "extensions": [".md", ".txt", ".html", ".htm", ".eml"],
+    "include_roots": ["/Users/you/Documents/"],
+    "code_root": "/Users/you/code/",
+    "code_folders": ["deliverables", "drafts", "outbox", "submissions", "proposals", "talk-materials", "lectures", "outreach-materials", "docs"],
+    "default_surface": "post",
+    "exclude_names": ["CLAUDE.md", "CLAUDE.local.md", "MEMORY.md", "HANDOFF.md", "CHANGELOG.md", "voice-rules.md", "voice-authoring.md", "Voice_Profile.md", "voice-intake.md", "CAPTURED.md"],
+    "exclude": ["*/.claude/*", "*/.claude-edu/*", "/private/tmp/*", "/tmp/*", "*/tests/*", "*/fixtures/*", "*/test_*", "/Users/you/Documents/voice-profile/*", "*/captures/*", "*/transcripts/*", "*/node_modules/*", "/Users/you/code/pherkad/*", "/Users/you/code/session-hygiene/voice/*"],
+    "routes": [
+      {"prefix": "/Users/you/el_loco_lobo/canon/", "config": "/Users/you/el_loco_lobo/tools/voice_config.json"},
+      {"prefix": "/Users/you/el_loco_lobo/deliverables/", "config": "/Users/you/el_loco_lobo/tools/voice_config.json"}
+    ]
+  },
+  "private": {
+    "words": ["ProjectX"],
+    "paths": ["projectx"],
+    "recipients": []
+  },
+  "transcripts": ["/Users/you/.claude/projects", "/Users/you/.claude-edu/projects"],
+  "deck_roots": ["/Users/you/Downloads", "/Users/you/Desktop", "/Users/you/Documents", "/Users/you/code", "/Users/you/Library/Application Support/Claude/local-agent-mode-sessions"],
+  "google_session_marker": "pherkad-google-capture"
+}

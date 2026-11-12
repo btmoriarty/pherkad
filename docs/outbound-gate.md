@@ -1,8 +1,7 @@
 # Outbound gate and edit capture: design
 
 Drafted 2026-11-12 after the scan in `/Users/moriarty/code/pherkad/LANDSCAPE.md` (decision:
-extend pherkad, per component). Nothing below is built until Brian approves it. The open
-decisions are at the end.
+extend pherkad, per component). Approved by Brian the same day; his decisions are at the end.
 
 ## The problem
 
@@ -497,16 +496,22 @@ the latest deck of the family, the keyword sort on the survey's real comment tex
 two snapshots. `test_deckcheck.py`: a two-slide pptx and an HTML deck built in the test.
 All join `tests/run-all.sh`.
 
-## Decisions for Brian
+## Decisions (Brian, 2026-11-12)
 
-1. Fail mode when the gate itself breaks: fail open with a visible warning and a logged count
-   (recommended), or fail closed.
-2. Where the draft log lives. Recommended: `/Users/moriarty/Documents/voice-profile/gate/`,
-   ignored by git so it never reaches the voice-profile remote, with the private ledger beside it.
-   The cost is that it sits on one disk; the durable output is the ledger, and an entry only
-   matters until its pair is mined.
-3. Which Gmail account the connector drafts from, and how capture reads Google: an app password
-   for IMAP (Gmail only), a read-only OAuth token (Gmail and live Slides comments, no model run),
-   or a nightly scheduled session read through its transcript (both, no credential, one small
-   model run a night).
-4. The path rule for Write and Edit as written above, or a narrower opt-in list of folders.
+Brian approved the build on 2026-11-12 ("Yes, nightly session"), with these answers:
+
+1. The gate fails open: a call goes through when the gate itself breaks, with a visible
+   `systemMessage`, a line in the log, and a count in section 5.
+2. The draft log, `comments.jsonl`, the snapshots and the private ledger live in
+   `/Users/moriarty/Documents/voice-profile/gate/`, ignored by git.
+3. Google is read by a nightly scheduled desktop session that calls the Gmail and Drive
+   connectors and leaves their results verbatim in its transcript, which `capture.py` parses. No
+   credential is created, so the account read is whichever one the connectors are signed into.
+   No IMAP app password and no OAuth token.
+4. The path rule for Write and Edit is as written above.
+5. Brian, the same day: "most of the input for training will be my edits and comments. I send
+   some email through my stevens.edu account but very little through gmail". So the build order
+   is chat edits, slides and their comments, and files first. The Gmail reader comes last and is
+   expected to yield little; stevens.edu mail is outside every connector here, and when he
+   pastes a sent stevens.edu message back into chat ("this is the email I sent so voice can
+   learn my small changes"), the chat source already captures it.
