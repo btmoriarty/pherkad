@@ -218,9 +218,82 @@ counter working (`SysCon2026_Moriarty_v3.pptx` is at 3, the HOSL poster at 10). 
 copies that differ from the repository builds (week 5 differs on 18 slides, the SRECon deck on 17)
 are builder output from an earlier or different build: both are at revision 1, the SRECon copy
 still carries python-pptx's default author, and the week 5 repository copy is four days newer. So route (a) would
-have caught no deck in the last 60 days; his slide changes all came through chat, which is why
+have caught no deck in the last 60 days; his edited slide text all came through chat, which is why
 source 1 comes first. Route (a) stays because it costs one snapshot per build and it is the only
-route that sees an edit made in PowerPoint.
+route that sees an edit made in PowerPoint. The revision check missed one thing: comments, below.
+
+### Source 2, continued: slide comments
+
+Brian said on 2026-11-12 that his slide "edits" are sometimes comments. A comment is not a
+before-and-after pair, so it cannot become a lint rule directly. Each one is captured with the
+slide text it sits on and, where one exists, the same slide after he or a session responded.
+
+**What exists.** A survey of every .pptx under the two trees, Downloads and Desktop (338 files,
+run 2026-11-12) found 137 comments in 40 files, every one by Brian, every file a Google Slides
+export (no `docProps/app.xml`, `:` written as `_` in the name), and every file in
+`/Users/moriarty/Downloads`. They date from 2024-01-21 to 2026-04-03. Many repeat, because each
+numbered copy of a deck carries its comments forward: the ten copies of the IEEE SysCon 2026 deck
+hold the same eight or nine. Counted once per deck and comment there are 43 distinct comments
+across 17 decks.
+
+| Kind | Raw | Distinct | Examples |
+|---|---|---|---|
+| Wording | 33 | 5 | "Change term", "Bad term ... we are avoiding desired end state", "Use artifact if possible", `Change this to "The Specification Gap"` |
+| Fact | 20 | 2 | "Check this data accuracy", "This is wrong here and in original" |
+| Design | 3 | 2 | "Make these slides into a table", "Add a callout" |
+| Content | 81 | 34 | "Update", "need a better demo of Index()", "These failure modes need more light" |
+
+In chat, 69 of Brian's short messages in the last 60 days name a slide without pasting text back
+("slide 5 is too words", "slide 29: subtitle sounds like AI", "the language in slide 13 is too
+inaccessible"). A keyword pass sorts 23 of them as wording; a hand read of a sample of 30 put 14
+there. So wording is about one in eight distinct file comments and a third to a half of the
+chat comments, which fits: in Google Slides he leaves to-do notes for himself, and in chat he reacts
+to text a session wrote.
+
+**Three routes.**
+
+1. *Comments in .pptx files.* `capture.py` reads `ppt/comments/comment*.xml` with
+   `ppt/commentAuthors.xml`, and the modern `ppt/comments/modernComment_*.xml` with
+   `ppt/authors.xml`, maps each comment to its slide through the slide relationships, and keeps
+   only comments whose author is Brian. The response is the same slide in the latest deck of the
+   same family (slide titles shared at 0.6 or more), not merely the next numbered copy, because
+   unresolved comments ride forward unchanged: in the SysCon copies only 5 of 40 comment texts sit
+   on a slide whose text later changed. The presented deck, `SysCon2026_Moriarty_v3.pptx`, holds
+   the answers: "desired end state" is gone, "artifact" is in, "time pressure" stayed.
+2. *Comments left live in Google Slides.* The Drive connector's `read_file_content` with
+   `includeComments` returns a deck's text with its comment threads inline, but only inside a
+   session. Retyping is avoidable here: Claude Code writes every tool result verbatim into the
+   session's transcript, so a scheduled desktop session that only calls `list_recent_files` and
+   then `read_file_content` on each presentation changed that day leaves the comments verbatim
+   in its transcript, and `capture.py` parses them from there without any model output in the
+   path. The costs are one small model run a night, a text format the tool's own description says
+   will change (so a parse failure shows as "failed" in section 5, never as zero), and one
+   dispatch that must finish the whole job. `download_file_content` with a .pptx export would
+   reuse route 1's parser, but it returns the deck as base64 into the model's context, which
+   does not fit for a full deck. The alternative with no model run is a read-only Google OAuth
+   token used by `capture.py` directly (Drive `comments.list` gives author, text, quoted text,
+   resolved state and replies); the same token would cover Gmail (question 3).
+3. *Comments in chat that name a slide.* A message that names a slide and does not paste text
+   back is a comment, no longer dropped. Its before text is that slide in the deck the session
+   was working on, taken from the snapshot `deckcheck.py` wrote at the last build before the
+   message; its after text is the same slide at the session's next build. The deck is found from
+   the session's own Bash calls to a known builder. For messages before snapshots exist, the
+   builder's source in git, at the commits either side of the message, gives the slide's string
+   literals before and after.
+
+**Sorting.** Each comment is sorted by keywords into wording (term, word, phrase, language,
+wordy, confusing, "sounds like AI", "reads as", a quoted replacement), fact (accuracy, wrong,
+check, data, correct, number), design (table, callout, layout, box, colour, font, chart
+placement) or content (everything else). Only wording comments feed the voice ledger, as
+judgment records: the comment as the rationale, the slide text before and after as the example,
+surface `slides`, kind `judgment`, so promote writes prose and never a rule. Fact, design and
+content comments are counted, not mined. A mis-sorted comment costs one retire on the daily page.
+
+**Where they live.** Every captured comment, of every kind, is copied with its deck path, the
+deck's sha256, slide number, slide text and response text into `comments.jsonl` in the private
+gate folder at capture time, so nothing depends on a file in Downloads staying put after
+`mac-cleanup` clears it. Wording records also go to the ledger (private ledger when the deck or
+session is private). The first run backfills the 137 comments already in Downloads.
 
 ### Sources 3 and 4: files and Gmail
 
@@ -249,9 +322,15 @@ Records drawn from a private source (a recipient or path matching the private li
 
 ### Reading sent Gmail headlessly
 
-The Gmail connector exists only inside a Claude session, so a launchd job cannot use it.
-A scheduled desktop task could, but its model would retype each sent message into a file, and a
-model retyping text is exactly what corrupts a word-level diff. Two headless routes work:
+The Gmail connector exists only inside a Claude session, so a launchd job cannot use it. A
+scheduled desktop task that wrote sent messages to a file would have its model retype them, and
+a model retyping text is exactly what corrupts a word-level diff. Three routes avoid that:
+
+- **A scheduled session read through its transcript.** The session only calls `search_threads`
+  and `get_thread` for the threads in the draft log; the messages land verbatim in its
+  transcript as tool results, and `capture.py` parses them from there, the same way as the live
+  Slides comments in source 2. No credential is created, at the cost of a small model run a
+  night and a result format that can change without notice.
 
 - **IMAP with a Gmail app password (recommended).** Python's `imaplib` reads `[Gmail]/Sent Mail`;
   Gmail's `X-GM-THRID` extension gives the same thread id the connector returns, so the pairing
@@ -263,7 +342,9 @@ model retyping text is exactly what corrupts a word-level diff. Two headless rou
   and authorises `gmail.readonly` once in a browser. It is more setup, and it is the route if app
   passwords are off for the account.
 
-Which account the connector drafts from decides which route (question 3).
+Which account the connector drafts from, and whether Brian would rather create a credential or
+run a nightly session, decides the route (question 3). The OAuth token is the one choice that
+also covers live Google Slides comments with no model run.
 
 ## 3. Approvals in section 1
 
@@ -296,7 +377,9 @@ distance between draft and sent text per surface. Captured edits are counted by 
 fixed columns, chat, slides, files and Gmail, each printed as 0 when it yielded nothing, so a
 source that has gone quiet or broken shows as a zero rather than a missing row. A source whose
 reader failed that night (an unreadable transcript store, an IMAP login refused) shows "failed"
-in its cell instead of a number. The edit distance is the number that says
+in its cell instead of a number. Slide comments get their own small table, by route (.pptx files,
+live Google Slides, chat) and by kind (wording, fact, design, content), with the same zero and
+"failed" rule; only the wording column feeds the ledger. The edit distance is the number that says
 whether the gate is working: if it does not fall over a month, the gate is catching the wrong
 things.
 
@@ -344,7 +427,11 @@ paste-back with a lead-in, a paste-back of a slide, a pasted review from another
 not count, a verbatim quote with a question, a curly-quote-only change, an email with quote
 marks, a compaction summary); the slide snapshot diff on a deck whose revision went up and on a
 renamed copy; Gmail pairing from a fixture log and a fixture mbox; the three labels; the
-private-ledger split; and the zero-not-missing source counts. `test_deckcheck.py`: a two-slide pptx and an HTML deck built in the test.
+private-ledger split; and the zero-not-missing source counts. For comments: a legacy and a
+modern comment part built in the test, authors other than Brian dropped, the response taken from
+the latest deck of the family, the keyword sort on the survey's real comment texts, a recorded
+`read_file_content` result parsed from a fixture transcript, and a chat slide comment paired with
+two snapshots. `test_deckcheck.py`: a two-slide pptx and an HTML deck built in the test.
 All join `tests/run-all.sh`.
 
 ## Decisions for Brian
@@ -355,6 +442,8 @@ All join `tests/run-all.sh`.
    ignored by git so it never reaches the voice-profile remote, with the private ledger beside it.
    The cost is that it sits on one disk; the durable output is the ledger, and an entry only
    matters until its pair is mined.
-3. Which Gmail account the connector drafts from, and whether you will create an app password
-   for it (IMAP) or prefer the OAuth route.
+3. Which Gmail account the connector drafts from, and how capture reads Google: an app password
+   for IMAP (Gmail only), a read-only OAuth token (Gmail and live Slides comments, no model run),
+   or a nightly scheduled session read through its transcript (both, no credential, one small
+   model run a night).
 4. The path rule for Write and Edit as written above, or a narrower opt-in list of folders.
