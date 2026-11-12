@@ -17,7 +17,7 @@ hand: 20 corrections since 2026-09-27, 19 pending, 1 promoted, and nothing asks 
 | Part | New code | Where it runs |
 |---|---|---|
 | 1. Outbound gate | `skills/pherkad/tools/gate.py` (PreToolUse and PostToolUse hook) | Every session, on the tools listed below |
-| 2. Edit capture | `skills/pherkad/tools/capture.py` plus a launchd job | 03:30 nightly, no model call |
+| 2. Edit capture | `skills/pherkad/tools/capture.py` plus a launchd job; four sources: chat transcripts, slides, files, Gmail | 03:30 nightly, no model call |
 | 3. Approvals | a gatherer in `/Users/moriarty/code/overnight/bin/daily` | Section 1 of the 04:30 build |
 | 4. Counts | the same gatherer | Section 5 of the 04:30 build |
 | 5. Deck check | `skills/pherkad/tools/deckcheck.py`, called by each builder | At the end of every deck build, and in the daily sweep |
@@ -126,8 +126,105 @@ never leave the Mac (question 2 below).
 
 ## 2. Edit capture, nightly
 
-`capture.py` runs at 03:30 from a launchd job, with no model call. For each logged entry not yet
-paired and newer than 14 days:
+`capture.py` runs at 03:30 from a launchd job, with no model call. It reads four sources, in this
+order, because the first two are where Brian's edits actually arrive (revised 2026-11-12 after he
+said his inline chat edits and slide changes were not being used at all).
+
+### Source 1: inline edits in chat
+
+`capture.py` reads the Claude Code transcripts of both seats,
+`/Users/moriarty/.claude/projects/*/*.jsonl` and `/Users/moriarty/.claude-edu/projects/*/*.jsonl`,
+for sessions changed since its last run. Only interactive sessions count (entrypoint
+`claude-desktop` or `cli`); headless runs and rows whose turn origin is `sdk` (scheduled tasks,
+messages from other sessions) are skipped, and so are compaction summaries.
+
+**How Brian marks his edits.** A survey of the last 60 days (17,487 of his messages in 8,686
+interactive sessions, run 2026-11-12) settled the matcher. He does not use brackets,
+strikethrough or tracked-change marks. He pastes the draft back with his changes made in place,
+under a short lead-in line: "I revised:", "edit:", "small rev:", "minor and partial revisions",
+"I want to go back to more like this:", "For slide 2 this is closer but still a little clunky",
+"this is the email I sent so voice can learn my small changes". Slide edits come the same way,
+often with the deck's own markers kept (`[SLIDE 3: the mirror]`). Instructions of the form
+`change "X" to "Y"` or `replace "X" with "Y"` did not appear in his own typed words in the 60
+days; the matches were reviews from other tools that he pasted in, which are not his
+corrections.
+
+**The matcher.**
+
+1. For each of Brian's messages, split it into sentences and find, for each, the closest
+   sentence in the assistant's earlier text in the same session (word overlap, the measure
+   `mine_pairs` uses).
+2. The message is a paste-back with edits when at least two sentences match at 0.6 or above and
+   at least one of them is changed (below 1.0). Its draft is the assistant block most of them
+   came from, cut to the span he pasted; its edited side is his matching span, without the
+   lead-in.
+3. Before the diff, both sides are normalised: curly quotes folded to straight ones, email
+   quote marks (`>`) and Markdown bold stripped. Without this, one candidate in eight was a
+   quote-style change.
+4. The lead-in decides whether it counts. A lead-in naming an edit (revised, rev, edit, version,
+   changes, closer, like this, I sent) counts. A lead-in naming someone else's text (feedback,
+   comments, review, recommend, "came back with", "what is this") does not. A message with no
+   lead-in counts only when the pasted span is not a web page or terminal output, and its
+   candidates are marked "no lead-in" on the daily page so Brian can retire a wrong one in one
+   step.
+5. A `change "X" to "Y"`, `replace "X" with "Y"` or `"X" -> "Y"` line counts when it is in
+   Brian's own typed text, outside any pasted block, and X occurs in the assistant's earlier
+   text.
+6. A message that names a slide is mined with surface `slides`; others with the surface of the
+   draft (email when it opens with a greeting, post otherwise). Saga sessions and "Yours: /
+   Mine:" exchanges are fiction and go to no personal ledger. Heron sessions and messages naming
+   Heron or FAccT go to the private ledger.
+
+**What the last 60 days would have yielded.** 123 messages were paste-backs with edits. With the
+normalisation, 80 of them produce candidates, 408 phrase candidates in all. By lead-in:
+
+| Lead-in | Messages with candidates | Candidates | Personal ledger | Private ledger |
+|---|---|---|---|---|
+| names an edit | 23 | 155 | 131 | 23 (one fiction pair dropped) |
+| none | 49 | 236 | 120 | 116 |
+| names someone else's text (excluded) | 8 | 17 | 0 | 0 |
+
+A sample of the no-lead-in group was about half real edits (a revised email, his edited talk
+abstract) and half pasted pages, terminal output or requests ("simplify and update this"),
+which is why those are labelled rather than trusted. So the chat source would have produced
+roughly 25 to 50 edited drafts and 150 to 270 candidates over 60 days, against the 20 records
+the ledger holds from three months of hand entry. That is two to four candidates a day for the
+daily page, so section 1 groups them by message with one retire-all line per message.
+
+### Source 2: slides
+
+Decks are built from source, so Brian's slide changes arrive by one of two routes: he edits a
+built .pptx and saves it, or he tells a session in chat and the session ports the change into the
+builder. Both are covered.
+
+**(a) Hand-saved decks.** Every builder already calls `deckcheck.py` as its last step (part 5).
+That call also writes a snapshot of each slide's text and speaker notes, with the deck's
+`cp:revision`, to the gate folder. Nightly, `capture.py` looks at every .pptx under the two trees,
+`/Users/moriarty/Downloads` and `/Users/moriarty/Desktop` changed since its last run. A deck is
+hand-saved when its revision is above the snapshot's (PowerPoint raises `cp:revision` on every
+save; pptxgenjs and python-pptx always write 1). A deck saved under a new name, such as
+`Week 6 tonight - 7 Oct.pptx` in Downloads, has no snapshot of its own, so it is matched to the
+snapshot whose slide titles it shares at 0.6 or more. Each changed slide is diffed against the
+snapshot, text and notes separately, and the pairs go to `corrections.py mine` with surface
+`slides`.
+
+**(b) Changes ported from chat.** When Brian pastes a slide back with his edits ("For slide 2
+this is closer", "[SLIDE 3: the mirror]"), source 1 catches it, and a message that names a slide
+is mined with surface `slides`. The builder commit that follows adds nothing new.
+
+What the last 60 days show (survey of 2026-11-12): 72 .pptx files changed, and every one has
+`cp:revision` 1, so none was saved by hand in PowerPoint. Brian's older hand-made decks show the
+counter working (`SysCon2026_Moriarty_v3.pptx` is at 3, the HOSL poster at 10). The Downloads
+copies that differ from the repository builds (week 5 differs on 18 slides, the SRECon deck on 17)
+are builder output from an earlier or different build: both are at revision 1, the SRECon copy
+still carries python-pptx's default author, and the week 5 repository copy is four days newer. So route (a) would
+have caught no deck in the last 60 days; his slide changes all came through chat, which is why
+source 1 comes first. Route (a) stays because it costs one snapshot per build and it is the only
+route that sees an edit made in PowerPoint.
+
+### Sources 3 and 4: files and Gmail
+
+For each gate-log entry not yet paired and newer than 14 days:
 
 - **Gmail drafts.** It reads Brian's sent mail in the draft's thread and pairs the logged draft
   with the message he sent (quoted history stripped by the code `samples.py` already uses).
@@ -195,7 +292,11 @@ list.
 
 One table per day for the last seven days: texts gated, passed, blocked, escalated to Brian,
 gate failures, then corrections captured, trialled, promoted and retired, and the mean edit
-distance between draft and sent text per surface. The edit distance is the number that says
+distance between draft and sent text per surface. Captured edits are counted by source in four
+fixed columns, chat, slides, files and Gmail, each printed as 0 when it yielded nothing, so a
+source that has gone quiet or broken shows as a zero rather than a missing row. A source whose
+reader failed that night (an unreadable transcript store, an IMAP login refused) shows "failed"
+in its cell instead of a number. The edit distance is the number that says
 whether the gate is working: if it does not fall over a month, the gate is catching the wrong
 things.
 
@@ -238,8 +339,12 @@ own scan and its own cost limit, since it puts a model call on every send.
 `test_gate.py`: each tool's text extraction from a recorded payload; the path rule (gated,
 excluded, saga-routed); added-lines-only for Edit and Write; deny, pass and escalate-on-third;
 fail-open and fail-closed on a broken config; the sdk skip for Write; the 300 ms and 20 ms
-budgets. `test_capture.py`: pairing from a fixture log and a fixture mbox, the three labels, the
-private-ledger split. `test_deckcheck.py`: a two-slide pptx and an HTML deck built in the test.
+budgets. `test_capture.py`: the chat matcher on fixture transcripts built from the survey's shapes (a
+paste-back with a lead-in, a paste-back of a slide, a pasted review from another tool that must
+not count, a verbatim quote with a question, a curly-quote-only change, an email with quote
+marks, a compaction summary); the slide snapshot diff on a deck whose revision went up and on a
+renamed copy; Gmail pairing from a fixture log and a fixture mbox; the three labels; the
+private-ledger split; and the zero-not-missing source counts. `test_deckcheck.py`: a two-slide pptx and an HTML deck built in the test.
 All join `tests/run-all.sh`.
 
 ## Decisions for Brian
