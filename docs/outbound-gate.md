@@ -224,43 +224,67 @@ route that sees an edit made in PowerPoint. The revision check missed one thing:
 
 ### Source 2, continued: slide comments
 
-Brian said on 2026-11-12 that his slide "edits" are sometimes comments. A comment is not a
-before-and-after pair, so it cannot become a lint rule directly. Each one is captured with the
-slide text it sits on and, where one exists, the same slide after he or a session responded.
+Brian said on 2026-11-12 that his slide "edits" are sometimes comments, and that the main ones
+are on decks a session built and sent him: he opens the .pptx in Keynote or PowerPoint, comments
+on it, and uploads it back into a chat. A comment is not a before-and-after pair, so it cannot
+become a lint rule directly. Each one is captured with the slide text it sits on, which is the
+deck as the session sent it, and with the same slide in the next version the session built.
 
-**What exists.** A survey of every .pptx under the two trees, Downloads and Desktop (338 files,
-run 2026-11-12) found 137 comments in 40 files, every one by Brian, every file a Google Slides
-export (no `docProps/app.xml`, `:` written as `_` in the name), and every file in
-`/Users/moriarty/Downloads`. They date from 2024-01-21 to 2026-04-03. Many repeat, because each
-numbered copy of a deck carries its comments forward: the ten copies of the IEEE SysCon 2026 deck
-hold the same eight or nine. Counted once per deck and comment there are 43 distinct comments
-across 17 decks.
+**What exists** (surveys of 2026-11-12, every .key and .pptx under the two trees, Downloads,
+Desktop and the Cowork session folders).
 
-| Kind | Raw | Distinct | Examples |
-|---|---|---|---|
-| Wording | 33 | 5 | "Change term", "Bad term ... we are avoiding desired end state", "Use artifact if possible", `Change this to "The Specification Gap"` |
-| Fact | 20 | 2 | "Check this data accuracy", "This is wrong here and in original" |
-| Design | 3 | 2 | "Make these slides into a table", "Add a callout" |
-| Content | 81 | 34 | "Update", "need a better demo of Index()", "These failure modes need more light" |
+| Where | Files with comments | Comments | Distinct | Wording | Fact | Design | Content |
+|---|---|---|---|---|---|---|---|
+| Decks a session sent, commented in Keynote and uploaded back | 10 | 120 | 91 | 29 | 6 | 2 | 54 |
+| Google Slides exports in Downloads | 40 | 137 | 43 | 5 | 2 | 2 | 34 |
+| Chat messages naming a slide, last 60 days | 69 messages | 69 | 69 | 23 to 32 | | | |
 
-In chat, 69 of Brian's short messages in the last 60 days name a slide without pasting text back
-("slide 5 is too words", "slide 29: subtitle sounds like AI", "the language in slide 13 is too
-inaccessible"). A keyword pass sorts 23 of them as wording; a hand read of a sample of 30 put 14
-there. So wording is about one in eight distinct file comments and a third to a half of the
-chat comments, which fits: in Google Slides he leaves to-do notes for himself, and in chat he reacts
-to text a session wrote.
+The uploaded decks are the FA550 lectures for weeks 2, 3, 4, 5, 6 and 11 (August 2026 and
+2026-11-11), all saved as Keynote files in `/Users/moriarty/Downloads` with names such as
+`week-04-critique-redesign-stevens-comments.key`. Week 11's two review rounds were also copied by
+a session into `lectures/week-11-capstone-launch/edits/` in the course repository. Every comment
+is by Brian. Distinct counts drop the repeats in copied files. The wording comments read like
+this: "Don't like word choice", "AI speak", "Cheesy", "Obtuse wording", "No way I would say or do
+this", "This sounds like an instruction for me on a slide students are seeing", "The forward
+look? I guess you stopped doing voice passes before showing me a draft". Nine of the content
+comments are one recurring complaint, a term used before students have been told what it means
+("Students will not remember what the five questions are"); that is a candidate for a structural
+check later, not a voice rule. The Google Slides exports (2024-01 to 2026-04) are mostly to-do
+notes he left himself ("Update"), which is why so few are wording.
 
-**Three routes.**
+**Where the uploads went.** Week 11's decks were attached in a Code-tab chat by path
+(`@"/Users/moriarty/Downloads/week-11-capstone-launch-stevens.key"`). The August decks appear in
+no Code-tab or Cowork transcript on either seat and in no Cowork `uploads/` folder, so they were
+uploaded in claude.ai chats, where the attachment lives on the server only. The Cowork folders
+hold one Keynote upload (`AITC_Slides.key`, no comments) and no .pptx, and none of their 1,433
+Markdown uploads is a converted deck. Capture therefore does not depend on the upload at all: in
+every case Brian saved the commented file on the Mac before uploading it, and capture reads that
+file. A deck commented on another device and uploaded straight to claude.ai would be missed;
+reaching it would need the claude.ai data export, done by hand, and that export carries a
+conversation's text, not reliably the original file.
 
-1. *Comments in .pptx files.* `capture.py` reads `ppt/comments/comment*.xml` with
-   `ppt/commentAuthors.xml`, and the modern `ppt/comments/modernComment_*.xml` with
-   `ppt/authors.xml`, maps each comment to its slide through the slide relationships, and keeps
-   only comments whose author is Brian. The response is the same slide in the latest deck of the
-   same family (slide titles shared at 0.6 or more), not merely the next numbered copy, because
-   unresolved comments ride forward unchanged: in the SysCon copies only 5 of 40 comment texts sit
-   on a slide whose text later changed. The presented deck, `SysCon2026_Moriarty_v3.pptx`, holds
-   the answers: "desired end state" is gone, "artifact" is in, "time pressure" stayed.
-2. *Comments left live in Google Slides.* The Drive connector's `read_file_content` with
+**Four routes.**
+
+1. *Decks sent for review and uploaded back with comments* (the main route). `capture.py` reads
+   commented .key and .pptx files wherever they are saved: Downloads, Desktop, the two trees and
+   the Cowork folders. Keynote files are read with a small stdlib reader (Keynote's IWA format is
+   snappy-compressed protobuf inside a zip); a comment is message type 3056, its author is
+   resolved through a reference, and its slide text comes from the same slide part. The survey
+   read all 33 Keynote files with no failure. PowerPoint files are read as in route 2. The before
+   text is the commented file's own slide text, since that file is the deck as sent. The after
+   text is the same slide, matched by word overlap, in the session's next build: the builder
+   snapshot after the comment's date, or the builder's committed output at the next commit. On
+   week 11 that pairing works: of 23 commented slides, the rebuild in commit `ace9add` ("deck
+   rebuilt from Brian's two review rounds") changed 19 and removed 3.
+2. *Comments in .pptx files*, mainly Google Slides exports. `capture.py` reads
+   `ppt/comments/comment*.xml` with `ppt/commentAuthors.xml`, and the modern
+   `ppt/comments/modernComment_*.xml` with `ppt/authors.xml`, maps each comment to its slide
+   through the slide relationships, and keeps only Brian's. The response is the same slide in the
+   latest deck of the same family, not merely the next numbered copy, because unresolved
+   comments ride forward unchanged: in the SysCon copies only 5 of 40 comment texts sit on a
+   slide whose text later changed. The presented deck, `SysCon2026_Moriarty_v3.pptx`, holds the
+   answers: "desired end state" is gone, "artifact" is in, "time pressure" stayed.
+3. *Comments left live in Google Slides.* The Drive connector's `read_file_content` with
    `includeComments` returns a deck's text with its comment threads inline, but only inside a
    session. Retyping is avoidable here: Claude Code writes every tool result verbatim into the
    session's transcript, so a scheduled desktop session that only calls `list_recent_files` and
@@ -269,11 +293,11 @@ to text a session wrote.
    path. The costs are one small model run a night, a text format the tool's own description says
    will change (so a parse failure shows as "failed" in section 5, never as zero), and one
    dispatch that must finish the whole job. `download_file_content` with a .pptx export would
-   reuse route 1's parser, but it returns the deck as base64 into the model's context, which
+   reuse route 2's parser, but it returns the deck as base64 into the model's context, which
    does not fit for a full deck. The alternative with no model run is a read-only Google OAuth
    token used by `capture.py` directly (Drive `comments.list` gives author, text, quoted text,
    resolved state and replies); the same token would cover Gmail (question 3).
-3. *Comments in chat that name a slide.* A message that names a slide and does not paste text
+4. *Comments in chat that name a slide.* A message that names a slide and does not paste text
    back is a comment, no longer dropped. Its before text is that slide in the deck the session
    was working on, taken from the snapshot `deckcheck.py` wrote at the last build before the
    message; its after text is the same slide at the session's next build. The deck is found from
@@ -281,19 +305,22 @@ to text a session wrote.
    builder's source in git, at the commits either side of the message, gives the slide's string
    literals before and after.
 
-**Sorting.** Each comment is sorted by keywords into wording (term, word, phrase, language,
-wordy, confusing, "sounds like AI", "reads as", a quoted replacement), fact (accuracy, wrong,
-check, data, correct, number), design (table, callout, layout, box, colour, font, chart
-placement) or content (everything else). Only wording comments feed the voice ledger, as
-judgment records: the comment as the rationale, the slide text before and after as the example,
-surface `slides`, kind `judgment`, so promote writes prose and never a rule. Fact, design and
-content comments are counted, not mined. A mis-sorted comment costs one retire on the daily page.
+**Sorting.** Each comment is sorted by keywords into wording (term, word, wording, phrase,
+language, wordy, obtuse, cheesy, confusing, "sounds like AI", "AI speak", "reads as", "would I
+say", a quoted replacement), fact (accuracy, wrong, check, source, data, correct, number, "is
+this actually"), design (table, matrix, callout, layout, box, visual, colour, font) or content
+(everything else). The hand sort of the 91 uploaded-deck comments above is the test set for the
+keyword sort. Only wording comments feed the voice ledger, as judgment records: the comment as
+the rationale, the slide text before and after as the example, surface `slides`, kind
+`judgment`, so promote writes prose and never a rule. Fact, design and content comments are
+counted, not mined. A mis-sorted comment costs one retire on the daily page.
 
 **Where they live.** Every captured comment, of every kind, is copied with its deck path, the
-deck's sha256, slide number, slide text and response text into `comments.jsonl` in the private
-gate folder at capture time, so nothing depends on a file in Downloads staying put after
+deck's sha256, slide, slide text and response text into `comments.jsonl` in the private gate
+folder at capture time, so nothing depends on a file in Downloads staying put after
 `mac-cleanup` clears it. Wording records also go to the ledger (private ledger when the deck or
-session is private). The first run backfills the 137 comments already in Downloads.
+session is private). The first run backfills the 257 comments already found; until then both
+surveys' records are kept in the voice-profile repository.
 
 ### Sources 3 and 4: files and Gmail
 
@@ -377,8 +404,8 @@ distance between draft and sent text per surface. Captured edits are counted by 
 fixed columns, chat, slides, files and Gmail, each printed as 0 when it yielded nothing, so a
 source that has gone quiet or broken shows as a zero rather than a missing row. A source whose
 reader failed that night (an unreadable transcript store, an IMAP login refused) shows "failed"
-in its cell instead of a number. Slide comments get their own small table, by route (.pptx files,
-live Google Slides, chat) and by kind (wording, fact, design, content), with the same zero and
+in its cell instead of a number. Slide comments get their own small table, by route (decks uploaded
+back, .pptx files, live Google Slides, chat) and by kind (wording, fact, design, content), with the same zero and
 "failed" rule; only the wording column feeds the ledger. The edit distance is the number that says
 whether the gate is working: if it does not fall over a month, the gate is catching the wrong
 things.
@@ -427,8 +454,11 @@ paste-back with a lead-in, a paste-back of a slide, a pasted review from another
 not count, a verbatim quote with a question, a curly-quote-only change, an email with quote
 marks, a compaction summary); the slide snapshot diff on a deck whose revision went up and on a
 renamed copy; Gmail pairing from a fixture log and a fixture mbox; the three labels; the
-private-ledger split; and the zero-not-missing source counts. For comments: a legacy and a
-modern comment part built in the test, authors other than Brian dropped, the response taken from
+private-ledger split; and the zero-not-missing source counts. For comments: a Keynote file with
+comments (a two-slide deck with two comments, made once in Keynote with neutral text and checked in as
+a fixture) read by the IWA reader
+with its author and slide text, the after text found in a later build; a legacy and a modern
+.pptx comment part built in the test, authors other than Brian dropped, the response taken from
 the latest deck of the family, the keyword sort on the survey's real comment texts, a recorded
 `read_file_content` result parsed from a fixture transcript, and a chat slide comment paired with
 two snapshots. `test_deckcheck.py`: a two-slide pptx and an HTML deck built in the test.
