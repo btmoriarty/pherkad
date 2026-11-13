@@ -642,7 +642,9 @@ def files_source(cfg: dict, store: Store, log: list[dict], stats: dict) -> None:
 def google_results(cfg: dict) -> list[dict]:
     """Tool results from the nightly Google session: transcripts whose first user message carries
     the marker. Returned verbatim: [{'tool', 'input', 'result', 'ts'}]."""
-    marker = cfg.get("google_session_marker", "pherkad-google-capture")
+    m = cfg.get("google_session_marker", "pherkad-google-capture")
+    # the scheduled task's first message is its prompt body, which may not carry the short marker
+    markers = [m] if isinstance(m, str) else list(m)
     out = []
     for root in cfg.get("transcripts", []):
         for f in glob.glob(os.path.join(root, "*", "*.jsonl")):
@@ -651,7 +653,7 @@ def google_results(cfg: dict) -> list[dict]:
                     continue
                 with open(f, encoding="utf-8", errors="replace") as fh:
                     head = fh.read(200_000)
-                if marker not in head or not _opens_with(f, marker):
+                if not any(k in head for k in markers) or not _opens_with(f, markers):
                     continue
                 calls, rows = {}, []
                 with open(f, encoding="utf-8", errors="replace") as fh:
@@ -675,7 +677,7 @@ def google_results(cfg: dict) -> list[dict]:
     return out
 
 
-def _opens_with(path: str, marker: str) -> bool:
+def _opens_with(path: str, markers) -> bool:
     """Whether the session's first user message starts with the marker (a session that only
     talks about the marker does not count)."""
     with open(path, encoding="utf-8", errors="replace") as fh:
@@ -687,7 +689,8 @@ def _opens_with(path: str, marker: str) -> bool:
             except json.JSONDecodeError:
                 continue
             if d.get("type") == "user":
-                return _text_of((d.get("message") or {}).get("content")).lstrip().startswith(marker)
+                first = _text_of((d.get("message") or {}).get("content"))[:2000]
+                return any(k in first for k in ([markers] if isinstance(markers, str) else markers))
     return False
 
 

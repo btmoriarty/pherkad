@@ -193,12 +193,15 @@ class FilesAndGmail(Base):
         thread = {"messages": [{"threadId": "th9", "labelIds": ["SENT"],
                                 "plaintextBody": "Hi all,\n\nMost of you should finish the first part in class this week.\n\nBrian"}]}
         self.session("google", [
-            row("u", "pherkad-google-capture: read sent threads", "2026-11-12T04:00:00Z"),
+            row("u", "<scheduled-task>This is the nightly Google read for pherkad's edit capture.</scheduled-task>",
+                "2026-11-12T04:00:00Z"),
             json.dumps({"type": "assistant", "entrypoint": "claude-desktop", "timestamp": "2026-11-12T04:01:00Z",
                         "message": {"content": [{"type": "tool_use", "id": "x1", "name": "mcp__g__get_thread", "input": {"threadId": "th9"}}]}}),
             json.dumps({"type": "user", "entrypoint": "claude-desktop", "timestamp": "2026-11-12T04:01:05Z",
                         "message": {"content": [{"type": "tool_result", "tool_use_id": "x1",
                                                  "content": [{"type": "text", "text": json.dumps(thread)}]}]}})])
+        self.cfg["google_session_marker"] = ["pherkad-google-capture",
+                                             "This is the nightly Google read for pherkad's edit capture"]
         out = self.run_capture(("gmail",))
         c = self.cands()
         self.assertTrue(c, out)
