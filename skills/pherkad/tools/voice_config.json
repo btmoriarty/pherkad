@@ -348,6 +348,18 @@
       "clean": [
         "A student who arrives with a topic and no dataset gets seminar time tonight."
       ]
+    },
+    {
+      "id": "soft.the-hard-part",
+      "pattern": "the hard part",
+      "rationale": "a clipped slogan imperative around a vague referent; 'the hard part' names nothing, and the reader has to ask which part; say the actual task in a full sentence",
+      "since": "2026-11-13",
+      "fires": [
+        "Questions slide bullets: Open your dataset before you write the proposal. / Name the hard part. / Write the cut list tonight."
+      ],
+      "clean": [
+        "Questions slide bullets: Open your dataset before you write the proposal. / In the proposal, say what might not work and why. / Write the cut list tonight."
+      ]
     }
   ],
   "filler_words": [
