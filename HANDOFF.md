@@ -45,7 +45,7 @@ Read this before doing anything in this repo. Every path is absolute. Every sect
 
 ## Open, to pick up here
 
-1. Brian installs the hooks and the nightly job (commands in the session's final report and below). Done when a real gated call shows in `/Users/moriarty/Documents/voice-profile/gate/gate-log.jsonl` with the session's id.
+1. Done 2026-11-13: hooks, the 03:30 launchd job and the 03:12 Google task are installed. Real calls are in the gate log: two Edit passes at 13:36 and a Write blocked at 16:40 for `honest-framing` (100 ms, no file written). The Google task's prompt lost its marker line when created; capture now matches its opening sentence too (7eedc81). Install commands, for a reinstall:
    - `/usr/bin/python3 /Users/moriarty/Documents/voice-profile/install/install-gate-hooks.py`
    - `cp /Users/moriarty/Documents/voice-profile/install/com.moriarty.pherkad.capture.plist /Users/moriarty/Library/LaunchAgents/` then `launchctl bootstrap gui/501 /Users/moriarty/Library/LaunchAgents/com.moriarty.pherkad.capture.plist`
    - Create the 03:00 scheduled desktop task from `/Users/moriarty/Documents/voice-profile/install/google-capture-task.md`.
