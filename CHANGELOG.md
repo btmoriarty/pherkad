@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Four soft phrases from the first capture backfill** (ledger triage of 2026-11-13; every example sentence is neutral, so no draft text is published). `soft.the-more-important-half` (c-20261113-108) catches an aphorism that announces importance instead of showing it. `soft.re-a7d56e2e` (c-20261113-109) catches "nobody has tested / checked / studied / measured", an absolute the writer cannot verify. `soft.re-90931805` (c-20261113-112) asks for "help" over "assist" and skips hyphenated compounds such as "AI-assisted", which a first matcher flagged 14 times on the course corpus. `soft.desired-end-state` (c-20261113-111) comes from a deck comment that read "we are avoiding desired end state". On the saga corpus (202 files, 273,431 words) the four add no findings. On the course corpus (498 files, 362,942 words) they fire 7 times: once on "nobody has tested" in a worked story, and 6 times on the course's own "assisted versus delegated" category in week 13, where a warning is the right weight.
 - **New soft phrase, `soft.the-hard-part`** (correction c-20261113-002, from a slide bullet that read "Name the hard part."). The phrase names nothing, so the reader has to ask which part. On the course corpus (498 files, 362,887 words) it fired twice, both in "The hard part is …" frames, and both are the same tell. On the saga corpus it adds one warning (vignettes/furniture.md:43), inside a character's speech, where a warning is the right weight.
 
 ## v0.5.56 (2026-11-10)

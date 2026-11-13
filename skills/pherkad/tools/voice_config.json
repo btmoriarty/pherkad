@@ -360,6 +360,58 @@
       "clean": [
         "Questions slide bullets: Open your dataset before you write the proposal. / In the proposal, say what might not work and why. / Write the cut list tonight."
       ]
+    },
+    {
+      "id": "soft.the-more-important-half",
+      "pattern": "the more important half",
+      "rationale": "an aphorism that announces importance instead of showing it",
+      "since": "2026-11-13",
+      "fires": [
+        "The second half of the checklist is the more important half."
+      ],
+      "clean": [
+        "The second half of the checklist decides what you do next."
+      ]
+    },
+    {
+      "id": "soft.re-a7d56e2e",
+      "pattern": "re:\\bnobody has (?:tested|checked|studied|measured)\\b",
+      "rationale": "an absolute I cannot verify; say what I know of",
+      "since": "2026-11-13",
+      "fires": [
+        "Nobody has tested whether the change helps.",
+        "Nobody has measured the effect on latency."
+      ],
+      "clean": [
+        "I know of no direct test of whether the change helps."
+      ]
+    },
+    {
+      "id": "soft.desired-end-state",
+      "pattern": "desired end state",
+      "rationale": "Bad term ... we are avoiding desired end state (Brian's comment on the SysCon 2026 deck)",
+      "since": "2026-11-13",
+      "fires": [
+        "The roadmap defines the desired end state."
+      ],
+      "clean": [
+        "The roadmap says where we want to be in a year."
+      ]
+    },
+    {
+      "id": "soft.re-90931805",
+      "pattern": "re:(?<![-\\w])assist(?:s|ed|ing)?\\b",
+      "rationale": "the plain verb: help, not assist",
+      "since": "2026-11-13",
+      "fires": [
+        "I volunteered to assist the program team.",
+        "She assisted with the review."
+      ],
+      "clean": [
+        "I volunteered to help the program team.",
+        "The assistant answered first.",
+        "AI-assisted work needs a disclosure line."
+      ]
     }
   ],
   "filler_words": [
