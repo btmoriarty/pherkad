@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- **New soft phrase, `soft.the-hard-part`** (correction c-20261113-002, from a slide bullet that read "Name the hard part."). The phrase names nothing, so the reader has to ask which part. On the course corpus (498 files, 362,887 words) it fired twice, both in "The hard part is …" frames, and both are the same tell.
+- **New soft phrase, `soft.the-hard-part`** (correction c-20261113-002, from a slide bullet that read "Name the hard part."). The phrase names nothing, so the reader has to ask which part. On the course corpus (498 files, 362,887 words) it fired twice, both in "The hard part is …" frames, and both are the same tell. On the saga corpus it adds one warning (vignettes/furniture.md:43), inside a character's speech, where a warning is the right weight.
 
 ## v0.5.56 (2026-11-10)
 
