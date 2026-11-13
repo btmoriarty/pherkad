@@ -930,9 +930,13 @@ def report(cfg: dict, days: int = 7) -> dict:
             continue
         g = groups.setdefault(c["group"], {"group": c["group"], "source": c["source"], "lead": c.get("lead"),
                                            "private": bool(c.get("private")), "surface": c.get("surface"),
-                                           "comment": c.get("comment", ""), "items": []})
-        g["items"].append({"id": c["id"], "before": c["before"], "after": c["after"], "kind": c["kind"]})
+                                           "comment": "", "items": []})
+        # each item keeps its own comment and slide: a deck group holds one comment per slide
+        g["items"].append({"id": c["id"], "before": c["before"], "after": c["after"], "kind": c["kind"],
+                           "comment": c.get("comment", ""), "slide": (c.get("origin") or {}).get("slide")})
     for g in groups.values():
+        said = {i["comment"] for i in g["items"]}
+        g["comment"] = said.pop() if len(said) == 1 else ""  # the header carries a comment only when one covers the group
         g["accept"] = f"python3 {tool} accept --config {cfg['_path']} {g['group']}"
         g["reject"] = f"python3 {tool} reject --config {cfg['_path']} {g['group']}"
     ledger_rows = []

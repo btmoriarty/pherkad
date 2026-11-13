@@ -246,6 +246,18 @@ class AcceptRejectReport(Base):
         self.assertEqual(out["sources"]["comments"]["status"], "failed")
         self.assertEqual(capture.report(self.cfg, 1)["per_day"][0]["comments"], "failed")
 
+    def test_deck_group_shows_each_comment_beside_its_slide(self):
+        k = os.path.join(self.cfg["deck_roots"][0], "week-11-deck-comments.key")
+        make_key(k, ["Step 3: build the first version of the review", "Step 4: run it and mark the findings"],
+                 {0: ["Obtuse wording"], 1: ["Phrasing"]})
+        self.run_capture(("comments",))
+        groups = capture.report(self.cfg)["groups"]
+        self.assertEqual(len(groups), 1)
+        g = groups[0]
+        self.assertEqual(g["comment"], "")  # two comments: the header carries neither
+        self.assertEqual(sorted((i["slide"], i["comment"]) for i in g["items"]),
+                         [(1, "Obtuse wording"), (2, "Phrasing")])
+
 
 class PromptHook(Base):
     def test_attached_keynote_comments_copied_at_once(self):
